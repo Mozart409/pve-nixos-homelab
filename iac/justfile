@@ -1,0 +1,22 @@
+set dotenv-load
+
+default:
+    just --choose
+
+clear:
+  clear
+
+shell:
+  nix develop . --command zsh
+
+fmt:
+  tofu  fmt
+
+validate: fmt
+  tofu  validate
+
+plan:
+  tofu  plan
+
+apply: validate plan
+  tofu  apply
