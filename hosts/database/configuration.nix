@@ -1,6 +1,9 @@
-{ config, lib, pkgs, ... }:
-
 {
+  config,
+  lib,
+  pkgs,
+  ...
+}: {
   imports = [
     ../../modules/common.nix
     ../../modules/disko-config.nix
@@ -11,8 +14,8 @@
   # PostgreSQL configuration
   services.postgresql = {
     enable = true;
-    package = pkgs.postgresql_16;
-    
+    package = pkgs.postgresql_18;
+
     settings = {
       # Performance tuning (adjust based on available RAM)
       shared_buffers = "256MB";
@@ -20,15 +23,15 @@
       maintenance_work_mem = "64MB";
       work_mem = "4MB";
       max_connections = 100;
-      
+
       # Enable query logging (optional)
       log_statement = "all";
       log_duration = true;
     };
-    
+
     # Enable TCP/IP connections
     enableTCPIP = true;
-    
+
     # Authentication configuration
     authentication = pkgs.lib.mkOverride 10 ''
       # TYPE  DATABASE        USER            ADDRESS                 METHOD
@@ -38,10 +41,10 @@
       host    all             all             10.0.0.0/8              md5
       host    all             all             192.168.0.0/16          md5
     '';
-    
+
     # Initial databases
-    ensureDatabases = [ "appdb" ];
-    
+    ensureDatabases = ["appdb"];
+
     # Initial users
     ensureUsers = [
       {
@@ -54,7 +57,7 @@
   # Backup configuration
   services.postgresqlBackup = {
     enable = true;
-    databases = [ "appdb" ];
+    databases = ["appdb"];
     location = "/var/backup/postgresql";
     startAt = "03:00";
   };
@@ -62,15 +65,15 @@
   # Firewall configuration
   networking.firewall = {
     enable = true;
-    allowedTCPPorts = [ 
-      22    # SSH
-      5432  # PostgreSQL
+    allowedTCPPorts = [
+      22 # SSH
+      5432 # PostgreSQL
     ];
   };
 
   # Additional database management tools
   environment.systemPackages = with pkgs; [
-    postgresql_16
+    postgresql_18
     pgcli
     pg_top
   ];
@@ -80,3 +83,4 @@
     "d /var/backup/postgresql 0700 postgres postgres -"
   ];
 }
+
