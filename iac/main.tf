@@ -28,17 +28,17 @@ provider "proxmox" {
 }
 
 
-# Debian 12 Cloud Image Download
+# Debian 12 Cloud Image Download (raw format for ZFS compatibility)
 resource "proxmox_virtual_environment_download_file" "debian_cloud_image" {
   content_type = "iso"
   datastore_id = "local"
   node_name    = "pve-gigabyte"
 
-  url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
+  url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.raw"
 
-  file_name          = "debian-12-generic-amd64.qcow2"
+  file_name          = "debian-12-generic-amd64.img"
   overwrite          = false
-  checksum           = "5da221d8f7434ee86145e78a2c60ca45eb4ef8296535e04f6f333193225792aa8ceee3df6aea2b4ee72d6793f7312308a8b0c6a1c7ed4c7c730fa7bda1bc665f"
+  checksum           = "dada9511e307fcdb9503f3bee6eef19286ff0868ce7fadfa9c7f6fbc126e0b18cc87b671cd10f57688059690ef68a6bb6de24c1c0c365ce64b551c3c029267a5"
   checksum_algorithm = "sha512"
 }
 
