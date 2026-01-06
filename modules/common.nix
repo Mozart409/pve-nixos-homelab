@@ -73,6 +73,11 @@
 
   # Enable QEMU guest agent (for Proxmox)
   services.qemuGuest.enable = true;
+  
+  # Ensure the qemu-guest-agent service starts on boot
+  systemd.services.qemu-guest-agent = {
+    wantedBy = [ "multi-user.target" ];
+  };
 
   # Boot loader configuration is handled by disko module
   # See modules/disko-config.nix for partition and boot setup
