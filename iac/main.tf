@@ -6,7 +6,17 @@ terraform {
     }
   }
 }
+# Set the variable value in *.tfvars file
+variable "endpoint" {
+  sensitive =false 
+}
+variable "username" {
+  sensitive = true
+}
 
+variable "password" {
+  sensitive = true
+}
 provider "proxmox" {
   # Configuration options
   endpoint = var.endpoint
@@ -38,11 +48,13 @@ resource "proxmox_virtual_environment_vm" "nixos_vm" {
   vm_id     = 4322
 
   # Boot from ISO
-  bios = "ovmf"
+  bios = "seabios"
+
+  keyboard_layout = "de"
 
   cpu {
     cores = 2
-    type  = "x86-64-v3-AES"
+    type  = "host"
   }
 
   memory {
@@ -51,8 +63,8 @@ resource "proxmox_virtual_environment_vm" "nixos_vm" {
   }
 
   disk {
-    datastore_id = "local-lvm"
-    size         = 32
+    datastore_id = "zfs_pool"
+    size         = 64
     interface    = "scsi0"
   }
 
@@ -69,10 +81,11 @@ resource "proxmox_virtual_environment_vm" "nixos_vm" {
     type = "l26"
   }
 
-  # EFI disk for UEFI boot
-  efi_disk {
-    datastore_id = "local-lvm"
-    type         = "4m"
+  initialization {
+    user_account {
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
   }
 
   serial_device {}
