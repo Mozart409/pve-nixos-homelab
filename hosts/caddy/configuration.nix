@@ -24,6 +24,20 @@
   networking.defaultGateway = "192.168.2.1";
   networking.nameservers = ["192.168.2.1" "1.1.1.1"];
 
+  environment.etc."/var/www/index.html".text = ''
+
+    <html>
+      <head>
+        <title>Demo</title>
+      </head>
+      <body>
+        <main>
+          <h1>Hello World</h1>
+        </main>
+      </body>
+    </html>
+  '';
+
   # Caddy reverse proxy configuration
   services.caddy = {
     enable = true;
@@ -35,7 +49,8 @@
     virtualHosts = {
       "http://localhost" = {
         extraConfig = ''
-          respond "Caddy is running!" 200
+          root * /var/www
+          file_server
         '';
       };
 
