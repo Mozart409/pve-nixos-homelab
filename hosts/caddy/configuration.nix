@@ -24,11 +24,11 @@
   networking.defaultGateway = "192.168.2.1";
   networking.nameservers = ["192.168.2.1" "1.1.1.1"];
 
-  environment.etc."/var/www/index.html".text = ''
-
+  environment.etc."/var/lib/caddy/index.html".text = ''
     <html>
       <head>
         <title>Demo</title>
+        <link rel="stylesheet" href="https://cdn.simplecss.org/simple.css" />
       </head>
       <body>
         <main>
@@ -49,7 +49,7 @@
     virtualHosts = {
       "http://localhost" = {
         extraConfig = ''
-          root * /var/www
+          root * /var/lib/caddy
           file_server
         '';
       };
