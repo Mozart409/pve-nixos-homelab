@@ -11,6 +11,19 @@
 
   networking.hostName = "ferron";
 
+  # Static IP configuration
+  networking.interfaces.ens18 = {
+    useDHCP = false;
+    ipv4.addresses = [
+      {
+        address = "192.168.2.132";
+        prefixLength = 24;
+      }
+    ];
+  };
+  networking.defaultGateway = "192.168.2.1";
+  networking.nameservers = ["192.168.2.1" "1.1.1.1"];
+
   # Ferron specific configuration
   # This could be a general-purpose server or specific service host
   # Add your ferron-specific services here

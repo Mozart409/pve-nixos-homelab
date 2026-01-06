@@ -71,8 +71,8 @@
   # Trust the amadeus user for remote builds
   nix.settings.trusted-users = ["root" "amadeus"];
 
-  # Networking basics
-  networking.useDHCP = lib.mkDefault true;
+  # Networking basics - DHCP disabled, using static IPs per host
+  networking.useDHCP = lib.mkDefault false;
 
   # Enable QEMU guest agent (for Proxmox)
   services.qemuGuest.enable = true;

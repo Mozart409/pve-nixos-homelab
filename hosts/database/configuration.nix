@@ -11,6 +11,19 @@
 
   networking.hostName = "database";
 
+  # Static IP configuration
+  networking.interfaces.ens18 = {
+    useDHCP = false;
+    ipv4.addresses = [
+      {
+        address = "192.168.2.133";
+        prefixLength = 24;
+      }
+    ];
+  };
+  networking.defaultGateway = "192.168.2.1";
+  networking.nameservers = ["192.168.2.1" "1.1.1.1"];
+
   # PostgreSQL configuration
   services.postgresql = {
     enable = true;
