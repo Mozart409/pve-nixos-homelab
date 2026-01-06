@@ -43,8 +43,8 @@
         database = mkHost "database";
       };
 
-      # Colmena configuration for deployment
-      colmena = {
+      # Colmena Hive for deployment
+      colmenaHive = colmena.lib.makeHive {
         meta = {
           nixpkgs = import nixpkgs {
             inherit system;
@@ -57,9 +57,9 @@
         # Host definitions
         ferron = {
           deployment = {
-            targetHost = "ferron.local";
+            targetHost = "192.168.2.132";
             targetUser = "amadeus";
-            buildOnTarget = false;
+            buildOnTarget = true;
             tags = ["containers"];
           };
           imports = [
@@ -70,9 +70,9 @@
 
         caddy = {
           deployment = {
-            targetHost = "caddy.local";
+            targetHost = "192.168.2.131";
             targetUser = "amadeus";
-            buildOnTarget = false;
+            buildOnTarget = true;
             tags = ["webserver"];
           };
           imports = [
@@ -83,9 +83,9 @@
 
         database = {
           deployment = {
-            targetHost = "database.local";
+            targetHost = "192.168.2.133";
             targetUser = "amadeus";
-            buildOnTarget = false;
+            buildOnTarget = true;
             tags = ["database"];
           };
           imports = [
