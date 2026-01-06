@@ -39,15 +39,15 @@ nixos-test host:
 
 deploy-ferron ip:
   @echo "Deploying ferron to {{ip}}..."
-  nixos-anywhere --flake .#ferron root@{{ip}}
+  nixos-anywhere --flake .#ferron --build-on-remote amadeus@{{ip}}
 
 deploy-caddy ip:
   @echo "Deploying caddy to {{ip}}..."
-  nixos-anywhere --flake .#caddy root@{{ip}}
+  nixos-anywhere --flake .#caddy --build-on-remote amadeus@{{ip}}
 
 deploy-database ip:
   @echo "Deploying database to {{ip}}..."
-  nixos-anywhere --flake .#database root@{{ip}}
+  nixos-anywhere --flake .#database --build-on-remote amadeus@{{ip}}
 
 # Colmena deployment commands (for updates after initial installation)
 colmena-apply:
