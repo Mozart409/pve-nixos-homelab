@@ -24,19 +24,29 @@
   networking.defaultGateway = "192.168.2.1";
   networking.nameservers = ["192.168.2.1" "1.1.1.1"];
 
-  environment.etc."/var/lib/caddy/index.html".text = ''
-    <html>
-      <head>
-        <title>Demo</title>
-        <link rel="stylesheet" href="https://cdn.simplecss.org/simple.css" />
-      </head>
-      <body>
-        <main>
-          <h1>Hello World</h1>
-        </main>
-      </body>
-    </html>
-  '';
+  environment.etc."caddy-index" = {
+    target = "/var/www/index.html";
+    user = "caddy";
+    group = "caddy";
+    mode = "0644";
+    text = ''
+      <html>
+        <head>
+          <title>Demo</title>
+          <link rel="stylesheet" href="https://cdn.simplecss.org/simple.css" />
+        </head>
+        <body>
+          <main>
+            <h1>Hello World</h1>
+          </main>
+        </body>
+      </html>
+    '';
+  };
+
+  systemd.tmpfiles.rules = [
+    "d /var/www 0755 caddy caddy -"
+  ];
 
   # Caddy reverse proxy configuration
   services.caddy = {
@@ -45,22 +55,21 @@
       auto_https off
     '';
 
-    # Example virtual hosts - customize as needed
-    virtualHosts = {
-      "http://localhost" = {
-        extraConfig = ''
-          root * /var/lib/caddy
+    # Serve the demo page on both localhost and the LAN IP
+    virtualHosts =
+      let
+        staticSite = ''
+          root * /var/www
           file_server
         '';
+      in {
+        "http://localhost" = {
+          extraConfig = staticSite;
+        };
+        "http://192.168.2.131" = {
+          extraConfig = staticSite;
+        };
       };
-
-      # Example reverse proxy configuration
-      # "app.local.lan" = {
-      #   extraConfig = ''
-      #     reverse_proxy http://10.0.0.10:8080
-      #   '';
-      # };
-    };
   };
 
   # Firewall configuration for web server
