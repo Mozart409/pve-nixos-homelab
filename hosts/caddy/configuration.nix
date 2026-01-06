@@ -47,7 +47,7 @@
 
     # Example virtual hosts - customize as needed
     virtualHosts = {
-      ":80" = {
+      "http://localhost" = {
         extraConfig = ''
           root * /var/lib/caddy
           file_server
