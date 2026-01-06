@@ -43,7 +43,7 @@
     '';
 
     # Initial databases
-    ensureDatabases = ["appdb"];
+    ensureDatabases = ["appdb" "appuser"];
 
     # Initial users
     ensureUsers = [
