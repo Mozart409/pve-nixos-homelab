@@ -1,6 +1,9 @@
-{ config, lib, pkgs, ... }:
-
 {
+  config,
+  lib,
+  pkgs,
+  ...
+}: {
   imports = [
     ../../modules/common.nix
     ../../modules/disko-config.nix
@@ -14,7 +17,7 @@
     globalConfig = ''
       auto_https off
     '';
-    
+
     # Example virtual hosts - customize as needed
     virtualHosts = {
       "http://localhost" = {
@@ -22,7 +25,7 @@
           respond "Caddy is running!" 200
         '';
       };
-      
+
       # Example reverse proxy configuration
       # "app.local.lan" = {
       #   extraConfig = ''
@@ -35,10 +38,10 @@
   # Firewall configuration for web server
   networking.firewall = {
     enable = true;
-    allowedTCPPorts = [ 
-      22   # SSH
-      80   # HTTP
-      443  # HTTPS
+    allowedTCPPorts = [
+      22 # SSH
+      80 # HTTP
+      443 # HTTPS
     ];
   };
 

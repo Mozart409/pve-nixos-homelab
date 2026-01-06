@@ -83,4 +83,3 @@
   # System state version (don't change this after initial installation)
   system.stateVersion = "25.05";
 }
-

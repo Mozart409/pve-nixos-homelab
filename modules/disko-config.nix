@@ -1,5 +1,4 @@
-{ lib, ... }:
-{
+{lib, ...}: {
   disko.devices = {
     disk = {
       main = {
@@ -15,30 +14,30 @@
                 type = "filesystem";
                 format = "vfat";
                 mountpoint = "/boot";
-                mountOptions = [ "defaults" ];
+                mountOptions = ["defaults"];
               };
             };
             root = {
               size = "100%";
               content = {
                 type = "btrfs";
-                extraArgs = [ "-f" ];
+                extraArgs = ["-f"];
                 subvolumes = {
                   "/root" = {
                     mountpoint = "/";
-                    mountOptions = [ "compress=zstd" "noatime" ];
+                    mountOptions = ["compress=zstd" "noatime"];
                   };
                   "/home" = {
                     mountpoint = "/home";
-                    mountOptions = [ "compress=zstd" "noatime" ];
+                    mountOptions = ["compress=zstd" "noatime"];
                   };
                   "/nix" = {
                     mountpoint = "/nix";
-                    mountOptions = [ "compress=zstd" "noatime" ];
+                    mountOptions = ["compress=zstd" "noatime"];
                   };
                   "/var" = {
                     mountpoint = "/var";
-                    mountOptions = [ "compress=zstd" "noatime" ];
+                    mountOptions = ["compress=zstd" "noatime"];
                   };
                   "/swap" = {
                     mountpoint = "/.swapvol";

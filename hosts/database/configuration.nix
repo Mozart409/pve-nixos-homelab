@@ -83,4 +83,3 @@
     "d /var/backup/postgresql 0700 postgres postgres -"
   ];
 }
-
