@@ -77,7 +77,8 @@
   # Boot loader configuration for BIOS systems
   boot.loader.grub = {
     enable = true;
-    device = "/dev/sda";
+    device = lib.mkDefault "/dev/sda";
+    efiSupport = false;
   };
 
   # System state version (don't change this after initial installation)

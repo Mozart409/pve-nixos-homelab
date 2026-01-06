@@ -7,12 +7,16 @@
         content = {
           type = "gpt";
           partitions = {
+            # BIOS boot partition for GRUB
+            bios = {
+              size = "1M";
+              type = "EF02";
+            };
             boot = {
               size = "1G";
-              type = "EF00";
               content = {
                 type = "filesystem";
-                format = "vfat";
+                format = "ext4";
                 mountpoint = "/boot";
                 mountOptions = ["defaults"];
               };
