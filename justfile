@@ -3,6 +3,9 @@ set dotenv-load
 default:
     just --choose
 
+fmt:
+  alejandra .
+
 clear:
   clear
 
@@ -45,7 +48,7 @@ nixos-test host:
   @echo "Dry building {{host}} configuration..."
   nix build .#nixosConfigurations.{{host}}.config.system.build.toplevel --dry-run
 
-# Deploy with nixos-anywhere
+# Deploy with nixos-anywhere (initial installation)
 deploy-ferron ip:
   nixos-anywhere --flake .#ferron root@{{ip}}
 
@@ -54,3 +57,40 @@ deploy-caddy ip:
 
 deploy-database ip:
   nixos-anywhere --flake .#database root@{{ip}}
+
+# Colmena deployment commands (for updates after initial installation)
+colmena-apply:
+  @echo "Deploying to all hosts..."
+  colmena apply
+
+colmena-apply-host host:
+  @echo "Deploying to {{host}}..."
+  colmena apply --on {{host}}
+
+colmena-apply-tag tag:
+  @echo "Deploying to hosts tagged with {{tag}}..."
+  colmena apply --on @{{tag}}
+
+colmena-build:
+  @echo "Building all configurations..."
+  colmena build
+
+colmena-build-host host:
+  @echo "Building {{host}} configuration..."
+  colmena build --on {{host}}
+
+colmena-diff:
+  @echo "Showing differences for all hosts..."
+  colmena apply --dry-activate
+
+colmena-diff-host host:
+  @echo "Showing differences for {{host}}..."
+  colmena apply --on {{host}} --dry-activate
+
+colmena-reboot host:
+  @echo "Rebooting {{host}}..."
+  colmena exec --on {{host}} -- sudo reboot
+
+colmena-status:
+  @echo "Checking host status..."
+  colmena exec -- uptime
