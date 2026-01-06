@@ -74,7 +74,6 @@ resource "proxmox_virtual_environment_vm" "nixos_vm" {
   }
 
   cdrom {
-    enabled = true
     file_id = proxmox_virtual_environment_download_file.nixos_iso.id
   }
 
@@ -132,7 +131,6 @@ resource "proxmox_virtual_environment_vm" "database_vm" {
   }
 
   cdrom {
-    enabled = true
     file_id = proxmox_virtual_environment_download_file.nixos_iso.id
   }
 
@@ -189,7 +187,6 @@ resource "proxmox_virtual_environment_vm" "caddy_vm" {
   }
 
   cdrom {
-    enabled = true
     file_id = proxmox_virtual_environment_download_file.nixos_iso.id
   }
 
