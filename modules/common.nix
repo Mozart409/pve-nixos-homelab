@@ -74,12 +74,8 @@
   # Enable QEMU guest agent (for Proxmox)
   services.qemuGuest.enable = true;
 
-  # Boot loader configuration for BIOS systems
-  boot.loader.grub = {
-    enable = true;
-    device = lib.mkDefault "/dev/sda";
-    efiSupport = false;
-  };
+  # Boot loader configuration is handled by disko module
+  # See modules/disko-config.nix for partition and boot setup
 
   # System state version (don't change this after initial installation)
   system.stateVersion = "25.05";
