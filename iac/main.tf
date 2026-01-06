@@ -96,6 +96,12 @@ resource "proxmox_virtual_environment_vm" "ferron_vm" {
 
   serial_device {}
 
+  # Enable QEMU Guest Agent
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
+
   # Start VM after creation - it will boot Debian with SSH access
   started = true
 
@@ -157,6 +163,12 @@ resource "proxmox_virtual_environment_vm" "database_vm" {
 
   serial_device {}
 
+  # Enable QEMU Guest Agent
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
+
   started = true
 
   on_boot = false
@@ -216,6 +228,12 @@ resource "proxmox_virtual_environment_vm" "caddy_vm" {
   }
 
   serial_device {}
+
+  # Enable QEMU Guest Agent
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
 
   started = true
 
