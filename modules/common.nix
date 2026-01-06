@@ -68,15 +68,18 @@
   # Enable nix flakes
   nix.settings.experimental-features = ["nix-command" "flakes"];
 
+  # Trust the amadeus user for remote builds
+  nix.settings.trusted-users = ["root" "amadeus"];
+
   # Networking basics
   networking.useDHCP = lib.mkDefault true;
 
   # Enable QEMU guest agent (for Proxmox)
   services.qemuGuest.enable = true;
-  
+
   # Ensure the qemu-guest-agent service starts on boot
   systemd.services.qemu-guest-agent = {
-    wantedBy = [ "multi-user.target" ];
+    wantedBy = ["multi-user.target"];
   };
 
   # Boot loader configuration is handled by disko module
