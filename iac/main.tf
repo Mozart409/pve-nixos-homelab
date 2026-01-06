@@ -28,27 +28,28 @@ provider "proxmox" {
 }
 
 
-# NixOS ISO Download
-resource "proxmox_virtual_environment_download_file" "nixos_iso" {
+# Debian 12 Cloud Image Download
+resource "proxmox_virtual_environment_download_file" "debian_cloud_image" {
   content_type = "iso"
   datastore_id = "local"
   node_name    = "pve-gigabyte"
 
-  url = "https://channels.nixos.org/nixos-25.11/latest-nixos-minimal-x86_64-linux.iso"
+  url = "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
 
-  file_name = "nixos-25.11-minimal-x86_64.iso"
-  overwrite = false
+  file_name          = "debian-12-generic-amd64.qcow2"
+  overwrite          = false
+  checksum           = "5da221d8f7434ee86145e78a2c60ca45eb4ef8296535e04f6f333193225792aa8ceee3df6aea2b4ee72d6793f7312308a8b0c6a1c7ed4c7c730fa7bda1bc665f"
+  checksum_algorithm = "sha512"
 }
 
-resource "proxmox_virtual_environment_vm" "nixos_vm" {
-  name        = "nixos-vm"
-  description = "NixOS VM - Managed by Terraform"
-  tags        = ["terraform", "nixos"]
+resource "proxmox_virtual_environment_vm" "ferron_vm" {
+  name        = "ferron"
+  description = "Ferron - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target"]
 
   node_name = "pve-gigabyte"
   vm_id     = 4322
 
-  # Boot from ISO
   bios = "seabios"
 
   keyboard_layout = "de"
@@ -65,16 +66,13 @@ resource "proxmox_virtual_environment_vm" "nixos_vm" {
 
   disk {
     datastore_id = "zfs_pool"
-    size         = 64
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
+    size         = 64
   }
 
   network_device {
     bridge = "vmbr0"
-  }
-
-  cdrom {
-    file_id = proxmox_virtual_environment_download_file.nixos_iso.id
   }
 
   operating_system {
@@ -82,6 +80,14 @@ resource "proxmox_virtual_environment_vm" "nixos_vm" {
   }
 
   initialization {
+    datastore_id = "local-lvm"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+
     user_account {
       username = "amadeus"
       keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
@@ -90,18 +96,17 @@ resource "proxmox_virtual_environment_vm" "nixos_vm" {
 
   serial_device {}
 
-  # Start VM after creation for initial nixos-anywhere installation
+  # Start VM after creation - it will boot Debian with SSH access
   started = true
 
-  # Don't start on boot initially (manual installation required)
   on_boot = false
 }
 
 # PostgreSQL Database VM
 resource "proxmox_virtual_environment_vm" "database_vm" {
   name        = "database"
-  description = "PostgreSQL Database - Managed by Terraform"
-  tags        = ["terraform", "nixos", "database"]
+  description = "Database - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target", "database"]
 
   node_name = "pve-gigabyte"
   vm_id     = 4323
@@ -122,16 +127,13 @@ resource "proxmox_virtual_environment_vm" "database_vm" {
 
   disk {
     datastore_id = "zfs_pool"
-    size         = 64
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
+    size         = 64
   }
 
   network_device {
     bridge = "vmbr0"
-  }
-
-  cdrom {
-    file_id = proxmox_virtual_environment_download_file.nixos_iso.id
   }
 
   operating_system {
@@ -139,6 +141,14 @@ resource "proxmox_virtual_environment_vm" "database_vm" {
   }
 
   initialization {
+    datastore_id = "local-lvm"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+
     user_account {
       username = "amadeus"
       keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
@@ -147,7 +157,6 @@ resource "proxmox_virtual_environment_vm" "database_vm" {
 
   serial_device {}
 
-  # Start VM after creation for initial nixos-anywhere installation
   started = true
 
   on_boot = false
@@ -156,8 +165,8 @@ resource "proxmox_virtual_environment_vm" "database_vm" {
 # Caddy Web Server VM
 resource "proxmox_virtual_environment_vm" "caddy_vm" {
   name        = "caddy"
-  description = "Caddy Reverse Proxy - Managed by Terraform"
-  tags        = ["terraform", "nixos", "webserver"]
+  description = "Caddy - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target", "webserver"]
 
   node_name = "pve-gigabyte"
   vm_id     = 4324
@@ -178,16 +187,13 @@ resource "proxmox_virtual_environment_vm" "caddy_vm" {
 
   disk {
     datastore_id = "zfs_pool"
-    size         = 32
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
+    size         = 32
   }
 
   network_device {
     bridge = "vmbr0"
-  }
-
-  cdrom {
-    file_id = proxmox_virtual_environment_download_file.nixos_iso.id
   }
 
   operating_system {
@@ -195,6 +201,14 @@ resource "proxmox_virtual_environment_vm" "caddy_vm" {
   }
 
   initialization {
+    datastore_id = "local-lvm"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+
     user_account {
       username = "amadeus"
       keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
@@ -203,7 +217,6 @@ resource "proxmox_virtual_environment_vm" "caddy_vm" {
 
   serial_device {}
 
-  # Start VM after creation for initial nixos-anywhere installation
   started = true
 
   on_boot = false
