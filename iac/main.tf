@@ -105,7 +105,7 @@ resource "proxmox_virtual_environment_vm" "ferron_vm" {
   # Start VM after creation - it will boot Debian with SSH access
   started = true
 
-  on_boot = false
+  on_boot = true 
 }
 
 # PostgreSQL Database VM
