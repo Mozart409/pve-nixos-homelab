@@ -7,6 +7,7 @@
   imports = [
     ../../modules/common.nix
     ../../modules/disko-config.nix
+    ../../modules/tailscale.nix
   ];
 
   networking.hostName = "database";
@@ -48,11 +49,11 @@
     # Authentication configuration
     authentication = pkgs.lib.mkOverride 10 ''
       # TYPE  DATABASE        USER            ADDRESS                 METHOD
-      local   all             all                                     trust
-      host    all             all             127.0.0.1/32            trust
-      host    all             all             ::1/128                 trust
-      host    all             all             10.0.0.0/8              md5
-      host    all             all             192.168.0.0/16          md5
+      local   all             all                                     peer
+      host    all             all             127.0.0.1/32            scram-sha-256
+      host    all             all             ::1/128                 scram-sha-256
+      host    all             all             10.0.0.0/8              scram-sha-256
+      host    all             all             192.168.0.0/16          scram-sha-256
     '';
 
     # Initial databases
@@ -73,11 +74,19 @@
     databases = ["appdb"];
     location = "/var/backup/postgresql";
     startAt = "03:00";
+    compression = "zstd";
+  };
+
+  # Prometheus exporter
+  services.prometheus.exporters.postgres = {
+    enable = true;
+    runAsLocalSuperUser = true;
   };
 
   # Firewall configuration
   networking.firewall = {
     enable = true;
+    trustedInterfaces = ["tailscale0"];
     allowedTCPPorts = [
       22 # SSH
       5432 # PostgreSQL
@@ -89,10 +98,12 @@
     postgresql_18
     pgcli
     pg_top
+    pg_activity
   ];
 
-  # Create backup directory
+  # Create backup directory and ensure postgres data directory is NoCoW (for Btrfs)
   systemd.tmpfiles.rules = [
     "d /var/backup/postgresql 0700 postgres postgres -"
+    "d /var/lib/postgresql 0750 postgres postgres - +C"
   ];
 }

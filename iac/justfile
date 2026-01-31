@@ -20,3 +20,6 @@ plan:
 
 apply: validate plan
   tofu  apply
+
+destroy: clear
+  tofu destroy

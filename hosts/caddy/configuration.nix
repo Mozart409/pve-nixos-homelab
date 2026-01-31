@@ -56,20 +56,19 @@
     '';
 
     # Serve the demo page on both localhost and the LAN IP
-    virtualHosts =
-      let
-        staticSite = ''
-          root * /var/www
-          file_server
-        '';
-      in {
-        "http://localhost" = {
-          extraConfig = staticSite;
-        };
-        "http://192.168.2.131" = {
-          extraConfig = staticSite;
-        };
+    virtualHosts = let
+      staticSite = ''
+        root * /var/www
+        file_server
+      '';
+    in {
+      "http://localhost" = {
+        extraConfig = staticSite;
       };
+      "http://192.168.2.131" = {
+        extraConfig = staticSite;
+      };
+    };
   };
 
   # Firewall configuration for web server
