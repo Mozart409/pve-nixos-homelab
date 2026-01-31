@@ -47,6 +47,7 @@
         database = mkHost "database";
         otel = mkHost "otel";
         dns = mkHost "dns";
+        unifi = mkHost "unifi";
       };
 
       # Colmena Hive for deployment
@@ -101,6 +102,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/dns/configuration.nix
+          ];
+        };
+
+        unifi = {
+          deployment = {
+            targetHost = "192.168.2.138";
+            targetUser = "amadeus";
+            buildOnTarget = true;
+            tags = ["unifi"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/unifi/configuration.nix
           ];
         };
       };

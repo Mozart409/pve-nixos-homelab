@@ -241,11 +241,78 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   on_boot = false
 }
 
+# UniFi Network Controller VM
+resource "proxmox_virtual_environment_vm" "unifi_vm" {
+  name        = "unifi"
+  description = "UniFi Network Controller - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target", "unifi"]
+
+  node_name = "pve-gigabyte"
+  vm_id     = 4327
+
+  bios = "seabios"
+
+  keyboard_layout = "de"
+
+  cpu {
+    cores = 2
+    type  = "host"
+  }
+
+  memory {
+    dedicated = 2048
+    floating  = 2048
+  }
+
+  disk {
+    datastore_id = "zfs_pool"
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    interface    = "scsi0"
+    size         = 32
+  }
+
+  network_device {
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  initialization {
+    datastore_id = "local-lvm"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+
+    user_account {
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
+  }
+
+  serial_device {}
+
+  # Enable QEMU Guest Agent
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
+
+  started = true
+
+  on_boot = false
+}
+
 output "vm_ipv4_addresses" {
   description = "Primary IPv4 addresses per VM"
   value = {
     database = proxmox_virtual_environment_vm.database_vm.ipv4_addresses
     otel     = proxmox_virtual_environment_vm.otel_vm.ipv4_addresses
     dns      = proxmox_virtual_environment_vm.dns_vm.ipv4_addresses
+    unifi    = proxmox_virtual_environment_vm.unifi_vm.ipv4_addresses
   }
 }

@@ -40,6 +40,9 @@ deploy-dns ip:
   @echo "Deploying dns to {{ip}}..."
   nixos-anywhere --flake .#dns amadeus@{{ip}}
 
+deploy-unifi ip:
+  @echo "Deploying unifi to {{ip}}..."
+  nixos-anywhere --flake .#unifi amadeus@{{ip}}
 
 # Colmena deployment commands (for updates after initial installation)
 colmena-apply: clear
