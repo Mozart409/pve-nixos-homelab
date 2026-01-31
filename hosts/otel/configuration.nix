@@ -83,9 +83,67 @@
     };
   };
 
-  services.prometheus.exporters.node = {
+  services.prometheus = {
     enable = true;
-    enabledCollectors = ["systemd" "processes"];
+    port = 9090;
+    retentionTime = "15d";
+
+    exporters.node = {
+      enable = true;
+      enabledCollectors = ["systemd" "processes"];
+    };
+
+    scrapeConfigs = [
+      {
+        job_name = "prometheus";
+        static_configs = [
+          {
+            targets = ["localhost:9090"];
+          }
+        ];
+      }
+      {
+        job_name = "node";
+        static_configs = [
+          {
+            targets = ["localhost:${toString config.services.prometheus.exporters.node.port}"];
+          }
+        ];
+      }
+      {
+        job_name = "otel-collector";
+        static_configs = [
+          {
+            targets = ["localhost:8888"];
+          }
+        ];
+      }
+    ];
+  };
+
+  services.grafana = {
+    enable = true;
+    settings = {
+      server = {
+        http_addr = "0.0.0.0";
+        http_port = 3000;
+      };
+      security = {
+        admin_user = "admin";
+        admin_password = "admin";
+      };
+    };
+    provision = {
+      enable = true;
+      datasources.settings.datasources = [
+        {
+          name = "Prometheus";
+          type = "prometheus";
+          url = "http://localhost:9090";
+          isDefault = true;
+        }
+      ];
+    };
   };
 
   networking.firewall = {
@@ -96,6 +154,8 @@
       4317 # OTLP gRPC
       4318 # OTLP HTTP
       8888 # Collector metrics
+      9090 # Prometheus
+      3000 # Grafana
     ];
   };
 
