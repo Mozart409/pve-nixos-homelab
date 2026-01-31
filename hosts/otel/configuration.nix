@@ -163,7 +163,7 @@
           reverse_proxy localhost:9090
         }
 
-        handle_path /grafana* {
+        handle /grafana* {
           reverse_proxy localhost:3000
         }
 
