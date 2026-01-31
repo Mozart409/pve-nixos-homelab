@@ -48,23 +48,23 @@
         batch: {}
 
       exporters:
-        logging:
-          loglevel: info
+        debug:
+          verbosity: basic
 
       service:
         pipelines:
           traces:
             receivers: [otlp]
             processors: [batch]
-            exporters: [logging]
+            exporters: [debug]
           metrics:
             receivers: [otlp]
             processors: [batch]
-            exporters: [logging]
+            exporters: [debug]
           logs:
             receivers: [otlp]
             processors: [batch]
-            exporters: [logging]
+            exporters: [debug]
     '';
   };
 
