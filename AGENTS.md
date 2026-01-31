@@ -1,6 +1,6 @@
 # Agent Guidelines for pve-nixos-homelab
 
-This repository contains the NixOS configurations and Infrastructure as Code (OpenTofu) for a Proxmox-based homelab. It manages multiple hosts (ferron, caddy, database) using Nix Flakes, Colmena, and Disko.
+This repository contains the NixOS configurations and Infrastructure as Code (OpenTofu) for a Proxmox-based homelab. It currently manages the `database` and `otel` hosts using Nix Flakes, Colmena, and Disko.
 
 ## 1. Build, Lint, and Test Commands
 
@@ -15,8 +15,7 @@ The project uses `just` as a command runner. Always prefer `just` commands over 
 
 ### Building
 - **Build All Hosts**: `just nixos-build-all`
-- **Build Specific Host**: `just nixos-build-<host>`
-  - Examples: `just nixos-build-ferron`, `just nixos-build-caddy`, `just nixos-build-database`
+- **Build otel**: `just nixos-build-otel`
 - **Colmena Build**: `just colmena-build` or `just colmena-build-host <host>`
   - Builds configurations using Colmena (useful for deployment checks).
 
@@ -27,10 +26,9 @@ The project uses `just` as a command runner. Always prefer `just` commands over 
 - **Colmena Diff**: `just colmena-diff` or `just colmena-diff-host <host>`
   - Shows what changes would be applied to the running systems.
 
-### Deployment
 - **Initial Install**: `just deploy-<host> <ip>`
   - Uses `nixos-anywhere` to install NixOS on a fresh machine.
-  - Example: `just deploy-ferron 192.168.2.132`
+  - Example: `just deploy-otel 192.168.2.134`
 - **Update/Apply**: `just colmena-apply` or `just colmena-apply-host <host>`
   - Uses `colmena` to push updates to running hosts.
 
@@ -39,7 +37,7 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
 - **Initialize**: `tofu init` (inside `iac/` directory)
 - **Plan**: `tofu plan`
 - **Apply**: `tofu apply`
-- **Format**: `tofu fmt`
+- **Format**: `tofu fmt` (run via `nix develop -c tofu fmt` to ensure the tool is available)
 
 ## 2. Code Style & Conventions
 
