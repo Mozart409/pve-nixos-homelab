@@ -17,19 +17,11 @@ nixos-check:
   @echo "Checking all NixOS configurations..."
   nix flake check
 
-nixos-build-ferron:
-  @echo "Building ferron configuration..."
-  nix build .#nixosConfigurations.ferron.config.system.build.toplevel
+nixos-build-otel:
+  @echo "Building otel configuration..."
+  nix build .#nixosConfigurations.otel.config.system.build.toplevel
 
-nixos-build-caddy:
-  @echo "Building caddy configuration..."
-  nix build .#nixosConfigurations.caddy.config.system.build.toplevel
-
-nixos-build-database:
-  @echo "Building database configuration..."
-  nix build .#nixosConfigurations.database.config.system.build.toplevel
-
-nixos-build-all: nixos-build-ferron nixos-build-caddy nixos-build-database
+nixos-build-all: nixos-build-otel
   @echo "All configurations built successfully!"
 
 nixos-test host:
@@ -37,17 +29,9 @@ nixos-test host:
   nix build .#nixosConfigurations.{{host}}.config.system.build.toplevel --dry-run
 
 
-deploy-ferron ip:
-  @echo "Deploying ferron to {{ip}}..."
-  nixos-anywhere --flake .#ferron --build-on-remote amadeus@{{ip}}
-
-deploy-caddy ip:
-  @echo "Deploying caddy to {{ip}}..."
-  nixos-anywhere --flake .#caddy --build-on-remote amadeus@{{ip}}
-
-deploy-database ip:
-  @echo "Deploying database to {{ip}}..."
-  nixos-anywhere --flake .#database --build-on-remote amadeus@{{ip}}
+deploy-otel ip:
+  @echo "Deploying otel to {{ip}}..."
+  nixos-anywhere --flake .#otel --build-on-remote amadeus@{{ip}}
 
 # Colmena deployment commands (for updates after initial installation)
 colmena-apply:

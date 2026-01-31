@@ -10,14 +10,14 @@
     ../../modules/tailscale.nix
   ];
 
-  networking.hostName = "database";
+  networking.hostName = "homelab-database";
 
   # Static IP configuration
   networking.interfaces.ens18 = {
     useDHCP = false;
     ipv4.addresses = [
       {
-        address = "192.168.2.133";
+        address = "192.168.2.134";
         prefixLength = 24;
       }
     ];

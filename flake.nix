@@ -44,9 +44,8 @@
     {
       # NixOS configurations for each host
       nixosConfigurations = {
-        ferron = mkHost "ferron";
-        caddy = mkHost "caddy";
         database = mkHost "database";
+        otel = mkHost "otel";
       };
 
       # Colmena Hive for deployment
@@ -62,37 +61,9 @@
         };
 
         # Host definitions
-        ferron = {
-          deployment = {
-            targetHost = "192.168.2.132";
-            targetUser = "amadeus";
-            buildOnTarget = true;
-            tags = ["containers"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/ferron/configuration.nix
-          ];
-        };
-
-        caddy = {
-          deployment = {
-            targetHost = "192.168.2.131";
-            targetUser = "amadeus";
-            buildOnTarget = true;
-            tags = ["webserver"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/caddy/configuration.nix
-          ];
-        };
-
         database = {
           deployment = {
-            targetHost = "192.168.2.133";
+            targetHost = "192.168.2.134";
             targetUser = "amadeus";
             buildOnTarget = true;
             tags = ["database"];
@@ -101,6 +72,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/database/configuration.nix
+          ];
+        };
+
+        otel = {
+          deployment = {
+            targetHost = "192.168.2.135";
+            targetUser = "amadeus";
+            buildOnTarget = true;
+            tags = ["monitoring"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/otel/configuration.nix
           ];
         };
       };
