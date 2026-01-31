@@ -46,6 +46,7 @@
       nixosConfigurations = {
         database = mkHost "database";
         otel = mkHost "otel";
+        dns = mkHost "dns";
       };
 
       # Colmena Hive for deployment
@@ -86,6 +87,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/otel/configuration.nix
+          ];
+        };
+
+        dns = {
+          deployment = {
+            targetHost = "192.168.2.137";
+            targetUser = "amadeus";
+            buildOnTarget = true;
+            tags = ["dns"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/dns/configuration.nix
           ];
         };
       };

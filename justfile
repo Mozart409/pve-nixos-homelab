@@ -29,9 +29,17 @@ nixos-test host:
   nix build .#nixosConfigurations.{{host}}.config.system.build.toplevel --dry-run
 
 
+deploy-database ip:
+  @echo "Deploying database to {{ip}}..."
+  nixos-anywhere --flake .#database amadeus@{{ip}}
 deploy-otel ip:
   @echo "Deploying otel to {{ip}}..."
-  nixos-anywhere --flake .#otel --build-on-remote amadeus@{{ip}}
+  nixos-anywhere --flake .#otel amadeus@{{ip}}
+
+deploy-dns ip:
+  @echo "Deploying dns to {{ip}}..."
+  nixos-anywhere --flake .#dns amadeus@{{ip}}
+
 
 # Colmena deployment commands (for updates after initial installation)
 colmena-apply: clear
