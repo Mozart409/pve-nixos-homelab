@@ -63,6 +63,10 @@
     curl
     wget
     rsync
+    iproute2
+    iputils
+    bind
+    traceroute
   ];
 
   # Enable nix flakes
