@@ -29,22 +29,19 @@
 
   programs.zsh = {
     enable = true;
-    zprof.enable = false;
-    history = {
-      expireDuplicatesFirst = true;
-      extended = true;
-      ignoreDups = true;
-      save = 5000;
-      size = 5000;
-      saveNoDups = true;
-      share = true;
-    };
+    enableCompletion = true;
+    syntaxHighlighting.enable = true;
+    autosuggestions.enable = true;
+    histSize = 5000;
+    histFile = "$HOME/.zsh_history";
     setOptions = [
       "HIST_IGNORE_SPACE"
+      "EXTENDED_HISTORY"
+      "HIST_IGNORE_DUPS"
+      "HIST_SAVE_NO_DUPS"
+      "SHARE_HISTORY"
+      "HIST_EXPIRE_DUPS_FIRST"
     ];
-    historySubstringSearch.enable = true;
-    syntaxHighlighting.enable = true;
-    autosuggestion.enable = true;
     shellAliases = {
       l = "ls -lah";
       lg = "lazygit";
@@ -63,7 +60,7 @@
       opencode = "nix run github:anomalyco/opencode";
       zkdir = "cd ~/code/zettelkasten/";
     };
-    oh-my-zsh = {
+    ohMyZsh = {
       enable = true;
       # theme = "fino";
       theme = "dogenpunk";
