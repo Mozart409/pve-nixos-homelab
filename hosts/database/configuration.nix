@@ -77,11 +77,18 @@
     compression = "zstd";
   };
 
-  # Prometheus exporter
-  services.prometheus.exporters.postgres = {
-    enable = true;
-    runAsLocalSuperUser = true;
+  services.prometheus = {
+    exporters.postgres = {
+      enable = true;
+      runAsLocalSuperUser = true;
+    };
+    exporters.node = {
+      enable = true;
+      enabledCollectors = ["systemd" "processes"];
+    };
   };
+
+  # Prometheus exporter
 
   # Firewall configuration
   networking.firewall = {
@@ -90,6 +97,8 @@
     allowedTCPPorts = [
       22 # SSH
       5432 # PostgreSQL
+      9100 # Node exporter
+      9187 # Postgres exporter
     ];
   };
 

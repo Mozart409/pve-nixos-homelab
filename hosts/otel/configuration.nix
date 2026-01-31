@@ -120,6 +120,29 @@
           }
         ];
       }
+      # Database host exporters
+      {
+        job_name = "database-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.134:9100"];
+            labels = {
+              instance = "homelab-database";
+            };
+          }
+        ];
+      }
+      {
+        job_name = "database-postgres";
+        static_configs = [
+          {
+            targets = ["192.168.2.134:9187"];
+            labels = {
+              instance = "homelab-database";
+            };
+          }
+        ];
+      }
     ];
   };
 

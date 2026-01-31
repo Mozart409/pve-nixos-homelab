@@ -34,7 +34,7 @@ deploy-otel ip:
   nixos-anywhere --flake .#otel --build-on-remote amadeus@{{ip}}
 
 # Colmena deployment commands (for updates after initial installation)
-colmena-apply:
+colmena-apply: clear
   @echo "Deploying to all hosts..."
   colmena apply
 
