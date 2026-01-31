@@ -90,6 +90,16 @@
     webExternalUrl = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
     extraFlags = ["--web.route-prefix=/"];
 
+    globalConfig = {
+      scrape_interval = "30s";
+      scrape_timeout = "10s";
+      evaluation_interval = "30s";
+      external_labels = {
+        environment = "homelab";
+        datacenter = "home";
+      };
+    };
+
     exporters.node = {
       enable = true;
       enabledCollectors = ["systemd" "processes"];
@@ -168,6 +178,9 @@
           type = "prometheus";
           url = "http://localhost:9090";
           isDefault = true;
+          jsonData = {
+            timeInterval = config.services.prometheus.globalConfig.scrape_interval;
+          };
         }
       ];
     };
