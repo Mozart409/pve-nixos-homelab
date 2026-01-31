@@ -71,6 +71,9 @@
     };
   };
 
+  # Prevent zsh new user dialog by creating .zshrc
+  system.userActivationScripts.zshrc = "touch .zshrc";
+
   # X11 keymap (if needed for any graphical applications)
   services.xserver.xkb = {
     layout = "de";
