@@ -87,6 +87,8 @@
     enable = true;
     port = 9090;
     retentionTime = "15d";
+    webExternalUrl = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
+    extraFlags = ["--web.route-prefix=/"];
 
     exporters.node = {
       enable = true;
@@ -125,8 +127,10 @@
     enable = true;
     settings = {
       server = {
-        http_addr = "0.0.0.0";
+        http_addr = "127.0.0.1";
         http_port = 3000;
+        root_url = "https://homelab-otel.dropbear-butterfly.ts.net/grafana/";
+        serve_from_sub_path = true;
       };
       security = {
         admin_user = "admin";
@@ -146,16 +150,45 @@
     };
   };
 
+  # Caddy reverse proxy with Tailscale TLS
+  services.caddy = {
+    enable = true;
+    virtualHosts."homelab-otel.dropbear-butterfly.ts.net" = {
+      extraConfig = ''
+        tls {
+          get_certificate tailscale
+        }
+
+        handle_path /prometheus* {
+          reverse_proxy localhost:9090
+        }
+
+        handle_path /grafana* {
+          reverse_proxy localhost:3000
+        }
+
+        handle {
+          respond "OK" 200
+        }
+      '';
+    };
+  };
+
+  # Allow Caddy to get Tailscale certs
+  services.tailscale.permitCertUid = "caddy";
+
+  # Give Caddy access to Tailscale socket for cert fetching
+  systemd.services.caddy.serviceConfig.BindPaths = "/var/run/tailscale/tailscaled.sock";
+
   networking.firewall = {
     enable = true;
     trustedInterfaces = ["tailscale0"];
     allowedTCPPorts = [
       22 # SSH
+      443 # HTTPS (Caddy)
       4317 # OTLP gRPC
       4318 # OTLP HTTP
       8888 # Collector metrics
-      9090 # Prometheus
-      3000 # Grafana
     ];
   };
 
