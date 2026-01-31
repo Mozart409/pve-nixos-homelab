@@ -27,6 +27,53 @@
     keyMap = "de";
   };
 
+  programs.zsh = {
+    enable = true;
+    zprof.enable = false;
+    history = {
+      expireDuplicatesFirst = true;
+      extended = true;
+      ignoreDups = true;
+      save = 5000;
+      size = 5000;
+      saveNoDups = true;
+      share = true;
+    };
+    setOptions = [
+      "HIST_IGNORE_SPACE"
+    ];
+    historySubstringSearch.enable = true;
+    syntaxHighlighting.enable = true;
+    autosuggestion.enable = true;
+    shellAliases = {
+      l = "ls -lah";
+      lg = "lazygit";
+      ld = "lazydocker";
+      sys = "systemctl status";
+      syr = "systemctl restart";
+      k = "kubectl";
+      flk = "cd /etc/nixos";
+      dps = "docker compose ps";
+      dup = "docker compose up -d --build --remove-orphans";
+      dwn = "docker compose down";
+      pup = "podman-compose up -d";
+      pwn = "podman-compose down";
+      n = "nvim .";
+      t = "tmux";
+      opencode = "nix run github:anomalyco/opencode";
+      zkdir = "cd ~/code/zettelkasten/";
+    };
+    oh-my-zsh = {
+      enable = true;
+      # theme = "fino";
+      theme = "dogenpunk";
+      plugins = [
+        "git"
+        "z"
+      ];
+    };
+  };
+
   # X11 keymap (if needed for any graphical applications)
   services.xserver.xkb = {
     layout = "de";
@@ -45,6 +92,7 @@
   # Common user configuration
   users.users.amadeus = {
     isNormalUser = true;
+    shell = pkgs.zsh;
     extraGroups = ["wheel" "networkmanager"];
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"
