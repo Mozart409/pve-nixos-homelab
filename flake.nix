@@ -5,6 +5,10 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     nixos-anywhere.url = "github:nix-community/nixos-anywhere";
+    agenix = {
+      url = "github:ryantm/agenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     disko = {
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -20,6 +24,7 @@
     nixpkgs,
     flake-utils,
     nixos-anywhere,
+    agenix,
     disko,
     colmena,
   }: let
@@ -31,6 +36,7 @@
         inherit system;
         modules = [
           disko.nixosModules.disko
+          agenix.nixosModules.default
           ./hosts/${hostname}/configuration.nix
         ];
       };
@@ -51,6 +57,7 @@
           };
           specialArgs = {
             inherit disko;
+            inherit agenix;
           };
         };
 
@@ -64,6 +71,7 @@
           };
           imports = [
             disko.nixosModules.disko
+            agenix.nixosModules.default
             ./hosts/ferron/configuration.nix
           ];
         };
@@ -77,6 +85,7 @@
           };
           imports = [
             disko.nixosModules.disko
+            agenix.nixosModules.default
             ./hosts/caddy/configuration.nix
           ];
         };
@@ -90,6 +99,7 @@
           };
           imports = [
             disko.nixosModules.disko
+            agenix.nixosModules.default
             ./hosts/database/configuration.nix
           ];
         };
@@ -122,6 +132,7 @@
           opentofu
           nixos-anywhere.packages.${system}.default
           colmena.packages.${system}.colmena
+          agenix.packages.${system}.default
         ];
       };
     });
