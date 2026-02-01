@@ -115,7 +115,7 @@
         ];
       }
       {
-        job_name = "node";
+        job_name = "otel-node";
         static_configs = [
           {
             targets = ["localhost:${toString config.services.prometheus.exporters.node.port}"];
