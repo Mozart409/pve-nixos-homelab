@@ -71,8 +71,8 @@
         # Root hints for recursive resolution
         root-hints = "${pkgs.dns-root-data}/root.hints";
 
-        # DNSSEC validation
-        auto-trust-anchor-file = lib.mkForce "${pkgs.dns-root-data}/root.key";
+        # DNSSEC validation is handled automatically by NixOS via enableRootTrustAnchor (default true)
+        # which uses a writable state directory for auto-trust-anchor-file
 
         # Logging
         verbosity = 1;
