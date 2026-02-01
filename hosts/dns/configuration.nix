@@ -17,7 +17,7 @@
     useDHCP = false;
     ipv4.addresses = [
       {
-        address = "192.168.2.137";
+        address = "192.168.2.145";
         prefixLength = 24;
       }
     ];
@@ -116,7 +116,6 @@
     wants = ["network-online.target"];
     serviceConfig = {
       Restart = "on-failure";
-      RestartSec = 5;
     };
   };
 
