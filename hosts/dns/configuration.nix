@@ -17,7 +17,7 @@
     useDHCP = false;
     ipv4.addresses = [
       {
-        address = "192.168.2.145";
+        address = "192.168.2.148";
         prefixLength = 24;
       }
     ];
@@ -154,6 +154,7 @@
       22 # SSH
       53 # DNS
       443 # HTTPS (Caddy)
+      9100 # Node exporter
     ];
     allowedUDPPorts = [
       53 # DNS

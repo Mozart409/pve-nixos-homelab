@@ -95,7 +95,7 @@
 
         dns = {
           deployment = {
-            targetHost = "192.168.2.137";
+            targetHost = "192.168.2.148";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["dns"];
