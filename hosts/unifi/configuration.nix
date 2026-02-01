@@ -81,6 +81,7 @@
       8880 # HTTP portal redirect
       8843 # HTTPS portal redirect
       6789 # Mobile speedtest
+      9100 # Node exporter
     ];
     allowedUDPPorts = [
       3478 # STUN
