@@ -48,6 +48,7 @@
         otel = mkHost "otel";
         dns = mkHost "dns";
         unifi = mkHost "unifi";
+        minimal = mkHost "minimal";
       };
 
       # Colmena Hive for deployment
@@ -55,6 +56,7 @@
         meta = {
           nixpkgs = import nixpkgs {
             inherit system;
+            config.allowUnfree = true;
           };
           specialArgs = {
             inherit disko;
@@ -67,7 +69,7 @@
           deployment = {
             targetHost = "192.168.2.134";
             targetUser = "amadeus";
-            buildOnTarget = true;
+            buildOnTarget = false;
             tags = ["database"];
           };
           imports = [
@@ -81,7 +83,7 @@
           deployment = {
             targetHost = "192.168.2.135";
             targetUser = "amadeus";
-            buildOnTarget = true;
+            buildOnTarget = false;
             tags = ["monitoring"];
           };
           imports = [
@@ -95,7 +97,7 @@
           deployment = {
             targetHost = "192.168.2.137";
             targetUser = "amadeus";
-            buildOnTarget = true;
+            buildOnTarget = false;
             tags = ["dns"];
           };
           imports = [
@@ -107,9 +109,9 @@
 
         unifi = {
           deployment = {
-            targetHost = "192.168.2.138";
+            targetHost = "192.168.2.142";
             targetUser = "amadeus";
-            buildOnTarget = true;
+            buildOnTarget = false;
             tags = ["unifi"];
           };
           imports = [

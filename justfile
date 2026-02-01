@@ -44,6 +44,10 @@ deploy-unifi ip:
   @echo "Deploying unifi to {{ip}}..."
   nixos-anywhere --flake .#unifi amadeus@{{ip}}
 
+deploy-minimal ip:
+  @echo "Deploying minimal to {{ip}}..."
+  nixos-anywhere --flake .#minimal amadeus@{{ip}}
+
 # Colmena deployment commands (for updates after initial installation)
 colmena-apply: clear
   @echo "Deploying to all hosts..."
