@@ -158,7 +158,7 @@
         job_name = "dns-node";
         static_configs = [
           {
-            targets = ["192.168.2.148:9100"];
+            targets = ["192.168.2.145:9100"];
             labels = {
               instance = "homelab-dns";
             };
