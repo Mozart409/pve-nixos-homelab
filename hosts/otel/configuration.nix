@@ -170,7 +170,7 @@
         job_name = "unifi-node";
         static_configs = [
           {
-            targets = ["192.168.2.138:9100"];
+            targets = ["192.168.2.142:9100"];
             labels = {
               instance = "homelab-unifi";
             };

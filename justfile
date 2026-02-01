@@ -28,7 +28,6 @@ nixos-test host:
   @echo "Dry building {{host}} configuration..."
   nix build .#nixosConfigurations.{{host}}.config.system.build.toplevel --dry-run
 
-
 deploy-database ip:
   @echo "Deploying database to {{ip}}..."
   nixos-anywhere --flake .#database amadeus@{{ip}}
