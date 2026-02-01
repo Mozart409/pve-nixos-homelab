@@ -72,7 +72,7 @@
         root-hints = "${pkgs.dns-root-data}/root.hints";
 
         # DNSSEC validation
-        auto-trust-anchor-file = "${pkgs.dns-root-data}/root.key";
+        auto-trust-anchor-file = lib.mkForce "${pkgs.dns-root-data}/root.key";
 
         # Logging
         verbosity = 1;

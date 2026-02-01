@@ -10,6 +10,12 @@
     ../../modules/tailscale.nix
   ];
 
+  # Allow unfree packages (required for UniFi controller)
+  nixpkgs.config.allowUnfreePredicate = pkg:
+    builtins.elem (lib.getName pkg) [
+      "unifi-controller"
+    ];
+
   networking.hostName = "homelab-unifi";
 
   # Static IP configuration
@@ -17,7 +23,7 @@
     useDHCP = false;
     ipv4.addresses = [
       {
-        address = "192.168.2.138";
+        address = "192.168.2.142";
         prefixLength = 24;
       }
     ];
