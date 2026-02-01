@@ -189,13 +189,13 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   keyboard_layout = "de"
 
   cpu {
-    cores = 1
+    cores = 2
     type  = "host"
   }
 
   memory {
-    dedicated = 1024
-    floating  = 1024
+    dedicated = 2048
+    floating  = 2048
   }
 
   disk {
