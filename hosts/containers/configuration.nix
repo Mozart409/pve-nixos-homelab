@@ -33,7 +33,7 @@
       enabledCollectors = ["systemd" "processes"];
     };
     exporters.postgres = {
-      enable = true;
+      enable = false;
       runAsLocalSuperUser = true;
     };
   };
