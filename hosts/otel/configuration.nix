@@ -177,6 +177,30 @@
           }
         ];
       }
+      # Containers host exporters
+      {
+        job_name = "containers-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.149:9100"];
+            labels = {
+              instance = "homelab-containers";
+            };
+          }
+        ];
+      }
+      {
+        job_name = "containers-postgres";
+        static_configs = [
+          {
+            targets = ["192.168.2.149:9187"];
+            labels = {
+              instance = "homelab-containers";
+              db = "uptime-forge";
+            };
+          }
+        ];
+      }
     ];
   };
 

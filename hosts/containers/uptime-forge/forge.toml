@@ -1,20 +1,48 @@
 [server]
 addr = "0.0.0.0:3000"
-# reload_config_interval = 60  # Reload config every 60 seconds (default, 0 to disable)
+reload_config_interval = 60  # Reload config every 60 seconds (default, 0 to disable)
 
-# Example endpoints - customize these for your needs
-
-[endpoints.google]
-addr = "https://google.com"
-description = "Google Search"
+[endpoints.mozart409]
+addr = "https://mozart409.com/"
+description = "mozart409.com"
 group = "external"
-tags = ["search"]
+tags = ["external"]
 
-[endpoints.github]
-addr = "https://github.com"
-description = "GitHub"
-group = "external"
-tags = ["code"]
+[endpoints.homeassistant]
+addr = "https://homeassistant.dropbear-butterfly.ts.net"
+description = "Home Assistant"
+group = "internal"
+tags = ["internal", "smarthome"]
+
+[endpoints.searxng]
+addr = "https://searxng.dropbear-butterfly.ts.net/"
+description = "SearXNG Search"
+group = "internal"
+tags = ["internal", "search"]
+
+[endpoints.pinchflat]
+addr = "https://pinchflat.dropbear-butterfly.ts.net/"
+description = "Pinchflat"
+group = "internal"
+tags = ["internal", "media"]
+
+[endpoints.jellyfin]
+addr = "https://jellyfin.dropbear-butterfly.ts.net"
+description = "Jellyfin Media Server"
+group = "internal"
+tags = ["internal", "media"]
+
+[endpoints.pve-gigabyte]
+addr = "https://pve-gigabyte.dropbear-butterfly.ts.net"
+description = "PVE Gigabyte"
+group = "internal"
+tags = ["internal", "infrastructure"]
+
+[endpoints.homelab-unifi]
+addr = "https://homelab-unifi.dropbear-butterfly.ts.net"
+description = "UniFi Controller"
+group = "internal"
+tags = ["internal", "infrastructure"]
 
 # Example: Your own services
 # [endpoints.my-api]
