@@ -59,11 +59,11 @@ in {
     script = ''
       mkdir -p /run/uptime-forge
       DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
-      cat > /run/uptime-forge/db.env << EOF
-      POSTGRES_USER=uptime
-      POSTGRES_PASSWORD=$DB_PASSWORD
-      POSTGRES_DB=uptime_forge
-      EOF
+      cat > /run/uptime-forge/db.env <<EOF
+POSTGRES_USER=uptime
+POSTGRES_PASSWORD=$DB_PASSWORD
+POSTGRES_DB=uptime_forge
+EOF
       chmod 600 /run/uptime-forge/db.env
     '';
   };
@@ -79,9 +79,9 @@ in {
     script = ''
       mkdir -p /run/uptime-forge
       DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
-      cat > /run/uptime-forge/app.env << EOF
-      DATABASE_URL=postgres://uptime:$DB_PASSWORD@uptime-forge-db:5432/uptime_forge
-      EOF
+      cat > /run/uptime-forge/app.env <<EOF
+DATABASE_URL=postgres://uptime:$DB_PASSWORD@uptime-forge-db:5432/uptime_forge
+EOF
       chmod 600 /run/uptime-forge/app.env
     '';
   };

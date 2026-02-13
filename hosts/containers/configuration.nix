@@ -32,6 +32,10 @@
       enable = true;
       enabledCollectors = ["systemd" "processes"];
     };
+    exporters.postgres = {
+      enable = true;
+      runAsLocalSuperUser = true;
+    };
   };
 
   # Firewall configuration
@@ -45,6 +49,7 @@
       3000 # Uptime Forge
       5444 # TimescaleDB (external access)
       9100 # Node exporter
+      9187 # Postgres exporter
     ];
   };
 }

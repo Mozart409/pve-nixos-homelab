@@ -77,6 +77,7 @@
     compression = "zstd";
   };
 
+  # Prometheus exporter
   services.prometheus = {
     exporters.postgres = {
       enable = true;
@@ -87,8 +88,6 @@
       enabledCollectors = ["systemd" "processes"];
     };
   };
-
-  # Prometheus exporter
 
   # Firewall configuration
   networking.firewall = {
