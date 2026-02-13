@@ -9,40 +9,44 @@
   postgresDataDir = "${dataDir}/postgres";
   forgeConfigDir = "${dataDir}/config";
 
+  # Template files for environment variables
+  dbEnvTemplate = pkgs.writeText "db-env-template" ''
+    POSTGRES_USER=uptime
+    POSTGRES_PASSWORD=__DB_PASSWORD__
+    POSTGRES_DB=uptime_forge
+  '';
+
+  appEnvTemplate = pkgs.writeText "app-env-template" ''
+    DATABASE_URL=postgres://uptime:__DB_PASSWORD__@uptime-forge-db:5432/uptime_forge
+  '';
+
+  postgresExporterEnvTemplate = pkgs.writeText "postgres-exporter-env-template" ''
+    DATA_SOURCE_NAME=postgresql://uptime:__DB_PASSWORD__@localhost:5444/uptime_forge?sslmode=disable
+  '';
+
   # Script to generate db.env
   generateDbEnv = pkgs.writeShellScript "generate-db-env" ''
-        mkdir -p /run/uptime-forge
-        DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
-        cat > /run/uptime-forge/db.env <<'EOF'
-    POSTGRES_USER=uptime
-    POSTGRES_PASSWORD=$DB_PASSWORD
-    POSTGRES_DB=uptime_forge
-    EOF
-        sed -i "s/\$DB_PASSWORD/$DB_PASSWORD/" /run/uptime-forge/db.env
-        chmod 600 /run/uptime-forge/db.env
+    mkdir -p /run/uptime-forge
+    DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
+    ${pkgs.gnused}/bin/sed "s/__DB_PASSWORD__/$DB_PASSWORD/" ${dbEnvTemplate} > /run/uptime-forge/db.env
+    chmod 600 /run/uptime-forge/db.env
   '';
 
   # Script to generate app.env
   generateAppEnv = pkgs.writeShellScript "generate-app-env" ''
-        mkdir -p /run/uptime-forge
-        DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
-        cat > /run/uptime-forge/app.env <<'EOF'
-    DATABASE_URL=postgres://uptime:$DB_PASSWORD@uptime-forge-db:5432/uptime_forge
-    EOF
-        sed -i "s/\$DB_PASSWORD/$DB_PASSWORD/" /run/uptime-forge/app.env
-        chmod 600 /run/uptime-forge/app.env
+    mkdir -p /run/uptime-forge
+    DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
+    ${pkgs.gnused}/bin/sed "s/__DB_PASSWORD__/$DB_PASSWORD/" ${appEnvTemplate} > /run/uptime-forge/app.env
+    chmod 600 /run/uptime-forge/app.env
   '';
 
   # Script to generate postgres exporter env
   generatePostgresExporterEnv = pkgs.writeShellScript "generate-postgres-exporter-env" ''
-        mkdir -p /run/uptime-forge
-        DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
-        cat > /run/uptime-forge/postgres-exporter.env <<'EOF'
-    DATA_SOURCE_NAME=postgresql://uptime:$DB_PASSWORD@localhost:5444/uptime_forge?sslmode=disable
-    EOF
-        sed -i "s/\$DB_PASSWORD/$DB_PASSWORD/" /run/uptime-forge/postgres-exporter.env
-        chmod 600 /run/uptime-forge/postgres-exporter.env
-        chown postgres_exporter:postgres_exporter /run/uptime-forge/postgres-exporter.env
+    mkdir -p /run/uptime-forge
+    DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
+    ${pkgs.gnused}/bin/sed "s/__DB_PASSWORD__/$DB_PASSWORD/" ${postgresExporterEnvTemplate} > /run/uptime-forge/postgres-exporter.env
+    chmod 640 /run/uptime-forge/postgres-exporter.env
+    chown root:postgres-exporter /run/uptime-forge/postgres-exporter.env
   '';
 in {
   # Enable Podman
