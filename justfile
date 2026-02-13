@@ -47,6 +47,10 @@ deploy-minimal ip:
   @echo "Deploying minimal to {{ip}}..."
   nixos-anywhere --flake .#minimal amadeus@{{ip}}
 
+deploy-containers ip:
+  @echo "Deploying containers to {{ip}}..."
+  nixos-anywhere --flake .#containers amadeus@{{ip}}
+
 # Colmena deployment commands (for updates after initial installation)
 colmena-apply: clear
   @echo "Deploying to all hosts..."

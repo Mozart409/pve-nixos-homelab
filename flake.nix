@@ -48,6 +48,7 @@
         otel = mkHost "otel";
         dns = mkHost "dns";
         unifi = mkHost "unifi";
+        containers = mkHost "containers";
         minimal = mkHost "minimal";
       };
 
@@ -120,6 +121,19 @@
             ./hosts/unifi/configuration.nix
           ];
         };
+        containers = {
+          deployment = {
+            targetHost = "192.168.2.155";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["containers"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/containers/configuration.nix
+          ];
+        };
       };
     }
     // flake-utils.lib.eachDefaultSystem (system: let
@@ -143,6 +157,9 @@
           bacon
           # fmt
           dprint
+
+          #ai
+          opencode
 
           # IaC
           tofu-ls
