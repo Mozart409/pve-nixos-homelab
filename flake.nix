@@ -123,7 +123,7 @@
         };
         containers = {
           deployment = {
-            targetHost = "192.168.2.155";
+            targetHost = "192.168.2.149";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["containers"];
