@@ -8,6 +8,42 @@
   dataDir = "/var/lib/uptime-forge";
   postgresDataDir = "${dataDir}/postgres";
   forgeConfigDir = "${dataDir}/config";
+
+  # Script to generate db.env
+  generateDbEnv = pkgs.writeShellScript "generate-db-env" ''
+        mkdir -p /run/uptime-forge
+        DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
+        cat > /run/uptime-forge/db.env <<'EOF'
+    POSTGRES_USER=uptime
+    POSTGRES_PASSWORD=$DB_PASSWORD
+    POSTGRES_DB=uptime_forge
+    EOF
+        sed -i "s/\$DB_PASSWORD/$DB_PASSWORD/" /run/uptime-forge/db.env
+        chmod 600 /run/uptime-forge/db.env
+  '';
+
+  # Script to generate app.env
+  generateAppEnv = pkgs.writeShellScript "generate-app-env" ''
+        mkdir -p /run/uptime-forge
+        DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
+        cat > /run/uptime-forge/app.env <<'EOF'
+    DATABASE_URL=postgres://uptime:$DB_PASSWORD@uptime-forge-db:5432/uptime_forge
+    EOF
+        sed -i "s/\$DB_PASSWORD/$DB_PASSWORD/" /run/uptime-forge/app.env
+        chmod 600 /run/uptime-forge/app.env
+  '';
+
+  # Script to generate postgres exporter env
+  generatePostgresExporterEnv = pkgs.writeShellScript "generate-postgres-exporter-env" ''
+        mkdir -p /run/uptime-forge
+        DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
+        cat > /run/uptime-forge/postgres-exporter.env <<'EOF'
+    DATA_SOURCE_NAME=postgresql://uptime:$DB_PASSWORD@localhost:5444/uptime_forge?sslmode=disable
+    EOF
+        sed -i "s/\$DB_PASSWORD/$DB_PASSWORD/" /run/uptime-forge/postgres-exporter.env
+        chmod 600 /run/uptime-forge/postgres-exporter.env
+        chown postgres_exporter:postgres_exporter /run/uptime-forge/postgres-exporter.env
+  '';
 in {
   # Enable Podman
   virtualisation.podman = {
@@ -47,45 +83,6 @@ in {
     mode = "0400";
   };
 
-  # Create a script that reads the secret and sets up environment
-  systemd.services.uptime-forge-db-env = {
-    description = "Generate uptime-forge database environment file";
-    wantedBy = ["podman-uptime-forge-db.service"];
-    before = ["podman-uptime-forge-db.service"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-    script = ''
-      mkdir -p /run/uptime-forge
-      DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
-      cat > /run/uptime-forge/db.env <<EOF
-POSTGRES_USER=uptime
-POSTGRES_PASSWORD=$DB_PASSWORD
-POSTGRES_DB=uptime_forge
-EOF
-      chmod 600 /run/uptime-forge/db.env
-    '';
-  };
-
-  systemd.services.uptime-forge-app-env = {
-    description = "Generate uptime-forge app environment file";
-    wantedBy = ["podman-uptime-forge.service"];
-    before = ["podman-uptime-forge.service"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-    script = ''
-      mkdir -p /run/uptime-forge
-      DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
-      cat > /run/uptime-forge/app.env <<EOF
-DATABASE_URL=postgres://uptime:$DB_PASSWORD@uptime-forge-db:5432/uptime_forge
-EOF
-      chmod 600 /run/uptime-forge/app.env
-    '';
-  };
-
   # OCI Containers
   virtualisation.oci-containers = {
     backend = "podman";
@@ -121,7 +118,7 @@ EOF
         dependsOn = ["uptime-forge-db"];
         extraOptions = [
           "--network=uptime-forge-net"
-          "--health-cmd=wget --no-verbose --tries=1 --spider http://localhost:3000/health"
+          "--health-cmd=curl -fsS http://localhost:3000/health"
           "--health-interval=30s"
           "--health-timeout=3s"
           "--health-start-period=5s"
@@ -146,14 +143,29 @@ EOF
     '';
   };
 
-  # Ensure proper service ordering
-  systemd.services.podman-uptime-forge = {
-    after = ["podman-uptime-forge-db.service" "podman-network-uptime-forge.service" "uptime-forge-app-env.service"];
-    requires = ["podman-network-uptime-forge.service" "uptime-forge-app-env.service"];
+  # Configure container services with ExecStartPre to generate env files
+  systemd.services.podman-uptime-forge-db = {
+    after = ["podman-network-uptime-forge.service"];
+    requires = ["podman-network-uptime-forge.service"];
+    serviceConfig = {
+      ExecStartPre = ["${generateDbEnv}"];
+    };
   };
 
-  systemd.services.podman-uptime-forge-db = {
-    after = ["podman-network-uptime-forge.service" "uptime-forge-db-env.service"];
-    requires = ["podman-network-uptime-forge.service" "uptime-forge-db-env.service"];
+  systemd.services.podman-uptime-forge = {
+    after = ["podman-uptime-forge-db.service" "podman-network-uptime-forge.service"];
+    requires = ["podman-network-uptime-forge.service"];
+    serviceConfig = {
+      ExecStartPre = ["${generateAppEnv}"];
+    };
+  };
+
+  # Configure postgres exporter to start after db container and generate env file
+  systemd.services.prometheus-postgres-exporter = {
+    after = ["podman-uptime-forge-db.service"];
+    wants = ["podman-uptime-forge-db.service"];
+    serviceConfig = {
+      ExecStartPre = ["+${generatePostgresExporterEnv}"];
+    };
   };
 }

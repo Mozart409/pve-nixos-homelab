@@ -26,15 +26,15 @@
   networking.defaultGateway = "192.168.2.1";
   networking.nameservers = ["192.168.2.1" "1.1.1.1"];
 
-  # Prometheus exporter
+  # Prometheus exporters
   services.prometheus = {
     exporters.node = {
       enable = true;
       enabledCollectors = ["systemd" "processes"];
     };
     exporters.postgres = {
-      enable = false;
-      runAsLocalSuperUser = true;
+      enable = true;
+      environmentFile = "/run/uptime-forge/postgres-exporter.env";
     };
   };
 
