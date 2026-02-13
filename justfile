@@ -28,29 +28,9 @@ nixos-test host:
   @echo "Dry building {{host}} configuration..."
   nix build .#nixosConfigurations.{{host}}.config.system.build.toplevel --dry-run
 
-deploy-database ip:
-  @echo "Deploying database to {{ip}}..."
-  nixos-anywhere --flake .#database amadeus@{{ip}}
-deploy-otel ip:
-  @echo "Deploying otel to {{ip}}..."
-  nixos-anywhere --flake .#otel amadeus@{{ip}}
-
-deploy-dns ip:
-  @echo "Deploying dns to {{ip}}..."
-  nixos-anywhere --flake .#dns amadeus@{{ip}}
-
-deploy-unifi ip:
-  @echo "Deploying unifi to {{ip}}..."
-  nixos-anywhere --flake .#unifi amadeus@{{ip}}
-
 deploy-minimal ip:
   @echo "Deploying minimal to {{ip}}..."
   nixos-anywhere --flake .#minimal amadeus@{{ip}}
-
-deploy-containers ip:
-  @echo "Deploying containers to {{ip}}..."
-  nixos-anywhere --flake .#containers amadeus@{{ip}}
-
 # Colmena deployment commands (for updates after initial installation)
 colmena-apply: clear
   @echo "Deploying to all hosts..."
