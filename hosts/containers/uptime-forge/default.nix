@@ -20,10 +20,6 @@
     DATABASE_URL=postgres://uptime:__DB_PASSWORD__@uptime-forge-db:5432/uptime_forge
   '';
 
-  postgresExporterEnvTemplate = pkgs.writeText "postgres-exporter-env-template" ''
-    DATA_SOURCE_NAME=postgresql://uptime:__DB_PASSWORD__@localhost:5444/uptime_forge?sslmode=disable
-  '';
-
   # Script to generate db.env
   generateDbEnv = pkgs.writeShellScript "generate-db-env" ''
     mkdir -p /run/uptime-forge
@@ -38,15 +34,6 @@
     DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
     ${pkgs.gnused}/bin/sed "s/__DB_PASSWORD__/$DB_PASSWORD/" ${appEnvTemplate} > /run/uptime-forge/app.env
     chmod 600 /run/uptime-forge/app.env
-  '';
-
-  # Script to generate postgres exporter env
-  generatePostgresExporterEnv = pkgs.writeShellScript "generate-postgres-exporter-env" ''
-    mkdir -p /run/uptime-forge
-    DB_PASSWORD=$(cat ${config.age.secrets.uptime-forge-db-password.path})
-    ${pkgs.gnused}/bin/sed "s/__DB_PASSWORD__/$DB_PASSWORD/" ${postgresExporterEnvTemplate} > /run/uptime-forge/postgres-exporter.env
-    chmod 640 /run/uptime-forge/postgres-exporter.env
-    chown root:postgres-exporter /run/uptime-forge/postgres-exporter.env
   '';
 in {
   # Enable Podman
@@ -84,7 +71,8 @@ in {
   # Load secrets via agenix
   age.secrets.uptime-forge-db-password = {
     file = ../../../secrets/uptime-forge-db-password.age;
-    mode = "0400";
+    mode = "0440";
+    group = "postgres-exporter";
   };
 
   # OCI Containers
@@ -164,12 +152,37 @@ in {
     };
   };
 
-  # Configure postgres exporter to start after db container and generate env file
+  # Custom postgres exporter service (not using services.prometheus.exporters.postgres)
+  # because we need to inject the password from agenix at runtime
+  users.users.postgres-exporter = {
+    isSystemUser = true;
+    group = "postgres-exporter";
+    description = "Prometheus postgres exporter service user";
+  };
+  users.groups.postgres-exporter = {};
+
   systemd.services.prometheus-postgres-exporter = {
-    after = ["podman-uptime-forge-db.service"];
+    description = "Prometheus PostgreSQL Exporter";
+    after = ["network.target" "podman-uptime-forge-db.service"];
     wants = ["podman-uptime-forge-db.service"];
+    wantedBy = ["multi-user.target"];
     serviceConfig = {
-      ExecStartPre = ["+${generatePostgresExporterEnv}"];
+      Type = "simple";
+      User = "postgres-exporter";
+      Group = "postgres-exporter";
+      ExecStart = let
+        wrapper = pkgs.writeShellScript "postgres-exporter-wrapper" ''
+          export DATA_SOURCE_NAME="postgresql://uptime:$(cat ${config.age.secrets.uptime-forge-db-password.path})@localhost:5444/uptime_forge?sslmode=disable"
+          exec ${pkgs.prometheus-postgres-exporter}/bin/postgres_exporter \
+            --web.listen-address=0.0.0.0:9187 \
+            --web.telemetry-path=/metrics
+        '';
+      in "${wrapper}";
+      Restart = "on-failure";
+      RestartSec = 5;
+      PrivateTmp = true;
+      ProtectHome = true;
+      NoNewPrivileges = true;
     };
   };
 }

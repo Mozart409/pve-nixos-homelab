@@ -32,10 +32,8 @@
       enable = true;
       enabledCollectors = ["systemd" "processes"];
     };
-    exporters.postgres = {
-      enable = true;
-      environmentFile = "/run/uptime-forge/postgres-exporter.env";
-    };
+    # Postgres exporter is configured in ./uptime-forge/default.nix
+    # because it needs access to agenix secrets for the connection string
   };
 
   # Firewall configuration
