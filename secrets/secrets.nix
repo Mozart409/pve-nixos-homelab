@@ -9,4 +9,7 @@ let
 in {
   "tailscale-auth-key.age".publicKeys = users;
   "uptime-forge-db-password.age".publicKeys = [amadeus hostContainers];
+  "harbor-db-password.age".publicKeys = [amadeus hostContainers];
+  "harbor-admin-password.age".publicKeys = [amadeus hostContainers];
+  "harbor-core-secret.age".publicKeys = [amadeus hostContainers];
 }
