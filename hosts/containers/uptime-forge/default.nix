@@ -36,13 +36,6 @@
     chmod 600 /run/uptime-forge/app.env
   '';
 in {
-  # Enable Podman
-  virtualisation.podman = {
-    enable = true;
-    dockerCompat = true;
-    defaultNetwork.settings.dns_enabled = true;
-  };
-
   # Create directories and config files
   systemd.tmpfiles.rules = [
     "d ${dataDir} 0755 root root -"
@@ -76,47 +69,44 @@ in {
   };
 
   # OCI Containers
-  virtualisation.oci-containers = {
-    backend = "podman";
-    containers = {
-      uptime-forge-db = {
-        image = "timescale/timescaledb:latest-pg16";
-        autoStart = true;
-        ports = ["5444:5432"];
-        volumes = [
-          "uptime_forge_db:/var/lib/postgresql/data"
-          "/etc/uptime-forge/postgresql.conf:/etc/postgresql/postgresql.conf:ro"
-          "/etc/uptime-forge/initdb:/docker-entrypoint-initdb.d:ro"
-        ];
-        environmentFiles = ["/run/uptime-forge/db.env"];
-        cmd = ["postgres" "-c" "config_file=/etc/postgresql/postgresql.conf"];
-        extraOptions = [
-          "--network=uptime-forge-net"
-          "--health-cmd=pg_isready -U uptime -d uptime_forge"
-          "--health-interval=10s"
-          "--health-timeout=5s"
-          "--health-retries=5"
-        ];
-      };
+  virtualisation.oci-containers.containers = {
+    uptime-forge-db = {
+      image = "timescale/timescaledb:latest-pg16";
+      autoStart = true;
+      ports = ["5444:5432"];
+      volumes = [
+        "uptime_forge_db:/var/lib/postgresql/data"
+        "/etc/uptime-forge/postgresql.conf:/etc/postgresql/postgresql.conf:ro"
+        "/etc/uptime-forge/initdb:/docker-entrypoint-initdb.d:ro"
+      ];
+      environmentFiles = ["/run/uptime-forge/db.env"];
+      cmd = ["postgres" "-c" "config_file=/etc/postgresql/postgresql.conf"];
+      extraOptions = [
+        "--network=uptime-forge-net"
+        "--health-cmd=pg_isready -U uptime -d uptime_forge"
+        "--health-interval=10s"
+        "--health-timeout=5s"
+        "--health-retries=5"
+      ];
+    };
 
-      uptime-forge = {
-        image = "ghcr.io/mozart409/uptime-forge:v0.2.6";
-        autoStart = true;
-        ports = ["3000:3000"];
-        volumes = [
-          "/etc/uptime-forge/forge.toml:/app/forge.toml:ro"
-        ];
-        environmentFiles = ["/run/uptime-forge/app.env"];
-        dependsOn = ["uptime-forge-db"];
-        extraOptions = [
-          "--network=uptime-forge-net"
-          "--health-cmd=curl -fsS http://localhost:3000/health"
-          "--health-interval=30s"
-          "--health-timeout=3s"
-          "--health-start-period=5s"
-          "--health-retries=3"
-        ];
-      };
+    uptime-forge = {
+      image = "ghcr.io/mozart409/uptime-forge:v0.2.6";
+      autoStart = true;
+      ports = ["3000:3000"];
+      volumes = [
+        "/etc/uptime-forge/forge.toml:/app/forge.toml:ro"
+      ];
+      environmentFiles = ["/run/uptime-forge/app.env"];
+      dependsOn = ["uptime-forge-db"];
+      extraOptions = [
+        "--network=uptime-forge-net"
+        "--health-cmd=curl -fsS http://localhost:3000/health"
+        "--health-interval=30s"
+        "--health-timeout=3s"
+        "--health-start-period=5s"
+        "--health-retries=3"
+      ];
     };
   };
 
