@@ -9,14 +9,14 @@ clear:
 shell:
   nix develop . --command zsh
 
-fmt:
+fmt: clear
   tofu  fmt
 
 validate: fmt
   tofu  validate
 
-plan:
-  tofu  plan
+plan: fmt
+  tofu plan
 
 apply: validate plan
   tofu  apply
