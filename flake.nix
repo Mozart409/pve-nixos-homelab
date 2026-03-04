@@ -143,7 +143,7 @@
 
         mcp = {
           deployment = {
-            targetHost = "192.168.2.148";
+            targetHost = "192.168.2.152";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["mcp"];

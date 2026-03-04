@@ -17,13 +17,6 @@ nixos-check:
   @echo "Checking all NixOS configurations..."
   nix flake check
 
-nixos-build-otel:
-  @echo "Building otel configuration..."
-  nix build .#nixosConfigurations.otel.config.system.build.toplevel
-
-nixos-build-all: nixos-build-otel
-  @echo "All configurations built successfully!"
-
 nixos-test host:
   @echo "Dry building {{host}} configuration..."
   nix build .#nixosConfigurations.{{host}}.config.system.build.toplevel --dry-run
@@ -47,18 +40,6 @@ colmena-apply-tag tag:
 colmena-build: clear
   @echo "Building all configurations..."
   colmena build
-
-colmena-build-host host:
-  @echo "Building {{host}} configuration..."
-  colmena build --on {{host}}
-
-colmena-diff:
-  @echo "Showing differences for all hosts..."
-  colmena apply --dry-activate
-
-colmena-diff-host host:
-  @echo "Showing differences for {{host}}..."
-  colmena apply --on {{host}} --dry-activate
 
 colmena-reboot host:
   @echo "Rebooting {{host}}..."
