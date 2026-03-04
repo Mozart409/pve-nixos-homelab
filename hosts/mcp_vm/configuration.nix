@@ -58,7 +58,7 @@
 
   services.hamcp = {
     enable = true;
-    haUrl = "http://homeassistant.local:8123";
+    haUrl = "https://homeassistant.dropbear-butterfly.ts.net";
     haTokenFile = config.age.secrets.homeassistant-token.path;
     port = 3000;
     openFirewall = true;
