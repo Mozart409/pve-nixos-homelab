@@ -73,7 +73,11 @@
   services.tailscale.permitCertUid = "caddy";
 
   # Give Caddy access to Tailscale socket for cert fetching
-  systemd.services.caddy.serviceConfig.BindPaths = "/var/run/tailscale/tailscaled.sock";
+  systemd.services.caddy = {
+    after = ["tailscaled.service"];
+    wants = ["tailscaled.service"];
+    serviceConfig.BindPaths = ["/run/tailscale/tailscaled.sock"];
+  };
 
   networking.firewall = {
     enable = true;
