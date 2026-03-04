@@ -17,6 +17,10 @@
       url = "github:zhaofengli/colmena";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    hamcp = {
+      url = "github:mozart409/hamcp-rs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
@@ -27,6 +31,7 @@
     agenix,
     disko,
     colmena,
+    hamcp,
   }: let
     system = "x86_64-linux";
 
@@ -62,6 +67,7 @@
           specialArgs = {
             inherit disko;
             inherit agenix;
+            inherit hamcp;
           };
         };
 
@@ -134,6 +140,22 @@
             ./hosts/containers/configuration.nix
           ];
         };
+
+        mcp = {
+          deployment = {
+            targetHost = "192.168.2.148";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["mcp"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            hamcp.nixosModules.default
+            ./hosts/mcp_vm/configuration.nix
+          ];
+        };
+        # END
       };
     }
     // flake-utils.lib.eachDefaultSystem (system: let

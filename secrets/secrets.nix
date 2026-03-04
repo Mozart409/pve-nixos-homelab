@@ -5,11 +5,13 @@ let
   hostDns = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILXKgvCX3XImCFgba09r+oEezHtDjG5zTPszYqOalfc3 root@homelab-dns";
   hostUnifi = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG1dva0wW3yY7pu0bT2HafVcn08BZMjzTwEh3CGcdfb8 root@homelab-unifi";
   hostContainers = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKHmDtkEG9WNd6bvbEM3+HhdfnSu29o5bYskujiM6VdF root@homelab-containers";
-  users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers];
+  hostMcp = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGkfmvav5dWx4dAbDHcJSuKG32GSmdVdOK+uQ1xjCtse root@homelab-mcp";
+  users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp];
 in {
   "tailscale-auth-key.age".publicKeys = users;
   "uptime-forge-db-password.age".publicKeys = [amadeus hostContainers];
   "harbor-db-password.age".publicKeys = [amadeus hostContainers];
   "harbor-admin-password.age".publicKeys = [amadeus hostContainers];
   "harbor-core-secret.age".publicKeys = [amadeus hostContainers];
+  "homeassistant-token.age".publicKeys = [amadeus hostMcp];
 }
