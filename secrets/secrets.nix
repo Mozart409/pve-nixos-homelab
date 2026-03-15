@@ -14,4 +14,5 @@ in {
   "harbor-admin-password.age".publicKeys = [amadeus hostContainers];
   "harbor-core-secret.age".publicKeys = [amadeus hostContainers];
   "homeassistant-token.age".publicKeys = [amadeus hostMcp];
+  "grafana-secret-key.age".publicKeys = [amadeus hostOtel];
 }
