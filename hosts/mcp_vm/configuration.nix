@@ -53,7 +53,6 @@
 
   age.secrets.homeassistant-token = {
     file = ../../secrets/homeassistant-token.age;
-    owner = "hamcp";
   };
 
   services.hamcp = {
