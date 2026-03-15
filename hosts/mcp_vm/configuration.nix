@@ -62,6 +62,11 @@
   systemd.services.hamcp = {
     wants = ["agenix.target"];
     after = ["agenix.target"];
+    # Override script to strip trailing newline from token
+    script = lib.mkForce ''
+      export HA_TOKEN="$(tr -d '\n' < "$CREDENTIALS_DIRECTORY/ha-token")"
+      exec ${config.services.hamcp.package}/bin/mcp
+    '';
   };
 
   # Allow Caddy to get Tailscale certs
