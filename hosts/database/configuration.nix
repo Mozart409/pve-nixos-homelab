@@ -155,7 +155,7 @@
   services.pgadmin = {
     enable = true;
     port = 5050;
-    initialEmail = "admin@homelab.local";
+    initialEmail = "admin@homelab.dev";
     initialPasswordFile = config.age.secrets.pgadmin-pwd.path;
     settings = {
       COOKIE_DEFAULT_PATH = "/pgadmin";
