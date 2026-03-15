@@ -41,11 +41,7 @@
         }
 
         handle {
-          reverse_proxy https://localhost:3000 {
-            transport http {
-              tls_insecure_skip_verify
-            }
-          }
+          reverse_proxy http://localhost:3000
         }
       '';
     };
