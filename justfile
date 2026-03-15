@@ -29,11 +29,11 @@ colmena-apply: clear
   @echo "Deploying to all hosts..."
   colmena apply
 
-colmena-apply-host host:
+colmena-apply-host host: clear
   @echo "Deploying to {{host}}..."
   colmena apply --on {{host}}
 
-colmena-apply-tag tag:
+colmena-apply-tag tag: clear
   @echo "Deploying to hosts tagged with {{tag}}..."
   colmena apply --on @{{tag}}
 
@@ -41,10 +41,10 @@ colmena-build: clear
   @echo "Building all configurations..."
   colmena build
 
-colmena-reboot host:
+colmena-reboot host: clear
   @echo "Rebooting {{host}}..."
   colmena exec --on {{host}} -- sudo reboot
 
-colmena-status:
+colmena-status: clear
   @echo "Checking host status..."
   colmena exec -- uptime
