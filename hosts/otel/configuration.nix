@@ -189,32 +189,32 @@
           }
         ];
       }
-       {
-         job_name = "containers-postgres";
-         static_configs = [
-           {
-             targets = ["192.168.2.149:9187"];
-             labels = {
-               instance = "homelab-containers";
-               db = "uptime-forge";
-             };
-           }
-         ];
-       }
-       # MCP host exporters
-       {
-         job_name = "mcp-node";
-         static_configs = [
-           {
-             targets = ["192.168.2.152:9100"];
-             labels = {
-               instance = "homelab-mcp";
-             };
-           }
-         ];
-       }
-     ];
-   };
+      {
+        job_name = "containers-postgres";
+        static_configs = [
+          {
+            targets = ["192.168.2.149:9187"];
+            labels = {
+              instance = "homelab-containers";
+              db = "uptime-forge";
+            };
+          }
+        ];
+      }
+      # MCP host exporters
+      {
+        job_name = "mcp-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.152:9100"];
+            labels = {
+              instance = "homelab-mcp";
+            };
+          }
+        ];
+      }
+    ];
+  };
 
   age.secrets.grafana-secret-key = {
     file = ../../secrets/grafana-secret-key.age;
