@@ -158,7 +158,7 @@
     initialEmail = "admin@homelab.dev";
     initialPasswordFile = config.age.secrets.pgadmin-pwd.path;
     settings = {
-      COOKIE_DEFAULT_PATH = "/pgadmin";
+      # No subpath config needed - Caddy strips /pgadmin prefix
     };
   };
 
@@ -200,34 +200,55 @@
     };
   };
 
-  # Import pgAdmin servers on first boot
+  # Import pgAdmin servers on first boot (runs as a timer to avoid blocking deployment)
   systemd.services.pgadmin-import-servers = {
     description = "Import pgAdmin server definitions";
-    wantedBy = ["multi-user.target"];
     after = ["pgadmin.service"];
     requires = ["pgadmin.service"];
     serviceConfig = {
       Type = "oneshot";
-      RemainAfterExit = true;
       User = "pgadmin";
       Group = "pgadmin";
+      StateDirectory = "pgadmin";
     };
+    path = [pkgs.coreutils];
     # Only import if not already done (check for marker file)
     script = ''
       MARKER="/var/lib/pgadmin/.servers-imported"
-      if [ ! -f "$MARKER" ]; then
-        # Wait for pgadmin to be fully initialized
-        sleep 5
-        ${config.services.pgadmin.package}/bin/pgadmin4-cli load-servers \
-          /etc/pgadmin/servers.json \
-          --user "${config.services.pgadmin.initialEmail}" \
-          --replace
-        touch "$MARKER"
-        echo "pgAdmin servers imported successfully"
-      else
+      DB_FILE="/var/lib/pgadmin/pgadmin4.db"
+
+      if [ -f "$MARKER" ]; then
         echo "pgAdmin servers already imported, skipping"
+        exit 0
       fi
+
+      # Wait for pgAdmin database to be created (max 2 minutes)
+      for i in $(seq 1 24); do
+        if [ -f "$DB_FILE" ]; then
+          echo "pgAdmin database found, importing servers..."
+          ${config.services.pgadmin.package}/bin/pgadmin4-cli load-servers \
+            /etc/pgadmin/servers.json \
+            --user "${config.services.pgadmin.initialEmail}" \
+            --replace && touch "$MARKER" && echo "pgAdmin servers imported successfully"
+          exit 0
+        fi
+        echo "Waiting for pgAdmin database... ($i/24)"
+        sleep 5
+      done
+
+      echo "Timeout waiting for pgAdmin database"
+      exit 1
     '';
+  };
+
+  # Timer to trigger server import after pgAdmin has started
+  systemd.timers.pgadmin-import-servers = {
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnBootSec = "2min";
+      OnUnitActiveSec = "1h";
+      Unit = "pgadmin-import-servers.service";
+    };
   };
 
   # Caddy reverse proxy with Tailscale TLS
@@ -239,10 +260,8 @@
           get_certificate tailscale
         }
 
-        handle /pgadmin* {
-          reverse_proxy localhost:5050 {
-            header_up X-Script-Name /pgadmin
-          }
+        handle_path /pgadmin* {
+          reverse_proxy localhost:5050
         }
 
         handle {
