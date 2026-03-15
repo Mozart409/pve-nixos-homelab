@@ -12,13 +12,6 @@
 
   networking.hostName = "homelab-database";
 
-  # Agenix secrets
-  age.secrets.pgadmin-pwd = {
-    file = ../../secrets/pgadmin-pwd.age;
-    owner = "pgadmin";
-    group = "pgadmin";
-  };
-
   # Static IP configuration
   networking.interfaces.ens18 = {
     useDHCP = false;
@@ -151,106 +144,6 @@
     };
   };
 
-  # pgAdmin4 web interface
-  services.pgadmin = {
-    enable = true;
-    port = 5050;
-    initialEmail = "admin@homelab.dev";
-    initialPasswordFile = config.age.secrets.pgadmin-pwd.path;
-    settings = {
-      APPLICATION_ROOT = "/pgadmin";
-    };
-  };
-
-  # Ensure pgadmin starts after agenix secrets are available
-  systemd.services.pgadmin = {
-    wants = ["agenix.service"];
-    after = ["agenix.service"];
-  };
-
-  # pgAdmin server definitions (imported on first boot)
-  environment.etc."pgadmin/servers.json".text = builtins.toJSON {
-    Servers = {
-      "1" = {
-        Name = "Local PostgreSQL";
-        Group = "Homelab";
-        Host = "localhost";
-        Port = 5432;
-        MaintenanceDB = "postgres";
-        Username = "postgres";
-        Comment = "Direct connection to local PostgreSQL";
-        ConnectionParameters = {
-          sslmode = "prefer";
-          connect_timeout = 10;
-        };
-      };
-      "2" = {
-        Name = "Local PostgreSQL (PgBouncer)";
-        Group = "Homelab";
-        Host = "localhost";
-        Port = 6432;
-        MaintenanceDB = "postgres";
-        Username = "postgres";
-        Comment = "Connection via PgBouncer connection pooler";
-        ConnectionParameters = {
-          sslmode = "prefer";
-          connect_timeout = 10;
-        };
-      };
-    };
-  };
-
-  # Import pgAdmin servers on first boot (runs as a timer to avoid blocking deployment)
-  systemd.services.pgadmin-import-servers = {
-    description = "Import pgAdmin server definitions";
-    after = ["pgadmin.service"];
-    requires = ["pgadmin.service"];
-    serviceConfig = {
-      Type = "oneshot";
-      User = "pgadmin";
-      Group = "pgadmin";
-      StateDirectory = "pgadmin";
-    };
-    path = [pkgs.coreutils];
-    # Only import if not already done (check for marker file)
-    script = ''
-      MARKER="/var/lib/pgadmin/.servers-imported"
-      DB_FILE="/var/lib/pgadmin/pgadmin4.db"
-
-      if [ -f "$MARKER" ]; then
-        echo "pgAdmin servers already imported, skipping"
-        exit 0
-      fi
-
-      # Wait for pgAdmin database to be created (max 2 minutes)
-      for i in $(seq 1 24); do
-        if [ -f "$DB_FILE" ]; then
-          echo "pgAdmin database found, importing servers..."
-          ${config.services.pgadmin.package}/bin/pgadmin4-cli load-servers \
-            /etc/pgadmin/servers.json \
-            --user "${config.services.pgadmin.initialEmail}" \
-            --replace && touch "$MARKER" && echo "pgAdmin servers imported successfully"
-          exit 0
-        fi
-        echo "Waiting for pgAdmin database... ($i/24)"
-        sleep 5
-      done
-
-      echo "Timeout waiting for pgAdmin database"
-      exit 1
-    '';
-  };
-
-  # Timer to trigger server import after pgAdmin has started
-  systemd.timers.pgadmin-import-servers = {
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnBootSec = "2min";
-      OnUnitActiveSec = "1h";
-      Unit = "pgadmin-import-servers.service";
-    };
-  };
-
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
     enable = true;
@@ -258,10 +151,6 @@
       extraConfig = ''
         tls {
           get_certificate tailscale
-        }
-
-        handle /pgadmin* {
-          reverse_proxy localhost:5050
         }
 
         handle {
