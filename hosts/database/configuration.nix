@@ -158,7 +158,7 @@
     initialEmail = "admin@homelab.dev";
     initialPasswordFile = config.age.secrets.pgadmin-pwd.path;
     settings = {
-      # No subpath config needed - Caddy strips /pgadmin prefix
+      APPLICATION_ROOT = "/pgadmin";
     };
   };
 
@@ -260,7 +260,7 @@
           get_certificate tailscale
         }
 
-        handle_path /pgadmin* {
+        handle /pgadmin* {
           reverse_proxy localhost:5050
         }
 
