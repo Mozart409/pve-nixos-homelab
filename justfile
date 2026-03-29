@@ -24,6 +24,10 @@ nixos-test host:
 deploy-minimal ip:
   @echo "Deploying minimal to {{ip}}..."
   nixos-anywhere --flake .#minimal amadeus@{{ip}}
+
+deploy-hermes ip:
+  @echo "Deploying hermes to {{ip}}..."
+  nixos-anywhere --flake .#hermes amadeus@{{ip}}
 # Colmena deployment commands (for updates after initial installation)
 colmena-apply: clear
   @echo "Deploying to all hosts..."
