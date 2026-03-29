@@ -21,6 +21,10 @@
       url = "github:mozart409/hamcp-rs";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    hermes-agent = {
+      url = "github:NousResearch/hermes-agent";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
@@ -32,6 +36,7 @@
     disko,
     colmena,
     hamcp,
+    hermes-agent,
   }: let
     system = "x86_64-linux";
 
@@ -55,6 +60,15 @@
         unifi = mkHost "unifi";
         containers = mkHost "containers";
         minimal = mkHost "minimal";
+        hermes = nixpkgs.lib.nixosSystem {
+          inherit system;
+          modules = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            hermes-agent.nixosModules.default
+            ./hosts/hermes/configuration.nix
+          ];
+        };
       };
 
       # Colmena Hive for deployment
@@ -68,6 +82,7 @@
             inherit disko;
             inherit agenix;
             inherit hamcp;
+            inherit hermes-agent;
           };
         };
 
@@ -153,6 +168,21 @@
             agenix.nixosModules.default
             hamcp.nixosModules.default
             ./hosts/mcp_vm/configuration.nix
+          ];
+        };
+
+        hermes = {
+          deployment = {
+            targetHost = "192.168.2.153";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["ai" "hermes"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            hermes-agent.nixosModules.default
+            ./hosts/hermes/configuration.nix
           ];
         };
         # END
