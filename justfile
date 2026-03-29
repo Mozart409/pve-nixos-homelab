@@ -48,3 +48,24 @@ colmena-reboot host: clear
 colmena-status: clear
   @echo "Checking host status..."
   colmena exec -- uptime
+
+# OpenTofu/IaC commands (run in iac/ directory)
+[working-directory: 'iac']
+iac-fmt: clear
+  tofu fmt
+
+[working-directory: 'iac']
+iac-validate: iac-fmt
+  tofu validate
+
+[working-directory: 'iac']
+iac-plan: iac-fmt
+  tofu plan
+
+[working-directory: 'iac']
+iac-apply: iac-validate iac-plan
+  tofu apply
+
+[working-directory: 'iac']
+iac-destroy: clear
+  tofu destroy
