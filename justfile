@@ -12,6 +12,9 @@ clear:
 shell:
   nix develop . --command zsh
 
+check: clear
+  nix flake check --all-systems
+
 # NixOS configuration commands
 nixos-check:
   @echo "Checking all NixOS configurations..."
@@ -25,10 +28,6 @@ deploy-minimal ip:
   @echo "Deploying minimal to {{ip}}..."
   nixos-anywhere --flake .#minimal amadeus@{{ip}}
 
-deploy-hermes ip:
-  @echo "Deploying hermes to {{ip}}..."
-  nixos-anywhere --flake .#hermes amadeus@{{ip}}
-# Colmena deployment commands (for updates after initial installation)
 colmena-apply: clear
   @echo "Deploying to all hosts..."
   colmena apply
