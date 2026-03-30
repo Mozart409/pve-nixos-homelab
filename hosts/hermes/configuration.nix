@@ -139,6 +139,7 @@
     # Only allow SSH and node exporter on LAN (for initial setup and monitoring)
     allowedTCPPorts = [
       22 # SSH
+      443 # HTTPS
       9100 # Node exporter
     ];
     # Block all other LAN access - hermes web UI only via Tailscale
