@@ -18,4 +18,5 @@ in {
   "grafana-secret-key.age".publicKeys = [amadeus hostOtel];
   "pgadmin-pwd.age".publicKeys = [amadeus hostDatabase];
   "hermes-opencode-zen-key.age".publicKeys = [amadeus hostHermes];
+  "hermes-api-server-key.age".publicKeys = [amadeus hostHermes];
 }
