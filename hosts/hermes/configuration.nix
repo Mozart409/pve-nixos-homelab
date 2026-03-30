@@ -37,18 +37,26 @@
     mode = "0400";
   };
 
+  # API server key for hermes-agent
+  age.secrets.hermes-api-server-key = {
+    file = ../../secrets/hermes-api-server-key.age;
+    mode = "0400";
+  };
+
   # Hermes Agent - Native mode with security hardening
   services.hermes-agent = {
     enable = true;
 
-    # Load OpenCode Zen API key (file contains: OPENAI_API_KEY=...)
+    # Load API keys from secrets (files contain KEY=value format)
     environmentFiles = [
       config.age.secrets.hermes-opencode-zen-key.path
+      config.age.secrets.hermes-api-server-key.path
     ];
 
-    # OpenCode Zen base URL (not a secret)
+    # OpenCode Zen base URL and API server config (not secrets)
     environment = {
       OPENAI_BASE_URL = "https://opencode.ai/zen/v1";
+      API_SERVER_ENABLED = "true";
     };
 
     # Declarative configuration
