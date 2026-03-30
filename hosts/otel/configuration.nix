@@ -213,6 +213,18 @@
           }
         ];
       }
+      # Hermes host exporters
+      {
+        job_name = "hermes-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.155:9100"];
+            labels = {
+              instance = "homelab-hermes";
+            };
+          }
+        ];
+      }
     ];
   };
 
