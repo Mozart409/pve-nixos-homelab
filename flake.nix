@@ -173,7 +173,7 @@
 
         hermes = {
           deployment = {
-            targetHost = "192.168.2.153";
+            targetHost = "192.168.2.155";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["ai" "hermes"];
@@ -188,7 +188,7 @@
         # END
       };
     }
-    // flake-utils.lib.eachDefaultSystem (system: let
+    // flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "aarch64-darwin"] (system: let
       pkgs = import nixpkgs {
         inherit system;
         config.allowUnfree = true;
