@@ -72,3 +72,8 @@ iac-apply: iac-validate iac-plan
 [working-directory: 'iac']
 iac-destroy: clear
   tofu destroy
+
+# Get SSH host key from a remote host (for agenix secrets.nix)
+get-host-key ip:
+  @echo "Getting SSH host key from {{ip}}..."
+  ssh amadeus@{{ip}} "cat /etc/ssh/ssh_host_ed25519_key.pub"
