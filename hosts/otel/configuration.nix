@@ -225,6 +225,30 @@
           }
         ];
       }
+      # K3s server exporters
+      {
+        job_name = "k3s-server-1-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.157:9100"];
+            labels = {
+              instance = "k3s-server-1";
+            };
+          }
+        ];
+      }
+      # K3s agent exporters
+      {
+        job_name = "k3s-agent-1-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.156:9100"];
+            labels = {
+              instance = "k3s-agent-1";
+            };
+          }
+        ];
+      }
     ];
   };
 
