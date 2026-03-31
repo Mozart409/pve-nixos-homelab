@@ -21,4 +21,5 @@ in {
   "pgadmin-pwd.age".publicKeys = [amadeus hostDatabase];
   "hermes-opencode-zen-key.age".publicKeys = [amadeus hostHermes];
   "hermes-api-server-key.age".publicKeys = [amadeus hostHermes];
+  "k3s-server-token.age".publicKeys = [amadeus hostK3sServer1 hostK3sWorker1];
 }
