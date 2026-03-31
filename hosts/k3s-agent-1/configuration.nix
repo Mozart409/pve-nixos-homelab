@@ -17,7 +17,7 @@
     useDHCP = false;
     ipv4.addresses = [
       {
-        address = "192.168.2.161";
+        address = "192.168.2.156";
         prefixLength = 24;
       }
     ];
@@ -32,7 +32,7 @@
   services.k3s = {
     enable = true;
     role = "agent";
-    serverAddr = "https://192.168.2.160:6443";
+    serverAddr = "https://192.168.2.157:6443";
     # tokenFile = config.age.secrets.k3s-token.path;
     # Uncomment above and add secret after k3s-server is deployed
   };
