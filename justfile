@@ -77,3 +77,9 @@ iac-destroy: clear
 get-host-key ip:
   @echo "Getting SSH host key from {{ip}}..."
   ssh amadeus@{{ip}} "cat /etc/ssh/ssh_host_ed25519_key.pub"
+
+
+[working-directory: 'secrets']
+reencrypt: clear
+  agenix -r
+
