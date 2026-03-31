@@ -17,7 +17,7 @@
     useDHCP = false;
     ipv4.addresses = [
       {
-        address = "192.168.2.160";
+        address = "192.168.2.157";
         prefixLength = 24;
       }
     ];
@@ -32,7 +32,7 @@
     extraFlags = toString [
       "--disable=traefik" # We'll use our own ingress
       "--disable=servicelb" # Disable built-in load balancer
-      "--tls-san=192.168.2.160"
+      "--tls-san=192.168.2.157"
       "--tls-san=k3s-server-1"
       "--tls-san=k3s-server-1.dropbear-butterfly.ts.net"
     ];

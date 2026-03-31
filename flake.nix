@@ -190,7 +190,7 @@
 
         k3s-server-1 = {
           deployment = {
-            targetHost = "192.168.2.160";
+            targetHost = "192.168.2.157";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["kubernetes" "k3s" "server"];
@@ -204,7 +204,7 @@
 
         k3s-agent-1 = {
           deployment = {
-            targetHost = "192.168.2.161";
+            targetHost = "192.168.2.156";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["kubernetes" "k3s" "agent"];
