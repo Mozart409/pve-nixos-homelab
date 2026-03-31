@@ -60,6 +60,8 @@
         unifi = mkHost "unifi";
         containers = mkHost "containers";
         minimal = mkHost "minimal";
+        k3s-server-1 = mkHost "k3s-server-1";
+        k3s-agent-1 = mkHost "k3s-agent-1";
         hermes = nixpkgs.lib.nixosSystem {
           inherit system;
           modules = [
@@ -183,6 +185,34 @@
             agenix.nixosModules.default
             hermes-agent.nixosModules.default
             ./hosts/hermes/configuration.nix
+          ];
+        };
+
+        k3s-server-1 = {
+          deployment = {
+            targetHost = "192.168.2.160";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["kubernetes" "k3s" "server"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/k3s-server-1/configuration.nix
+          ];
+        };
+
+        k3s-agent-1 = {
+          deployment = {
+            targetHost = "192.168.2.161";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["kubernetes" "k3s" "agent"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/k3s-agent-1/configuration.nix
           ];
         };
         # END
