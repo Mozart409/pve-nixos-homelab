@@ -30,6 +30,7 @@
     enable = true;
     role = "server";
     extraFlags = toString [
+      "--node-name=k3s-server-1"
       "--disable=traefik" # We'll use our own ingress
       "--disable=servicelb" # Disable built-in load balancer
       "--tls-san=192.168.2.157"
