@@ -498,9 +498,9 @@ resource "proxmox_virtual_environment_vm" "hermes_vm" {
     timeout = "60s"
   }
 
-  started = true
+  started = false
 
-  on_boot = true
+  on_boot = false
 }
 
 # K3s Server (Control Plane) VM
@@ -654,13 +654,13 @@ resource "proxmox_virtual_environment_vm" "k3s_agent_1_vm" {
 output "vm_ipv4_addresses" {
   description = "Primary IPv4 addresses per VM"
   value = {
-    database   = proxmox_virtual_environment_vm.database_vm.ipv4_addresses
-    otel       = proxmox_virtual_environment_vm.otel_vm.ipv4_addresses
-    dns        = proxmox_virtual_environment_vm.dns_vm.ipv4_addresses
-    unifi      = proxmox_virtual_environment_vm.unifi_vm.ipv4_addresses
-    container  = proxmox_virtual_environment_vm.containers_vm.ipv4_addresses
-    mcp        = proxmox_virtual_environment_vm.mcp_vm.ipv4_addresses
-    hermes     = proxmox_virtual_environment_vm.hermes_vm.ipv4_addresses
+    database     = proxmox_virtual_environment_vm.database_vm.ipv4_addresses
+    otel         = proxmox_virtual_environment_vm.otel_vm.ipv4_addresses
+    dns          = proxmox_virtual_environment_vm.dns_vm.ipv4_addresses
+    unifi        = proxmox_virtual_environment_vm.unifi_vm.ipv4_addresses
+    container    = proxmox_virtual_environment_vm.containers_vm.ipv4_addresses
+    mcp          = proxmox_virtual_environment_vm.mcp_vm.ipv4_addresses
+    hermes       = proxmox_virtual_environment_vm.hermes_vm.ipv4_addresses
     k3s_server_1 = proxmox_virtual_environment_vm.k3s_server_1_vm.ipv4_addresses
     k3s_agent_1  = proxmox_virtual_environment_vm.k3s_agent_1_vm.ipv4_addresses
   }
