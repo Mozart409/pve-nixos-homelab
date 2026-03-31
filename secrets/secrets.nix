@@ -8,7 +8,7 @@ let
   hostMcp = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGkfmvav5dWx4dAbDHcJSuKG32GSmdVdOK+uQ1xjCtse root@homelab-mcp";
   hostHermes = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKBloNkev1cC0W2YBDi0Qk0adUqVwWve1oXK4X5PYnds root@homelab-hermes";
   hostK3sServer1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILK0KcBwr2zXxl97/JjpFRBD38XpG0wEWZjkIQgarRcJ root@k3s-server-1";
-  hostK3sWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMtwgQdHZdj7KSSmzc5nI02kzRIUqV26A2B4D/dbEpj7 root@k3s-worker-1";
+  hostK3sWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMtwgQdHZdj7KSSmzc5nI02kzRIUqV26A2B4D/dbEpj7 root@homelab-minimal root@k3s-worker-1";
   users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1];
 in {
   "tailscale-auth-key.age".publicKeys = users;
