@@ -247,6 +247,9 @@
           opencode
           claude-code
 
+          # k8s
+          timoni
+
           # IaC
           tofu-ls
           opentofu
