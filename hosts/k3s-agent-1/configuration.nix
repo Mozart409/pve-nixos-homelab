@@ -25,16 +25,17 @@
   networking.defaultGateway = "192.168.2.1";
   networking.nameservers = ["192.168.2.145" "1.1.1.1"];
 
+  # K3s token secret
+  age.secrets.k3s-server-token = {
+    file = ../../secrets/k3s-server-token.age;
+  };
+
   # K3s Agent (Worker Node)
-  # Note: After deploying k3s-server, get the token from:
-  # /var/lib/rancher/k3s/server/node-token
-  # Then set it via agenix secret or environment variable
   services.k3s = {
     enable = true;
     role = "agent";
     serverAddr = "https://192.168.2.157:6443";
-    # tokenFile = config.age.secrets.k3s-token.path;
-    # Uncomment above and add secret after k3s-server is deployed
+    tokenFile = config.age.secrets.k3s-server-token.path;
   };
 
   # Install kubectl for debugging
