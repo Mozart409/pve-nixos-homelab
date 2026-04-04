@@ -63,8 +63,8 @@
       host    all             all             192.168.0.0/16          scram-sha-256
     '';
 
-    # Initial databases
-    ensureDatabases = ["appdb" "appuser" "terraform_state"];
+    # Initial databases (names must match usernames when using ensureDBOwnership)
+    ensureDatabases = ["appdb" "appuser" "terraform"];
 
     # Initial users
     ensureUsers = [
@@ -99,7 +99,7 @@
   # Backup configuration
   services.postgresqlBackup = {
     enable = true;
-    databases = ["appdb" "terraform_state"];
+    databases = ["appdb" "terraform"];
     location = "/var/backup/postgresql";
     startAt = "03:00";
     compression = "zstd";
