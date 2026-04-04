@@ -1,4 +1,5 @@
 set dotenv-load
+set unstable
 
 default:
     just --choose
