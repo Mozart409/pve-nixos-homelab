@@ -240,6 +240,7 @@
           rust-analyzer
           rustc
           bacon
+          rainfrog
           # fmt
           dprint
 
