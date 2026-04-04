@@ -25,6 +25,13 @@
   networking.defaultGateway = "192.168.2.1";
   networking.nameservers = ["192.168.2.1" "1.1.1.1"];
 
+  # Terraform state database password
+  age.secrets.terraform-state-db-password = {
+    file = ../../secrets/terraform-state-db-password.age;
+    owner = "postgres";
+    group = "postgres";
+  };
+
   # PostgreSQL configuration
   services.postgresql = {
     enable = true;
@@ -57,7 +64,7 @@
     '';
 
     # Initial databases
-    ensureDatabases = ["appdb" "appuser"];
+    ensureDatabases = ["appdb" "appuser" "terraform_state"];
 
     # Initial users
     ensureUsers = [
@@ -65,13 +72,34 @@
         name = "appuser";
         ensureDBOwnership = true;
       }
+      {
+        name = "terraform";
+        ensureDBOwnership = true;
+      }
     ];
+  };
+
+  # Set password for terraform user after PostgreSQL starts
+  systemd.services.postgresql-terraform-password = {
+    description = "Set Terraform PostgreSQL user password";
+    after = ["postgresql.service" "agenix.service"];
+    requires = ["postgresql.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "postgres";
+    };
+    script = ''
+      PASSWORD=$(cat ${config.age.secrets.terraform-state-db-password.path})
+      ${config.services.postgresql.package}/bin/psql -c "ALTER USER terraform WITH PASSWORD '$PASSWORD';"
+    '';
   };
 
   # Backup configuration
   services.postgresqlBackup = {
     enable = true;
-    databases = ["appdb"];
+    databases = ["appdb" "terraform_state"];
     location = "/var/backup/postgresql";
     startAt = "03:00";
     compression = "zstd";
