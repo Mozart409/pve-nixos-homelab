@@ -79,11 +79,11 @@
     ];
   };
 
-  # Set password for terraform user after PostgreSQL starts
+  # Set password for terraform user after PostgreSQL creates the user
   systemd.services.postgresql-terraform-password = {
     description = "Set Terraform PostgreSQL user password";
-    after = ["postgresql.service" "agenix.service"];
-    requires = ["postgresql.service"];
+    after = ["postgresql-ensure-users.service" "agenix.service"];
+    requires = ["postgresql-ensure-users.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
