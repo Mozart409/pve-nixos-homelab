@@ -58,9 +58,9 @@
             transport http {
               tls_insecure_skip_verify
             }
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-            header_up X-Forwarded-Proto {scheme}
+            header_up Host localhost:8443
+            header_up Origin https://localhost:8443
+            header_up Referer https://localhost:8443/
           }
         }
       '';
