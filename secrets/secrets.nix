@@ -19,6 +19,7 @@ in {
   "homeassistant-token.age".publicKeys = [amadeus hostMcp];
   "grafana-secret-key.age".publicKeys = [amadeus hostOtel];
   "pgadmin-pwd.age".publicKeys = [amadeus hostDatabase];
+  "terraform-state-db-password.age".publicKeys = [amadeus hostDatabase];
   "hermes-opencode-zen-key.age".publicKeys = [amadeus hostHermes];
   "hermes-api-server-key.age".publicKeys = [amadeus hostHermes];
   "k3s-server-token.age".publicKeys = [amadeus hostK3sServer1 hostK3sWorker1];
