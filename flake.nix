@@ -40,6 +40,25 @@
   }: let
     system = "x86_64-linux";
 
+    # Set DEPLOY_NET=tailscale to use Tailscale hosts, defaults to local IPs
+    deployNet = builtins.getEnv "DEPLOY_NET";
+
+    hostAddrs = {
+      database   = { local = "192.168.2.134"; tailscale = "homelab-database"; };
+      otel       = { local = "192.168.2.135"; tailscale = "homelab-otel"; };
+      dns        = { local = "192.168.2.145"; tailscale = "homelab-dns"; };
+      unifi      = { local = "192.168.2.142"; tailscale = "homelab-unifi"; };
+      containers = { local = "192.168.2.149"; tailscale = "homelab-containers"; };
+      mcp        = { local = "192.168.2.152"; tailscale = "homelab-mcp"; };
+      "k3s-server-1" = { local = "192.168.2.157"; tailscale = "192.168.2.157"; };
+      "k3s-agent-1"  = { local = "192.168.2.156"; tailscale = "192.168.2.156"; };
+    };
+
+    targetHost = name:
+      if deployNet == "tailscale"
+      then hostAddrs.${name}.tailscale
+      else hostAddrs.${name}.local;
+
     # Function to create a NixOS system configuration
     mkHost = hostname:
       nixpkgs.lib.nixosSystem {
@@ -91,7 +110,7 @@
         # Host definitions
         database = {
           deployment = {
-            targetHost = "192.168.2.134";
+            targetHost = targetHost "database";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["database"];
@@ -105,7 +124,7 @@
 
         otel = {
           deployment = {
-            targetHost = "192.168.2.135";
+            targetHost = targetHost "otel";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["monitoring"];
@@ -119,7 +138,7 @@
 
         dns = {
           deployment = {
-            targetHost = "192.168.2.145";
+            targetHost = targetHost "dns";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["dns"];
@@ -133,7 +152,7 @@
 
         unifi = {
           deployment = {
-            targetHost = "192.168.2.142";
+            targetHost = targetHost "unifi";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["unifi"];
@@ -146,7 +165,7 @@
         };
         containers = {
           deployment = {
-            targetHost = "192.168.2.149";
+            targetHost = targetHost "containers";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["containers"];
@@ -160,7 +179,7 @@
 
         mcp = {
           deployment = {
-            targetHost = "192.168.2.152";
+            targetHost = targetHost "mcp";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["mcp"];
@@ -190,7 +209,7 @@
 
         k3s-server-1 = {
           deployment = {
-            targetHost = "192.168.2.157";
+            targetHost = targetHost "k3s-server-1";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["kubernetes" "k3s" "server"];
@@ -204,7 +223,7 @@
 
         k3s-agent-1 = {
           deployment = {
-            targetHost = "192.168.2.156";
+            targetHost = targetHost "k3s-agent-1";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["kubernetes" "k3s" "agent"];
