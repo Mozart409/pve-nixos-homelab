@@ -422,6 +422,7 @@
           {
             name = "Prometheus";
             type = "prometheus";
+            uid = "prometheus";
             url = "http://localhost:9090";
             isDefault = true;
             jsonData = {
@@ -431,18 +432,43 @@
           {
             name = "Loki";
             type = "loki";
+            uid = "loki";
             url = "http://localhost:3100";
             jsonData = {
               maxLines = 1000;
+              derivedFields = [
+                {
+                  name = "TraceID";
+                  matcherRegex = "(?:traceID|trace_id|traceId)[=:]\\s*([a-fA-F0-9]+)";
+                  url = "$${__value.raw}";
+                  datasourceUid = "tempo";
+                  urlDisplayLabel = "View Trace";
+                }
+              ];
             };
           }
           {
             name = "Tempo";
             type = "tempo";
+            uid = "tempo";
             url = "http://localhost:3200";
             jsonData = {
-              nodeGraph = {
-                enabled = true;
+              nodeGraph.enabled = true;
+              tracesToLogsV2 = {
+                datasourceUid = "loki";
+                spanStartTimeShift = "-1h";
+                spanEndTimeShift = "1h";
+                filterByTraceID = true;
+                filterBySpanID = false;
+              };
+              tracesToMetrics = {
+                datasourceUid = "prometheus";
+              };
+              serviceMap = {
+                datasourceUid = "prometheus";
+              };
+              lokiSearch = {
+                datasourceUid = "loki";
               };
             };
           }
