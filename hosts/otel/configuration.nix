@@ -357,6 +357,19 @@
           }
         ];
       }
+      # Hofvarpnir
+      {
+        job_name = "hofvarpnir";
+        scheme = "https";
+        static_configs = [
+          {
+            targets = ["hofvarpnir.dropbear-butterfly.ts.net"];
+            labels = {
+              instance = "hofvarpnir";
+            };
+          }
+        ];
+      }
     ];
   };
 
