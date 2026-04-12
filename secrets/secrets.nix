@@ -18,6 +18,7 @@ in {
   "harbor-core-secret.age".publicKeys = [amadeus hostContainers];
   "homeassistant-token.age".publicKeys = [amadeus hostMcp];
   "grafana-secret-key.age".publicKeys = [amadeus hostOtel];
+  "grafana-oidc-secret.age".publicKeys = [amadeus hostOtel];
   "pgadmin-pwd.age".publicKeys = [amadeus hostDatabase];
   "terraform-state-db-password.age".publicKeys = [amadeus hostDatabase];
   "hermes-opencode-zen-key.age".publicKeys = [amadeus hostHermes];
