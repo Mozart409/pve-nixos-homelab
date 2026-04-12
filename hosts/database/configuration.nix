@@ -61,6 +61,7 @@
       host    all             all             ::1/128                 scram-sha-256
       host    all             all             10.0.0.0/8              scram-sha-256
       host    all             all             192.168.0.0/16          scram-sha-256
+      host    all             all             100.64.0.0/10           scram-sha-256
     '';
 
     # Initial databases (names must match usernames when using ensureDBOwnership)
