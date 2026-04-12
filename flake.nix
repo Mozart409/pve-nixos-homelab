@@ -44,14 +44,38 @@
     deployNet = builtins.getEnv "DEPLOY_NET";
 
     hostAddrs = {
-      database   = { local = "192.168.2.134"; tailscale = "homelab-database"; };
-      otel       = { local = "192.168.2.135"; tailscale = "homelab-otel"; };
-      dns        = { local = "192.168.2.145"; tailscale = "homelab-dns"; };
-      unifi      = { local = "192.168.2.142"; tailscale = "homelab-unifi"; };
-      containers = { local = "192.168.2.149"; tailscale = "homelab-containers"; };
-      mcp        = { local = "192.168.2.152"; tailscale = "homelab-mcp"; };
-      "k3s-server-1" = { local = "192.168.2.157"; tailscale = "192.168.2.157"; };
-      "k3s-agent-1"  = { local = "192.168.2.156"; tailscale = "192.168.2.156"; };
+      database = {
+        local = "192.168.2.134";
+        tailscale = "homelab-database";
+      };
+      otel = {
+        local = "192.168.2.135";
+        tailscale = "homelab-otel";
+      };
+      dns = {
+        local = "192.168.2.145";
+        tailscale = "homelab-dns";
+      };
+      unifi = {
+        local = "192.168.2.142";
+        tailscale = "homelab-unifi";
+      };
+      containers = {
+        local = "192.168.2.149";
+        tailscale = "homelab-containers";
+      };
+      mcp = {
+        local = "192.168.2.152";
+        tailscale = "homelab-mcp";
+      };
+      "k3s-server-1" = {
+        local = "192.168.2.157";
+        tailscale = "192.168.2.157";
+      };
+      "k3s-agent-1" = {
+        local = "192.168.2.156";
+        tailscale = "192.168.2.156";
+      };
     };
 
     targetHost = name:
