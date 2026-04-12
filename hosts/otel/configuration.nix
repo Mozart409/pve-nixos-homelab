@@ -366,6 +366,12 @@
     group = "grafana";
   };
 
+  age.secrets.grafana-oidc-secret = {
+    file = ../../secrets/grafana-oidc-secret.age;
+    owner = "grafana";
+    group = "grafana";
+  };
+
   services.grafana = {
     enable = true;
     settings = {
@@ -379,6 +385,19 @@
         admin_user = "admin";
         admin_password = "admin";
         secret_key = "$__file{${config.age.secrets.grafana-secret-key.path}}";
+      };
+      "auth.generic_oauth" = {
+        enabled = true;
+        name = "Pocket-ID";
+        allow_sign_up = true;
+        client_id = "dba3e94b-d22d-444d-82ce-723e433e3d67";
+        client_secret = "$__file{${config.age.secrets.grafana-oidc-secret.path}}";
+        scopes = "openid email profile";
+        auth_url = "https://pocketid.dropbear-butterfly.ts.net/authorize";
+        token_url = "https://pocketid.dropbear-butterfly.ts.net/api/oidc/token";
+        api_url = "https://pocketid.dropbear-butterfly.ts.net/api/oidc/userinfo";
+        use_pkce = true;
+        role_attribute_path = "contains(groups[*], 'admins') && 'Admin' || 'Viewer'";
       };
     };
     provision = {
