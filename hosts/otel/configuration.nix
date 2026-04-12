@@ -42,21 +42,33 @@
         otlp:
           protocols:
             grpc:
+              endpoint: "0.0.0.0:4317"
             http:
+              endpoint: "0.0.0.0:4318"
 
       processors:
-        batch: {}
+        batch:
+          timeout: 5s
+          send_batch_size: 1000
 
       exporters:
         debug:
           verbosity: basic
+
+        otlphttp/tempo:
+          endpoint: "http://127.0.0.1:4328"
+          tls:
+            insecure: true
+
+        loki:
+          endpoint: "http://127.0.0.1:3100/loki/api/v1/push"
 
       service:
         pipelines:
           traces:
             receivers: [otlp]
             processors: [batch]
-            exporters: [debug]
+            exporters: [otlphttp/tempo, debug]
           metrics:
             receivers: [otlp]
             processors: [batch]
@@ -64,7 +76,7 @@
           logs:
             receivers: [otlp]
             processors: [batch]
-            exporters: [debug]
+            exporters: [loki, debug]
     '';
   };
 
@@ -83,10 +95,106 @@
     };
   };
 
+  # Loki for log aggregation
+  services.loki = {
+    enable = true;
+    configuration = {
+      auth_enabled = false;
+      server = {
+        http_listen_port = 3100;
+        grpc_listen_port = 9096;
+      };
+      common = {
+        path_prefix = "/var/lib/loki";
+        storage.filesystem = {
+          chunks_directory = "/var/lib/loki/chunks";
+          rules_directory = "/var/lib/loki/rules";
+        };
+        replication_factor = 1;
+        ring = {
+          instance_addr = "127.0.0.1";
+          kvstore.store = "inmemory";
+        };
+      };
+      schema_config.configs = [
+        {
+          from = "2024-01-01";
+          store = "tsdb";
+          object_store = "filesystem";
+          schema = "v13";
+          index = {
+            prefix = "index_";
+            period = "24h";
+          };
+        }
+      ];
+      limits_config = {
+        retention_period = "720h"; # 30 days
+        allow_structured_metadata = true;
+        volume_enabled = true;
+      };
+      compactor = {
+        working_directory = "/var/lib/loki/compactor";
+        compaction_interval = "10m";
+        retention_enabled = true;
+        retention_delete_delay = "2h";
+        delete_request_store = "filesystem";
+      };
+    };
+  };
+
+  # Tempo for distributed tracing
+  services.tempo = {
+    enable = true;
+    settings = {
+      server = {
+        http_listen_port = 3200;
+        grpc_listen_port = 9097;
+      };
+      distributor.receivers = {
+        otlp.protocols = {
+          grpc.endpoint = "127.0.0.1:4327";
+          http.endpoint = "127.0.0.1:4328";
+        };
+      };
+      storage.trace = {
+        backend = "local";
+        local.path = "/var/lib/tempo/traces";
+        wal.path = "/var/lib/tempo/wal";
+        block = {
+          bloom_filter_false_positive = 0.05;
+          v2_index_downsample_bytes = 1000;
+          v2_encoding = "zstd";
+        };
+      };
+      compactor = {
+        compaction = {
+          block_retention = "720h"; # 30 days
+        };
+      };
+      metrics_generator = {
+        registry.external_labels = {
+          source = "tempo";
+          environment = "homelab";
+        };
+        storage = {
+          path = "/var/lib/tempo/generator/wal";
+          remote_write = [
+            {
+              url = "http://localhost:9090/api/v1/write";
+              send_exemplars = true;
+            }
+          ];
+        };
+      };
+      overrides.defaults.metrics_generator.processors = ["service-graphs" "span-metrics"];
+    };
+  };
+
   services.prometheus = {
     enable = true;
     port = 9090;
-    retentionTime = "15d";
+    retentionTime = "30d";
     webExternalUrl = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
     extraFlags = ["--web.route-prefix=/"];
 
@@ -279,10 +387,55 @@
         {
           name = "Prometheus";
           type = "prometheus";
+          uid = "prometheus";
           url = "http://localhost:9090";
           isDefault = true;
           jsonData = {
             timeInterval = config.services.prometheus.globalConfig.scrape_interval;
+          };
+        }
+        {
+          name = "Loki";
+          type = "loki";
+          uid = "loki";
+          url = "http://localhost:3100";
+          jsonData = {
+            maxLines = 1000;
+            derivedFields = [
+              {
+                name = "TraceID";
+                matcherRegex = "traceID=(\\w+)";
+                url = "$${__value.raw}";
+                datasourceUid = "tempo";
+              }
+            ];
+          };
+        }
+        {
+          name = "Tempo";
+          type = "tempo";
+          uid = "tempo";
+          url = "http://localhost:3200";
+          jsonData = {
+            tracesToLogsV2 = {
+              datasourceUid = "loki";
+              spanStartTimeShift = "-1h";
+              spanEndTimeShift = "1h";
+              filterByTraceID = true;
+              filterBySpanID = true;
+            };
+            tracesToMetrics = {
+              datasourceUid = "prometheus";
+            };
+            serviceMap = {
+              datasourceUid = "prometheus";
+            };
+            nodeGraph = {
+              enabled = true;
+            };
+            lokiSearch = {
+              datasourceUid = "loki";
+            };
           };
         }
       ];
@@ -300,6 +453,14 @@
 
         handle_path /prometheus* {
           reverse_proxy localhost:9090
+        }
+
+        handle_path /loki* {
+          reverse_proxy localhost:3100
+        }
+
+        handle_path /tempo* {
+          reverse_proxy localhost:3200
         }
 
         handle /grafana* {
@@ -327,6 +488,8 @@
       443 # HTTPS (Caddy)
       4317 # OTLP gRPC
       4318 # OTLP HTTP
+      3100 # Loki HTTP
+      3200 # Tempo HTTP
       8888 # Collector metrics
     ];
   };
