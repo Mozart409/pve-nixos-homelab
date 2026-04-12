@@ -420,14 +420,6 @@
           url = "http://localhost:3100";
           jsonData = {
             maxLines = 1000;
-            derivedFields = [
-              {
-                name = "TraceID";
-                matcherRegex = "traceID=(\\w+)";
-                url = "$${__value.raw}";
-                datasourceUid = "tempo";
-              }
-            ];
           };
         }
         {
@@ -436,24 +428,8 @@
           uid = "tempo";
           url = "http://localhost:3200";
           jsonData = {
-            tracesToLogsV2 = {
-              datasourceUid = "loki";
-              spanStartTimeShift = "-1h";
-              spanEndTimeShift = "1h";
-              filterByTraceID = true;
-              filterBySpanID = true;
-            };
-            tracesToMetrics = {
-              datasourceUid = "prometheus";
-            };
-            serviceMap = {
-              datasourceUid = "prometheus";
-            };
             nodeGraph = {
               enabled = true;
-            };
-            lokiSearch = {
-              datasourceUid = "loki";
             };
           };
         }
