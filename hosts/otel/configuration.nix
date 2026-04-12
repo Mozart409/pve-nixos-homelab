@@ -402,38 +402,52 @@
     };
     provision = {
       enable = true;
-      datasources.settings.datasources = [
-        {
-          name = "Prometheus";
-          type = "prometheus";
-          uid = "prometheus";
-          url = "http://localhost:9090";
-          isDefault = true;
-          jsonData = {
-            timeInterval = config.services.prometheus.globalConfig.scrape_interval;
-          };
-        }
-        {
-          name = "Loki";
-          type = "loki";
-          uid = "loki";
-          url = "http://localhost:3100";
-          jsonData = {
-            maxLines = 1000;
-          };
-        }
-        {
-          name = "Tempo";
-          type = "tempo";
-          uid = "tempo";
-          url = "http://localhost:3200";
-          jsonData = {
-            nodeGraph = {
-              enabled = true;
+      datasources.settings = {
+        apiVersion = 1;
+        deleteDatasources = [
+          {
+            name = "Prometheus";
+            orgId = 1;
+          }
+          {
+            name = "Loki";
+            orgId = 1;
+          }
+          {
+            name = "Tempo";
+            orgId = 1;
+          }
+        ];
+        datasources = [
+          {
+            name = "Prometheus";
+            type = "prometheus";
+            url = "http://localhost:9090";
+            isDefault = true;
+            jsonData = {
+              timeInterval = config.services.prometheus.globalConfig.scrape_interval;
             };
-          };
-        }
-      ];
+          }
+          {
+            name = "Loki";
+            type = "loki";
+            url = "http://localhost:3100";
+            jsonData = {
+              maxLines = 1000;
+            };
+          }
+          {
+            name = "Tempo";
+            type = "tempo";
+            url = "http://localhost:3200";
+            jsonData = {
+              nodeGraph = {
+                enabled = true;
+              };
+            };
+          }
+        ];
+      };
     };
   };
 
