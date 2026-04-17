@@ -118,10 +118,25 @@
   # Caddy reverse proxy - Tailscale-only access
   services.caddy = {
     enable = true;
+
+    # Tailscale hostname
     virtualHosts."homelab-hermes.dropbear-butterfly.ts.net" = {
       extraConfig = ''
         tls {
           get_certificate tailscale
+        }
+
+        handle {
+          reverse_proxy http://localhost:8080
+        }
+      '';
+    };
+
+    # Local network hostname with step-ca certificate
+    virtualHosts."hermes.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
         handle {
