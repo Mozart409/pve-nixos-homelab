@@ -113,3 +113,24 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
 -   **Disko**: Declarative disk partitioning.
 -   **OpenTofu**: Infrastructure provisioning (fork of Terraform).
 -   **Proxmox**: Virtualization platform target.
+
+## 5. Common Pitfalls
+
+### Caddy Path Handling
+When configuring Caddy reverse proxies, be careful with `handle` vs `handle_path`:
+- **`handle /path*`**: Preserves the full path when proxying. Use this for services that expect their prefix in the URL (e.g., Loki expects `/loki/api/v1/push`, Tempo expects `/tempo/api/...`).
+- **`handle_path /path*`**: Strips the prefix before proxying. Use this for services that expect requests at root (e.g., Grafana served at `/grafana` but expects `/` internally).
+
+**Example - WRONG:**
+```
+handle_path /loki* {
+  reverse_proxy localhost:3100  # Sends /api/v1/push instead of /loki/api/v1/push - 404!
+}
+```
+
+**Example - CORRECT:**
+```
+handle /loki* {
+  reverse_proxy localhost:3100  # Sends /loki/api/v1/push as expected
+}
+```
