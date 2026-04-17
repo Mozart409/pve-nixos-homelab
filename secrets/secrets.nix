@@ -25,6 +25,5 @@ in {
   "hermes-opencode-zen-key.age".publicKeys = [amadeus hostHermes];
   "hermes-api-server-key.age".publicKeys = [amadeus hostHermes];
   "k3s-server-token.age".publicKeys = [amadeus hostK3sServer1 hostK3sWorker1];
-  # step-ca intermediate CA password (needed before hostCa key is available, so just amadeus for now)
   "step-ca-password.age".publicKeys = [amadeus hostCa];
 }
