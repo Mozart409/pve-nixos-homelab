@@ -521,11 +521,11 @@
           reverse_proxy localhost:9090
         }
 
-        handle_path /loki* {
+        handle /loki* {
           reverse_proxy localhost:3100
         }
 
-        handle_path /tempo* {
+        handle /tempo* {
           reverse_proxy localhost:3200
         }
 
@@ -550,11 +550,11 @@
           reverse_proxy localhost:9090
         }
 
-        handle_path /loki* {
+        handle /loki* {
           reverse_proxy localhost:3100
         }
 
-        handle_path /tempo* {
+        handle /tempo* {
           reverse_proxy localhost:3200
         }
 
