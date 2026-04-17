@@ -506,10 +506,41 @@
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
     enable = true;
+
+    # Tailscale hostname
     virtualHosts."homelab-otel.dropbear-butterfly.ts.net" = {
       extraConfig = ''
         tls {
           get_certificate tailscale
+        }
+
+        handle_path /prometheus* {
+          reverse_proxy localhost:9090
+        }
+
+        handle /loki* {
+          reverse_proxy localhost:3100
+        }
+
+        handle /tempo* {
+          reverse_proxy localhost:3200
+        }
+
+        handle /grafana* {
+          reverse_proxy localhost:3000
+        }
+
+        handle {
+          respond "OK" 200
+        }
+      '';
+    };
+
+    # Local network hostname with step-ca certificate
+    virtualHosts."otel.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
         handle_path /prometheus* {

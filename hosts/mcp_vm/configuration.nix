@@ -35,10 +35,25 @@
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
     enable = true;
+
+    # Tailscale hostname
     virtualHosts."homelab-mcp.dropbear-butterfly.ts.net" = {
       extraConfig = ''
         tls {
           get_certificate tailscale
+        }
+
+        handle {
+          reverse_proxy http://localhost:3000
+        }
+      '';
+    };
+
+    # Local network hostname with step-ca certificate
+    virtualHosts."mcp.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
         handle {

@@ -48,10 +48,32 @@
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
     enable = true;
+
+    # Tailscale hostname
     virtualHosts."homelab-unifi.dropbear-butterfly.ts.net" = {
       extraConfig = ''
         tls {
           get_certificate tailscale
+        }
+
+        handle {
+          reverse_proxy https://localhost:8443 {
+            transport http {
+              tls_insecure_skip_verify
+            }
+            header_up Host localhost:8443
+            header_up Origin https://localhost:8443
+            header_up Referer https://localhost:8443/
+          }
+        }
+      '';
+    };
+
+    # Local network hostname with step-ca certificate
+    virtualHosts."unifi.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
         handle {

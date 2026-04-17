@@ -89,13 +89,27 @@
         local-data = [
           ''"homeassistant.local. A 192.168.2.208"''
           ''"pve-gigabyte.local. A 192.168.2.42"''
-          # Homelab CA - step-ca certificate authority
+          # Homelab services with step-ca certificates
           ''"ca.homelab.local. A 192.168.2.160"''
+          ''"database.homelab.local. A 192.168.2.134"''
+          ''"otel.homelab.local. A 192.168.2.135"''
+          ''"dns.homelab.local. A 192.168.2.145"''
+          ''"unifi.homelab.local. A 192.168.2.142"''
+          ''"containers.homelab.local. A 192.168.2.149"''
+          ''"mcp.homelab.local. A 192.168.2.152"''
+          ''"hermes.homelab.local. A 192.168.2.155"''
         ];
         local-data-ptr = [
           ''"192.168.2.208 homeassistant.local"''
           ''"192.168.2.42 pve-gigabyte.local"''
           ''"192.168.2.160 ca.homelab.local"''
+          ''"192.168.2.134 database.homelab.local"''
+          ''"192.168.2.135 otel.homelab.local"''
+          ''"192.168.2.145 dns.homelab.local"''
+          ''"192.168.2.142 unifi.homelab.local"''
+          ''"192.168.2.149 containers.homelab.local"''
+          ''"192.168.2.152 mcp.homelab.local"''
+          ''"192.168.2.155 hermes.homelab.local"''
         ];
       };
 
@@ -133,10 +147,25 @@
   # Caddy reverse proxy with Tailscale TLS for management interface
   services.caddy = {
     enable = true;
+
+    # Tailscale hostname
     virtualHosts."homelab-dns.dropbear-butterfly.ts.net" = {
       extraConfig = ''
         tls {
           get_certificate tailscale
+        }
+
+        handle {
+          respond "DNS Server OK" 200
+        }
+      '';
+    };
+
+    # Local network hostname with step-ca certificate
+    virtualHosts."dns.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
         handle {
