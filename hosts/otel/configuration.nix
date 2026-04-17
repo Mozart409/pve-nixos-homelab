@@ -533,6 +533,11 @@
           reverse_proxy localhost:3000
         }
 
+        # OTLP endpoints (traces, metrics, logs)
+        handle /v1/* {
+          reverse_proxy localhost:4318
+        }
+
         handle {
           respond "OK" 200
         }
@@ -560,6 +565,11 @@
 
         handle /grafana* {
           reverse_proxy localhost:3000
+        }
+
+        # OTLP endpoints (traces, metrics, logs)
+        handle /v1/* {
+          reverse_proxy localhost:4318
         }
 
         handle {
