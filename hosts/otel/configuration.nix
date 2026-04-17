@@ -43,9 +43,12 @@
         otlp:
           protocols:
             grpc:
-              endpoint: "0.0.0.0:4317"
+              endpoint: 0.0.0.0:4317
             http:
-              endpoint: "0.0.0.0:4318"
+              endpoint: 0.0.0.0:4318
+              cors:
+                allowed_origins:
+                  - "*"
 
       processors:
         batch:
@@ -518,11 +521,11 @@
           reverse_proxy localhost:9090
         }
 
-        handle /loki* {
+        handle_path /loki* {
           reverse_proxy localhost:3100
         }
 
-        handle /tempo* {
+        handle_path /tempo* {
           reverse_proxy localhost:3200
         }
 
@@ -547,11 +550,11 @@
           reverse_proxy localhost:9090
         }
 
-        handle /loki* {
+        handle_path /loki* {
           reverse_proxy localhost:3100
         }
 
-        handle /tempo* {
+        handle_path /tempo* {
           reverse_proxy localhost:3200
         }
 
