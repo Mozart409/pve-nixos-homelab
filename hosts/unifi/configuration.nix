@@ -8,6 +8,7 @@
     ../../modules/common.nix
     ../../modules/disko-config.nix
     ../../modules/tailscale.nix
+    ../../modules/step-ca-trust.nix
   ];
 
   # Allow unfree packages (required for UniFi controller)

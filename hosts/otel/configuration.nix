@@ -8,6 +8,7 @@
     ../../modules/common.nix
     ../../modules/disko-config.nix
     ../../modules/tailscale.nix
+    ../../modules/step-ca-trust.nix
   ];
 
   networking.hostName = "homelab-otel";
@@ -353,6 +354,18 @@
             targets = ["192.168.2.156:9100"];
             labels = {
               instance = "k3s-agent-1";
+            };
+          }
+        ];
+      }
+      # CA host exporters
+      {
+        job_name = "ca-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.160:9100"];
+            labels = {
+              instance = "homelab-ca";
             };
           }
         ];
