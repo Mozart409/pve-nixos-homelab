@@ -9,7 +9,8 @@ let
   hostHermes = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKBloNkev1cC0W2YBDi0Qk0adUqVwWve1oXK4X5PYnds root@homelab-hermes";
   hostK3sServer1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILK0KcBwr2zXxl97/JjpFRBD38XpG0wEWZjkIQgarRcJ root@k3s-server-1";
   hostK3sWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMtwgQdHZdj7KSSmzc5nI02kzRIUqV26A2B4D/dbEpj7 root@homelab-minimal root@k3s-worker-1";
-  users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1];
+  hostCa = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP8qC6ErJ2PUjNlIwchBMyAWeRDVB6to2cNSnnDqmD+x root@homelab-ca";
+  users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa];
 in {
   "tailscale-auth-key.age".publicKeys = users;
   "uptime-forge-db-password.age".publicKeys = [amadeus hostContainers];
@@ -24,4 +25,6 @@ in {
   "hermes-opencode-zen-key.age".publicKeys = [amadeus hostHermes];
   "hermes-api-server-key.age".publicKeys = [amadeus hostHermes];
   "k3s-server-token.age".publicKeys = [amadeus hostK3sServer1 hostK3sWorker1];
+  # step-ca intermediate CA password (needed before hostCa key is available, so just amadeus for now)
+  "step-ca-password.age".publicKeys = [amadeus hostCa];
 }
