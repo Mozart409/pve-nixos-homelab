@@ -57,17 +57,17 @@
     enable = true;
     trustedInterfaces = ["tailscale0" "cni0" "flannel.1"];
     allowedTCPPorts = [
-      22    # SSH
-      6443  # Kubernetes API
-      2379  # etcd client
-      2380  # etcd peer
+      22 # SSH
+      6443 # Kubernetes API
+      2379 # etcd client
+      2380 # etcd peer
       10250 # Kubelet
       10251 # kube-scheduler
       10252 # kube-controller-manager
-      9100  # Node exporter
+      9100 # Node exporter
     ];
     allowedUDPPorts = [
-      8472  # Flannel VXLAN
+      8472 # Flannel VXLAN
     ];
   };
 }

@@ -76,6 +76,10 @@
         local = "192.168.2.156";
         tailscale = "192.168.2.156";
       };
+      ca = {
+        local = "192.168.2.160";
+        tailscale = "homelab-ca";
+      };
     };
 
     targetHost = name:
@@ -105,6 +109,7 @@
         minimal = mkHost "minimal";
         k3s-server-1 = mkHost "k3s-server-1";
         k3s-agent-1 = mkHost "k3s-agent-1";
+        ca = mkHost "ca";
         # hermes = nixpkgs.lib.nixosSystem {
         #   inherit system;
         #   modules = [
@@ -256,6 +261,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/k3s-agent-1/configuration.nix
+          ];
+        };
+
+        ca = {
+          deployment = {
+            targetHost = targetHost "ca";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["security" "ca"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/ca/configuration.nix
           ];
         };
         # END
