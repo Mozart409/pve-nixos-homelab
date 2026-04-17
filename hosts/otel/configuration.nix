@@ -190,6 +190,27 @@
             }
           ];
         };
+        processor = {
+          service_graphs = {
+            dimensions = [
+              "http.method"
+              "http.status_code"
+            ];
+          };
+          span_metrics = {
+            dimensions = [
+              "http.method"
+              "http.status_code"
+            ];
+          };
+          # Future: semantic HTTP convention attributes
+          # service_graphs = {
+          #   dimensions = [
+          #     "http.request.method"
+          #     "http.response.status_code"
+          #   ];
+          # };
+        };
       };
       overrides.defaults.metrics_generator.processors = ["service-graphs" "span-metrics"];
     };
