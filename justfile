@@ -29,6 +29,10 @@ deploy-minimal ip:
   @echo "Deploying minimal to {{ip}}..."
   nixos-anywhere --flake .#minimal amadeus@{{ip}}
 
+deploy host ip:
+  @echo "Deploying {{host}} to {{ip}}..."
+  nixos-anywhere --flake .#{{host}} amadeus@{{ip}}
+
 colmena-apply: clear
   @echo "Deploying to all hosts..."
   colmena apply
