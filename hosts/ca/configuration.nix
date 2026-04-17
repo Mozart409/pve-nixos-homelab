@@ -64,24 +64,6 @@
           {
             type = "ACME";
             name = "acme";
-            # Allow HTTP-01 and TLS-ALPN-01 challenges
-            challenges = ["http-01" "tls-alpn-01"];
-          }
-          # JWK provisioner for manual certificate requests via step CLI
-          {
-            type = "JWK";
-            name = "admin";
-            # This key will be generated during bootstrap
-            key = {
-              use = "sig";
-              kty = "EC";
-              crv = "P-256";
-              alg = "ES256";
-              # Placeholder - will be populated during bootstrap
-              x = "";
-              y = "";
-            };
-            encryptedKey = ""; # Placeholder - will be populated during bootstrap
           }
         ];
 
