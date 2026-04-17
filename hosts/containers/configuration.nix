@@ -8,6 +8,7 @@
     ../../modules/common.nix
     ../../modules/disko-config.nix
     ../../modules/tailscale.nix
+    ../../modules/step-ca-trust.nix
     ../../modules/podman.nix
     ./uptime-forge
     ./harbor
