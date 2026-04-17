@@ -83,14 +83,18 @@
         # Static local DNS records
         local-zone = [
           "local. static"
+          "homelab.local. static"
         ];
         local-data = [
           ''"homeassistant.local. A 192.168.2.208"''
           ''"pve-gigabyte.local. A 192.168.2.42"''
+          # Homelab CA - step-ca certificate authority
+          ''"ca.homelab.local. A 192.168.2.160"''
         ];
         local-data-ptr = [
           ''"192.168.2.208 homeassistant.local"''
           ''"192.168.2.42 pve-gigabyte.local"''
+          ''"192.168.2.160 ca.homelab.local"''
         ];
       };
 
