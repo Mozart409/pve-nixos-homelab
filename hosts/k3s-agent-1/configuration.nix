@@ -58,12 +58,12 @@
     enable = true;
     trustedInterfaces = ["tailscale0" "cni0" "flannel.1"];
     allowedTCPPorts = [
-      22    # SSH
+      22 # SSH
       10250 # Kubelet
-      9100  # Node exporter
+      9100 # Node exporter
     ];
     allowedUDPPorts = [
-      8472  # Flannel VXLAN
+      8472 # Flannel VXLAN
     ];
   };
 }
