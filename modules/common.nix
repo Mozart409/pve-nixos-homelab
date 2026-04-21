@@ -112,6 +112,7 @@
     file
     fzf
     git
+    gnused
     gzip
     htop
     iproute2
@@ -121,7 +122,6 @@
     pv
     ripgrep
     rsync
-    sed
     tmux
     traceroute
     tree
