@@ -128,6 +128,8 @@
 
   # Networking basics - DHCP disabled, using static IPs per host
   networking.useDHCP = lib.mkDefault false;
+  networking.nameservers = lib.mkDefault ["192.168.2.145" "192.168.2.1"];
+  networking.search = ["homelab.local"];
 
   # Enable QEMU guest agent (for Proxmox)
   services.qemuGuest.enable = true;
