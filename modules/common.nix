@@ -104,20 +104,33 @@
 
   # Common packages
   environment.systemPackages = with pkgs; [
-    vim
-    git
-    ss
-    jq
-    sed
-    htop
-    tmux
+    # keep-sorted start
+
+    bind
     curl
-    wget
-    rsync
+    fd
+    file
+    fzf
+    git
+    gzip
+    htop
     iproute2
     iputils
-    bind
+    jq
+    mtr
+    pv
+    ripgrep
+    rsync
+    sed
+    tmux
     traceroute
+    tree
+    unzip
+    vim
+    wget
+    yq
+    zip
+    # keep-sorted end
   ];
 
   # Enable nix flakes
