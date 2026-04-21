@@ -24,7 +24,8 @@
     ];
   };
   networking.defaultGateway = "192.168.2.1";
-  networking.nameservers = ["192.168.2.145" "1.1.1.1"];
+  networking.nameservers = ["192.168.2.145" "192.168.2.1"];
+  networking.search = ["homelab.local"];
 
   # K3s token secret
   age.secrets.k3s-server-token = {
