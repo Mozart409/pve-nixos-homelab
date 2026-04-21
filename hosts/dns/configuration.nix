@@ -24,7 +24,8 @@
     ];
   };
   networking.defaultGateway = "192.168.2.1";
-  networking.nameservers = ["127.0.0.1" "1.1.1.1"];
+  networking.nameservers = ["127.0.0.1" "192.168.2.1"];
+  networking.search = ["homelab.local"];
 
   # Unbound DNS resolver with systemd integration
   services.unbound = {
