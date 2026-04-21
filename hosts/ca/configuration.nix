@@ -24,8 +24,6 @@
     ];
   };
   networking.defaultGateway = "192.168.2.1";
-  networking.nameservers = ["192.168.2.145" "192.168.2.1"];
-  networking.search = ["homelab.local"];
 
   # step-ca Certificate Authority
   # Password for the intermediate CA key (created via agenix)
