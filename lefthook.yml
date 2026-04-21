@@ -1,0 +1,14 @@
+# Refer for explanation to following link:
+# https://lefthook.dev/configuration/
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: alejandra
+      glob: "*.nix"
+      run: alejandra {staged_files}
+      stage_fixed: true
+
+    - name: keep-sorted
+      run: keep-sorted {staged_files}
+      stage_fixed: true

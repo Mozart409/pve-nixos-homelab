@@ -288,38 +288,44 @@
     in {
       devShells.default = pkgs.mkShell {
         buildInputs = with pkgs; [
-          podman
-          podman-compose
-          podman-tui
-          dive
-          lazydocker
-          # check for security issues
-          kics
-          just
+          # keep-sorted start
+
+          agenix.packages.${system}.default
+          bacon
           # rust
           cargo
           cargo-workspaces
-          rust-analyzer
-          rustc
-          bacon
-          rainfrog
+          claude-code
+          colmena.packages.${system}.colmena
+          dive
           # fmt
           dprint
-
+          just
+          keep-sorted
+          # check for security issues
+          kics
+          lazydocker
+          lefthook
+          nixos-anywhere.packages.${system}.default
           #ai
           opencode
-          claude-code
-
+          opentofu
+          podman
+          podman-compose
+          podman-tui
+          rainfrog
+          rust-analyzer
+          rustc
           # k8s
           timoni
-
           # IaC
           tofu-ls
-          opentofu
-          nixos-anywhere.packages.${system}.default
-          colmena.packages.${system}.colmena
-          agenix.packages.${system}.default
+
+          # keep-sorted end
         ];
+        shellHook = ''
+          lefthook install
+        '';
       };
     });
 }
