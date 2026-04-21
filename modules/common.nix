@@ -106,6 +106,9 @@
   environment.systemPackages = with pkgs; [
     vim
     git
+    ss
+    jq
+    sed
     htop
     tmux
     curl
