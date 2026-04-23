@@ -128,6 +128,7 @@
     path = [pkgs.fleet];
     script = ''
       export FLEET_MYSQL_PASSWORD=$(cat ${config.age.secrets.fleet-mysql-password.path})
+      export FLEET_SERVER_TLS=false
       fleet prepare db --config /etc/fleet/fleet.yml --no-prompt
       exec fleet serve --config /etc/fleet/fleet.yml
     '';
