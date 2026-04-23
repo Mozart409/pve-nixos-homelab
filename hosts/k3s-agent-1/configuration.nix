@@ -9,6 +9,7 @@
     ../../modules/disko-config.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
+    ../../modules/osquery.nix
   ];
 
   networking.hostName = "k3s-agent-1";
