@@ -80,6 +80,10 @@
         local = "192.168.2.160";
         tailscale = "homelab-ca";
       };
+      fleet = {
+        local = "192.168.2.165";
+        tailscale = "homelab-fleet";
+      };
     };
 
     targetHost = name:
@@ -110,6 +114,7 @@
         k3s-server-1 = mkHost "k3s-server-1";
         k3s-agent-1 = mkHost "k3s-agent-1";
         ca = mkHost "ca";
+        fleet = mkHost "fleet";
         # hermes = nixpkgs.lib.nixosSystem {
         #   inherit system;
         #   modules = [
@@ -275,6 +280,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/ca/configuration.nix
+          ];
+        };
+
+        fleet = {
+          deployment = {
+            targetHost = targetHost "fleet";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["security" "fleet"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/fleet/configuration.nix
           ];
         };
         # END
