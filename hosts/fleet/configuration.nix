@@ -33,10 +33,10 @@
   };
   networking.defaultGateway = "192.168.2.1";
 
-  # MySQL database for Fleet
+  # MySQL database for Fleet (requires MySQL 8.0.36+, not MariaDB)
   services.mysql = {
     enable = true;
-    package = pkgs.mariadb;
+    package = pkgs.mysql84;
     settings = {
       mysqld = {
         bind-address = "127.0.0.1";
@@ -110,7 +110,7 @@
     };
     script = ''
       PASSWORD=$(cat ${config.age.secrets.fleet-mysql-password.path})
-      ${pkgs.mariadb}/bin/mariadb <<EOF
+      ${pkgs.mysql84}/bin/mysql <<EOF
       CREATE USER IF NOT EXISTS 'fleet'@'localhost' IDENTIFIED BY '$PASSWORD';
       ALTER USER 'fleet'@'localhost' IDENTIFIED BY '$PASSWORD';
       GRANT ALL PRIVILEGES ON fleet.* TO 'fleet'@'localhost';
