@@ -99,7 +99,7 @@
           ''"containers.homelab.local. A 192.168.2.149"''
           ''"mcp.homelab.local. A 192.168.2.152"''
           ''"hermes.homelab.local. A 192.168.2.155"''
-          ''"fleet.homelab.local. A 192.168.2.165"''
+          ''"fleet.homelab.local. A 192.168.2.164"''
         ];
         local-data-ptr = [
           ''"192.168.2.208 homeassistant.local"''
@@ -112,7 +112,7 @@
           ''"192.168.2.149 containers.homelab.local"''
           ''"192.168.2.152 mcp.homelab.local"''
           ''"192.168.2.155 hermes.homelab.local"''
-          ''"192.168.2.165 fleet.homelab.local"''
+          ''"192.168.2.164 fleet.homelab.local"''
         ];
       };
 
