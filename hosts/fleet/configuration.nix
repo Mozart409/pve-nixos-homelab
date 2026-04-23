@@ -11,6 +11,14 @@
     ../../modules/step-ca-trust.nix
   ];
 
+  # Fleet MySQL password
+  age.secrets.fleet-mysql-password = {
+    file = ../../secrets/fleet-mysql-password.age;
+    mode = "0400";
+    owner = "fleet";
+    group = "fleet";
+  };
+
   networking.hostName = "homelab-fleet";
 
   # Static IP configuration
@@ -77,7 +85,6 @@
         address: 127.0.0.1:3306
         database: fleet
         username: fleet
-        password: ""
         max_open_conns: 50
         max_idle_conns: 25
         conn_max_lifetime: 3600
@@ -98,14 +105,33 @@
     '';
   };
 
+  # Set MySQL password for fleet user after it's created
+  systemd.services.fleet-mysql-password = {
+    description = "Set Fleet MySQL user password";
+    after = ["mysql.service" "agenix.service"];
+    requires = ["mysql.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      PASSWORD=$(cat ${config.age.secrets.fleet-mysql-password.path})
+      ${pkgs.mariadb}/bin/mysql -e "ALTER USER 'fleet'@'localhost' IDENTIFIED BY '$PASSWORD';"
+    '';
+  };
+
   # Fleet systemd service
   systemd.services.fleet = {
     description = "Fleet osquery management server";
-    after = ["network.target" "mysql.service" "redis-fleet.service"];
-    requires = ["mysql.service" "redis-fleet.service"];
+    after = ["network.target" "mysql.service" "redis-fleet.service" "fleet-mysql-password.service"];
+    requires = ["mysql.service" "redis-fleet.service" "fleet-mysql-password.service"];
     wantedBy = ["multi-user.target"];
+    script = ''
+      export FLEET_MYSQL_PASSWORD=$(cat ${config.age.secrets.fleet-mysql-password.path})
+      exec ${pkgs.fleet}/bin/fleet serve --config /etc/fleet/fleet.yml
+    '';
     serviceConfig = {
-      ExecStart = "${pkgs.fleet}/bin/fleet serve --config /etc/fleet/fleet.yml";
       User = "fleet";
       Group = "fleet";
       Restart = "on-failure";

@@ -28,4 +28,5 @@ in {
   "k3s-server-token.age".publicKeys = [amadeus hostK3sServer1 hostK3sWorker1];
   "step-ca-password.age".publicKeys = [amadeus hostCa];
   "fleet-enroll-secret.age".publicKeys = users;
+  "fleet-mysql-password.age".publicKeys = [amadeus hostFleet];
 }
