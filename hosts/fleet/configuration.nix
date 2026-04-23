@@ -114,10 +114,14 @@
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
+      User = "root";
     };
     script = ''
       PASSWORD=$(cat ${config.age.secrets.fleet-mysql-password.path})
-      ${pkgs.mariadb}/bin/mysql -e "ALTER USER 'fleet'@'localhost' IDENTIFIED BY '$PASSWORD';"
+      ${pkgs.mariadb}/bin/mariadb <<EOF
+      ALTER USER 'fleet'@'localhost' IDENTIFIED BY '$PASSWORD';
+      FLUSH PRIVILEGES;
+      EOF
     '';
   };
 
