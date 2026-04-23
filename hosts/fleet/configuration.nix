@@ -44,14 +44,6 @@
       };
     };
     ensureDatabases = ["fleet"];
-    ensureUsers = [
-      {
-        name = "fleet";
-        ensurePermissions = {
-          "fleet.*" = "ALL PRIVILEGES";
-        };
-      }
-    ];
   };
 
   # Redis for Fleet
@@ -105,9 +97,9 @@
     '';
   };
 
-  # Set MySQL password for fleet user after it's created
-  systemd.services.fleet-mysql-password = {
-    description = "Set Fleet MySQL user password";
+  # Create MySQL user with password auth (not unix_socket)
+  systemd.services.fleet-mysql-setup = {
+    description = "Create Fleet MySQL user with password auth";
     after = ["mysql.service" "agenix.service"];
     requires = ["mysql.service"];
     wantedBy = ["multi-user.target"];
@@ -119,7 +111,9 @@
     script = ''
       PASSWORD=$(cat ${config.age.secrets.fleet-mysql-password.path})
       ${pkgs.mariadb}/bin/mariadb <<EOF
+      CREATE USER IF NOT EXISTS 'fleet'@'localhost' IDENTIFIED BY '$PASSWORD';
       ALTER USER 'fleet'@'localhost' IDENTIFIED BY '$PASSWORD';
+      GRANT ALL PRIVILEGES ON fleet.* TO 'fleet'@'localhost';
       FLUSH PRIVILEGES;
       EOF
     '';
@@ -128,8 +122,8 @@
   # Fleet systemd service
   systemd.services.fleet = {
     description = "Fleet osquery management server";
-    after = ["network.target" "mysql.service" "redis-fleet.service" "fleet-mysql-password.service"];
-    requires = ["mysql.service" "redis-fleet.service" "fleet-mysql-password.service"];
+    after = ["network.target" "mysql.service" "redis-fleet.service" "fleet-mysql-setup.service"];
+    requires = ["mysql.service" "redis-fleet.service" "fleet-mysql-setup.service"];
     wantedBy = ["multi-user.target"];
     script = ''
       export FLEET_MYSQL_PASSWORD=$(cat ${config.age.secrets.fleet-mysql-password.path})
