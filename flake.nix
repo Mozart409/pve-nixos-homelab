@@ -81,7 +81,7 @@
         tailscale = "homelab-ca";
       };
       fleet = {
-        local = "192.168.2.165";
+        local = "192.168.2.164";
         tailscale = "homelab-fleet";
       };
     };

@@ -548,7 +548,7 @@ resource "proxmox_virtual_environment_vm" "fleet_vm" {
 
     ip_config {
       ipv4 {
-        address = "192.168.2.165/24"
+        address = "192.168.2.164/24"
         gateway = "192.168.2.1"
       }
     }
