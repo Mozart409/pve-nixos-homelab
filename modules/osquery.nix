@@ -24,7 +24,6 @@
         distributed_tls_max_attempts = "3";
         distributed_tls_read_endpoint = "/api/osquery/distributed/read";
         distributed_tls_write_endpoint = "/api/osquery/distributed/write";
-        logger_plugin = "tls";
         logger_tls_endpoint = "/api/osquery/log";
         logger_tls_period = "10";
       };
