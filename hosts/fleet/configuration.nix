@@ -125,9 +125,11 @@
     after = ["network.target" "mysql.service" "redis-fleet.service" "fleet-mysql-setup.service"];
     requires = ["mysql.service" "redis-fleet.service" "fleet-mysql-setup.service"];
     wantedBy = ["multi-user.target"];
+    path = [pkgs.fleet];
     script = ''
       export FLEET_MYSQL_PASSWORD=$(cat ${config.age.secrets.fleet-mysql-password.path})
-      exec ${pkgs.fleet}/bin/fleet serve --config /etc/fleet/fleet.yml
+      fleet prepare db --config /etc/fleet/fleet.yml --no-prompt
+      exec fleet serve --config /etc/fleet/fleet.yml
     '';
     serviceConfig = {
       User = "fleet";
