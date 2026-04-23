@@ -18,7 +18,7 @@
     useDHCP = false;
     ipv4.addresses = [
       {
-        address = "192.168.2.165";
+        address = "192.168.2.164";
         prefixLength = 24;
       }
     ];
