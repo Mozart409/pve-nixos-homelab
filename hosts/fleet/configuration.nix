@@ -88,8 +88,6 @@
 
       server:
         address: 0.0.0.0:8080
-        cert: /var/lib/fleet/certs/server.crt
-        key: /var/lib/fleet/certs/server.key
 
       logging:
         json: true
