@@ -43,7 +43,6 @@
         port = 3306;
       };
     };
-    ensureDatabases = ["fleet"];
   };
 
   # Redis for Fleet
@@ -110,7 +109,8 @@
     };
     script = ''
       PASSWORD=$(cat ${config.age.secrets.fleet-mysql-password.path})
-      ${pkgs.mysql84}/bin/mysql <<EOF
+      ${pkgs.mysql84}/bin/mysql -u root <<EOF
+      CREATE DATABASE IF NOT EXISTS fleet;
       CREATE USER IF NOT EXISTS 'fleet'@'localhost' IDENTIFIED BY '$PASSWORD';
       ALTER USER 'fleet'@'localhost' IDENTIFIED BY '$PASSWORD';
       GRANT ALL PRIVILEGES ON fleet.* TO 'fleet'@'localhost';
