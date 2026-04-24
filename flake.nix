@@ -69,8 +69,8 @@
         tailscale = "homelab-mcp";
       };
       "k3s-server-1" = {
-        local = "192.168.2.157";
-        tailscale = "192.168.2.157";
+        local = "192.168.2.165";
+        tailscale = "192.168.2.165";
       };
       "k3s-agent-1" = {
         local = "192.168.2.156";

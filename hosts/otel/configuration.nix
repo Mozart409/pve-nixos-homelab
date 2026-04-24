@@ -363,7 +363,7 @@
         job_name = "k3s-server-1-node";
         static_configs = [
           {
-            targets = ["192.168.2.157:9100"];
+            targets = ["192.168.2.165:9100"];
             labels = {
               instance = "k3s-server-1";
             };
