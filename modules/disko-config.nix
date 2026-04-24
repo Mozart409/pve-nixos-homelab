@@ -64,6 +64,8 @@
   boot.loader.grub = {
     enable = true;
     efiSupport = false;
+    forceInstall = true;
+    fsIdentifier = "label";
   };
 
   # Ensure necessary modules are available in initrd
