@@ -99,7 +99,9 @@
           ''"containers.homelab.local. A 192.168.2.149"''
           ''"mcp.homelab.local. A 192.168.2.152"''
           ''"hermes.homelab.local. A 192.168.2.155"''
+          ''"k3s-agent-1.homelab.local. A 192.168.2.156"''
           ''"fleet.homelab.local. A 192.168.2.164"''
+          ''"k3s-server-1.homelab.local. A 192.168.2.165"''
         ];
         local-data-ptr = [
           ''"192.168.2.208 homeassistant.local"''
@@ -112,7 +114,9 @@
           ''"192.168.2.149 containers.homelab.local"''
           ''"192.168.2.152 mcp.homelab.local"''
           ''"192.168.2.155 hermes.homelab.local"''
+          ''"192.168.2.156 k3s-agent-1.homelab.local"''
           ''"192.168.2.164 fleet.homelab.local"''
+          ''"192.168.2.165 k3s-server-1.homelab.local"''
         ];
       };
 

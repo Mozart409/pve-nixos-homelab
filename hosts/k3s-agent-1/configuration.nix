@@ -35,7 +35,7 @@
   services.k3s = {
     enable = true;
     role = "agent";
-    serverAddr = "https://192.168.2.157:6443";
+    serverAddr = "https://192.168.2.165:6443";
     tokenFile = config.age.secrets.k3s-server-token.path;
     extraFlags = toString [
       "--node-name=k3s-agent-1"
