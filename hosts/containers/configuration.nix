@@ -12,7 +12,7 @@
     ../../modules/osquery.nix
     ../../modules/podman.nix
     ./uptime-forge
-    ./harbor
+    # ./harbor  # Disabled - consider dedicated VM
   ];
 
   networking.hostName = "homelab-containers";
@@ -54,25 +54,6 @@
           reverse_proxy localhost:3000
         }
 
-        # Harbor Portal (UI)
-        handle /harbor* {
-          reverse_proxy localhost:8081
-        }
-
-        # Harbor API routes (core service)
-        handle /api/* {
-          reverse_proxy localhost:8080
-        }
-        handle /c/* {
-          reverse_proxy localhost:8080
-        }
-        handle /service/* {
-          reverse_proxy localhost:8080
-        }
-        handle /v2/* {
-          reverse_proxy localhost:8080
-        }
-
         handle {
           respond "OK" 200
         }
@@ -88,25 +69,6 @@
 
         handle /uptime-forge* {
           reverse_proxy localhost:3000
-        }
-
-        # Harbor Portal (UI)
-        handle /harbor* {
-          reverse_proxy localhost:8081
-        }
-
-        # Harbor API routes (core service)
-        handle /api/* {
-          reverse_proxy localhost:8080
-        }
-        handle /c/* {
-          reverse_proxy localhost:8080
-        }
-        handle /service/* {
-          reverse_proxy localhost:8080
-        }
-        handle /v2/* {
-          reverse_proxy localhost:8080
         }
 
         handle {
