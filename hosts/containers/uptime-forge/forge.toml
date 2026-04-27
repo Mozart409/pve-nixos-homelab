@@ -1,6 +1,7 @@
 [server]
 addr = "0.0.0.0:3000"
-reload_config_interval = 60  # Reload config every 60 seconds (default, 0 to disable)
+reload_config_interval = 60  # Reload config every 60 seconds (0 to disable)
+base_path = "/uptime-forge"  # Run behind reverse proxy at subpath
 
 [endpoints.mozart409]
 addr = "https://mozart409.com/"
