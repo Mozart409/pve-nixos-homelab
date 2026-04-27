@@ -54,8 +54,23 @@
           reverse_proxy localhost:3000
         }
 
+        # Harbor Portal (UI)
         handle /harbor* {
           reverse_proxy localhost:8081
+        }
+
+        # Harbor API routes (core service)
+        handle /api/* {
+          reverse_proxy localhost:8080
+        }
+        handle /c/* {
+          reverse_proxy localhost:8080
+        }
+        handle /service/* {
+          reverse_proxy localhost:8080
+        }
+        handle /v2/* {
+          reverse_proxy localhost:8080
         }
 
         handle {
@@ -75,8 +90,23 @@
           reverse_proxy localhost:3000
         }
 
+        # Harbor Portal (UI)
         handle /harbor* {
           reverse_proxy localhost:8081
+        }
+
+        # Harbor API routes (core service)
+        handle /api/* {
+          reverse_proxy localhost:8080
+        }
+        handle /c/* {
+          reverse_proxy localhost:8080
+        }
+        handle /service/* {
+          reverse_proxy localhost:8080
+        }
+        handle /v2/* {
+          reverse_proxy localhost:8080
         }
 
         handle {
