@@ -69,6 +69,11 @@ in {
     source = ./config/core.conf;
   };
 
+  environment.etc."harbor/nginx.conf" = {
+    mode = "0644";
+    source = ./config/nginx.conf;
+  };
+
   # Load secrets via agenix
   age.secrets.harbor-db-password = {
     file = ../../../secrets/harbor-db-password.age;
@@ -162,6 +167,9 @@ in {
       image = "goharbor/harbor-portal:v2.11.2";
       autoStart = true;
       ports = ["8081:8080"];
+      volumes = [
+        "/etc/harbor/nginx.conf:/etc/nginx/nginx.conf:ro"
+      ];
       dependsOn = ["harbor-core"];
       extraOptions = [
         "--network=harbor-net"
