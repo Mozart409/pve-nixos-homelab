@@ -21,9 +21,9 @@ description = "SearXNG Search"
 group = "internal"
 tags = ["internal", "search"]
 
-[endpoints.pinchflat]
-addr = "https://pinchflat.dropbear-butterfly.ts.net/"
-description = "Pinchflat"
+[endpoints.hofvarpnir]
+addr = "https://hofvarpnir.dropbear-butterfly.ts.net/"
+description = "Hofvarpnir"
 group = "internal"
 tags = ["internal", "media"]
 
