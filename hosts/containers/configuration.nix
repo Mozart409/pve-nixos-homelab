@@ -50,11 +50,11 @@
           get_certificate tailscale
         }
 
-        handle_path /uptime-forge* {
+        handle /uptime-forge* {
           reverse_proxy localhost:3000
         }
 
-        handle_path /harbor* {
+        handle /harbor* {
           reverse_proxy localhost:8081
         }
 
@@ -71,11 +71,11 @@
           ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
-        handle_path /uptime-forge* {
+        handle /uptime-forge* {
           reverse_proxy localhost:3000
         }
 
-        handle_path /harbor* {
+        handle /harbor* {
           reverse_proxy localhost:8081
         }
 
