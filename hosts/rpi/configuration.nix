@@ -58,9 +58,9 @@
   boot.blacklistedKernelModules = ["brcmfmac" "brcmutil" "btbcm" "hci_uart"];
 
   # Hardware watchdog - auto-reboots if system freezes
-  systemd.watchdog = {
-    runtimeTime = "30s";
-    rebootTime = "10m";
+  systemd.settings.Manager = {
+    RuntimeWatchdogSec = "30s";
+    RebootWatchdogSec = "10m";
   };
 
   # CPU frequency scaling - balance power and performance
