@@ -88,3 +88,14 @@ get-host-key ip:
 reencrypt: clear
   agenix -r
 
+# Raspberry Pi SD image build (specify model: rpi4 or rpi5)
+rpi-build model: clear
+  @echo "Building Raspberry Pi {{model}} SD image (aarch64)..."
+  nix build '.#nixosConfigurations.{{model}}.config.system.build.sdImage' --show-trace
+
+rpi-flash device: clear
+  @echo "Flashing SD image to {{device}}..."
+  @echo "WARNING: This will overwrite all data on {{device}}"
+  @read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+  sudo dd if=result/sd-image/*.img of={{device}} bs=4096 conv=fsync status=progress
+
