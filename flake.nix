@@ -25,6 +25,7 @@
       url = "github:NousResearch/hermes-agent";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    nixos-hardware.url = "github:NixOS/nixos-hardware/master";
   };
 
   outputs = {
@@ -37,6 +38,7 @@
     colmena,
     hamcp,
     hermes-agent,
+    nixos-hardware,
   }: let
     system = "x86_64-linux";
 
@@ -84,6 +86,11 @@
         local = "192.168.2.164";
         tailscale = "homelab-fleet";
       };
+      # Raspberry Pi hosts (update IP after first boot)
+      "rpi4-1" = {
+        local = "192.168.2.170";
+        tailscale = "homelab-rpi4-1";
+      };
     };
 
     targetHost = name:
@@ -115,6 +122,31 @@
         k3s-agent-1 = mkHost "k3s-agent-1";
         ca = mkHost "ca";
         fleet = mkHost "fleet";
+        # Raspberry Pi 4 (aarch64) - build with: nix build '.#nixosConfigurations.rpi4.config.system.build.sdImage'
+        rpi4 = nixpkgs.lib.nixosSystem {
+          system = "aarch64-linux";
+          modules = [
+            nixos-hardware.nixosModules.raspberry-pi-4
+            ./hosts/rpi/configuration.nix
+          ];
+        };
+        # Raspberry Pi 5 (aarch64) - build with: nix build '.#nixosConfigurations.rpi5.config.system.build.sdImage'
+        rpi5 = nixpkgs.lib.nixosSystem {
+          system = "aarch64-linux";
+          modules = [
+            nixos-hardware.nixosModules.raspberry-pi-5
+            ./hosts/rpi/configuration.nix
+          ];
+        };
+        # Named Pi hosts for Colmena deployment
+        "rpi4-1" = nixpkgs.lib.nixosSystem {
+          system = "aarch64-linux";
+          modules = [
+            nixos-hardware.nixosModules.raspberry-pi-4
+            agenix.nixosModules.default
+            ./hosts/rpi4-1/configuration.nix
+          ];
+        };
         # hermes = nixpkgs.lib.nixosSystem {
         #   inherit system;
         #   modules = [
@@ -138,6 +170,7 @@
             inherit agenix;
             inherit hamcp;
             inherit hermes-agent;
+            inherit nixos-hardware;
           };
         };
 
@@ -294,6 +327,22 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/fleet/configuration.nix
+          ];
+        };
+
+        # Raspberry Pi 4 - builds on target (uses aarch64 binary cache)
+        "rpi4-1" = {
+          deployment = {
+            targetHost = targetHost "rpi4-1";
+            targetUser = "amadeus";
+            buildOnTarget = true;
+            tags = ["raspberry-pi" "arm"];
+          };
+          nixpkgs.system = "aarch64-linux";
+          imports = [
+            nixos-hardware.nixosModules.raspberry-pi-4
+            agenix.nixosModules.default
+            ./hosts/rpi4-1/configuration.nix
           ];
         };
         # END
