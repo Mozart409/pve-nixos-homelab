@@ -20,6 +20,15 @@
   boot.loader.grub.enable = false;
   boot.loader.generic-extlinux-compatible.enable = true;
 
+  # Fix for missing dw-hdmi module in newer kernels
+  boot.initrd.availableKernelModules = lib.mkForce [
+    "usbhid"
+    "usb_storage"
+    "vc4"
+    "pcie_brcmstb"
+    "reset-raspberrypi"
+  ];
+
   # Timezone configuration
   time.timeZone = "Europe/Berlin";
 
