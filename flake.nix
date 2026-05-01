@@ -118,8 +118,8 @@
         unifi = mkHost "unifi";
         containers = mkHost "containers";
         minimal = mkHost "minimal";
-        k3s-server-1 = mkHost "k3s-server-1";
-        k3s-agent-1 = mkHost "k3s-agent-1";
+        # k3s-server-1 = mkHost "k3s-server-1";
+        # k3s-agent-1 = mkHost "k3s-agent-1";
         ca = mkHost "ca";
         fleet = mkHost "fleet";
         # Raspberry Pi 4 (aarch64) - build with: nix build '.#nixosConfigurations.rpi4.config.system.build.sdImage'
@@ -139,14 +139,14 @@
           ];
         };
         # Named Pi hosts for Colmena deployment
-        "rpi4-1" = nixpkgs.lib.nixosSystem {
-          system = "aarch64-linux";
-          modules = [
-            nixos-hardware.nixosModules.raspberry-pi-4
-            agenix.nixosModules.default
-            ./hosts/rpi4-1/configuration.nix
-          ];
-        };
+        # "rpi4-1" = nixpkgs.lib.nixosSystem {
+        #   system = "aarch64-linux";
+        #   modules = [
+        #     nixos-hardware.nixosModules.raspberry-pi-4
+        #     agenix.nixosModules.default
+        #     ./hosts/rpi4-1/configuration.nix
+        #   ];
+        # };
         # hermes = nixpkgs.lib.nixosSystem {
         #   inherit system;
         #   modules = [
@@ -274,33 +274,33 @@
         #   ];
         # };
 
-        k3s-server-1 = {
-          deployment = {
-            targetHost = targetHost "k3s-server-1";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["kubernetes" "k3s" "server"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/k3s-server-1/configuration.nix
-          ];
-        };
+        # k3s-server-1 = {
+        #   deployment = {
+        #     targetHost = targetHost "k3s-server-1";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["kubernetes" "k3s" "server"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/k3s-server-1/configuration.nix
+        #   ];
+        # };
 
-        k3s-agent-1 = {
-          deployment = {
-            targetHost = targetHost "k3s-agent-1";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["kubernetes" "k3s" "agent"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/k3s-agent-1/configuration.nix
-          ];
-        };
+        # k3s-agent-1 = {
+        #   deployment = {
+        #     targetHost = targetHost "k3s-agent-1";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["kubernetes" "k3s" "agent"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/k3s-agent-1/configuration.nix
+        #   ];
+        # };
 
         ca = {
           deployment = {
@@ -331,20 +331,20 @@
         };
 
         # Raspberry Pi 4 - builds on target (uses aarch64 binary cache)
-        "rpi4-1" = {
-          deployment = {
-            targetHost = targetHost "rpi4-1";
-            targetUser = "amadeus";
-            buildOnTarget = true;
-            tags = ["raspberry-pi" "arm"];
-          };
-          nixpkgs.system = "aarch64-linux";
-          imports = [
-            nixos-hardware.nixosModules.raspberry-pi-4
-            agenix.nixosModules.default
-            ./hosts/rpi4-1/configuration.nix
-          ];
-        };
+        # "rpi4-1" = {
+        #   deployment = {
+        #     targetHost = targetHost "rpi4-1";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = true;
+        #     tags = ["raspberry-pi" "arm"];
+        #   };
+        #   nixpkgs.system = "aarch64-linux";
+        #   imports = [
+        #     nixos-hardware.nixosModules.raspberry-pi-4
+        #     agenix.nixosModules.default
+        #     ./hosts/rpi4-1/configuration.nix
+        #   ];
+        # };
         # END
       };
     }
