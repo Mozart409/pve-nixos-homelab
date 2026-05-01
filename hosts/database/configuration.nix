@@ -228,7 +228,7 @@
   # Additional database management tools
   environment.systemPackages = with pkgs; [
     postgresql_18
-    pgcli
+    # pgcli  # Disabled - test failures in nixpkgs unstable
     pg_top
     pg_activity
   ];
