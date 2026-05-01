@@ -65,7 +65,7 @@
     enable = true;
     efiSupport = false;
     forceInstall = true;
-    fsIdentifier = "label";
+    fsIdentifier = "uuid";
   };
 
   # Ensure necessary modules are available in initrd
