@@ -17,6 +17,13 @@
 
   networking.hostName = "homelab-containers";
 
+  # Disable IPv6 - LXC container doesn't have proper IPv6 routing
+  # which breaks Tailscale connections preferring IPv6
+  boot.kernel.sysctl = {
+    "net.ipv6.conf.all.disable_ipv6" = 1;
+    "net.ipv6.conf.default.disable_ipv6" = 1;
+  };
+
   # Static IP configuration
   networking.interfaces.ens18 = {
     useDHCP = false;
