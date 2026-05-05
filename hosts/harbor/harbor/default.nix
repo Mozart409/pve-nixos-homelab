@@ -26,6 +26,7 @@
     HARBOR_ADMIN_PASSWORD=__ADMIN_PASSWORD__
     CORE_SECRET=__CORE_SECRET__
     JOBSERVICE_SECRET=__CORE_SECRET__
+    JOBSERVICE_URL=http://harbor-jobservice:8080
     _REDIS_URL_CORE=redis://harbor-redis:6379/0
     _REDIS_URL_REG=redis://harbor-redis:6379/1
     EXT_ENDPOINT=https://harbor.homelab.local
@@ -38,6 +39,16 @@
     WITH_NOTARY=false
     CHART_REPOSITORY_URL=http://harbor-core:8080/chartrepo
     PERMITTED_REGISTRY_TYPES_FOR_PROXY_CACHE=docker-hub,harbor,azure-acr,aws-ecr,google-gcr,quay,docker-registry,github-ghcr,jfrog-artifactory
+  '';
+
+  jobserviceEnvTemplate = pkgs.writeText "harbor-jobservice-env-template" ''
+    CORE_SECRET=__CORE_SECRET__
+    JOBSERVICE_SECRET=__CORE_SECRET__
+    CORE_URL=http://harbor-core:8080
+    REGISTRY_URL=http://harbor-registry:5000
+    REGISTRY_CONTROLLER_URL=http://harbor-registry:5000
+    TOKEN_SERVICE_URL=http://harbor-core:8080/service/token
+    _REDIS_URL_JOB=redis://harbor-redis:6379/2
   '';
 
   generateDbEnv = pkgs.writeShellScript "generate-harbor-db-env" ''
@@ -53,14 +64,27 @@
     HARBOR_URL="http://localhost:8080"
     ADMIN_PASSWORD=$(cat ${config.age.secrets.harbor-admin-password.path})
 
-    echo "Waiting for Harbor to be ready..."
+    echo "Waiting for Harbor Core to be ready..."
     for i in $(seq 1 60); do
       if ${pkgs.curl}/bin/curl -fsS "$HARBOR_URL/api/v2.0/ping" >/dev/null 2>&1; then
-        echo "Harbor is ready"
+        echo "Harbor Core is ready"
         break
       fi
       if [ $i -eq 60 ]; then
-        echo "Harbor failed to become ready"
+        echo "Harbor Core failed to become ready"
+        exit 1
+      fi
+      sleep 5
+    done
+
+    echo "Waiting for Harbor Jobservice to be ready..."
+    for i in $(seq 1 60); do
+      if ${pkgs.podman}/bin/podman exec harbor-jobservice curl -fsS http://localhost:8080/api/v1/stats >/dev/null 2>&1; then
+        echo "Harbor Jobservice is ready"
+        break
+      fi
+      if [ $i -eq 60 ]; then
+        echo "Harbor Jobservice failed to become ready"
         exit 1
       fi
       sleep 5
@@ -170,6 +194,15 @@
       ${coreEnvTemplate} > /run/harbor/core.env
     chmod 600 /run/harbor/core.env
   '';
+
+  generateJobserviceEnv = pkgs.writeShellScript "generate-harbor-jobservice-env" ''
+    mkdir -p /run/harbor
+    CORE_SECRET=$(cat ${config.age.secrets.harbor-core-secret.path})
+    ${pkgs.gnused}/bin/sed \
+      -e "s/__CORE_SECRET__/$CORE_SECRET/" \
+      ${jobserviceEnvTemplate} > /run/harbor/jobservice.env
+    chmod 600 /run/harbor/jobservice.env
+  '';
 in {
   systemd.tmpfiles.rules = [
     "d ${dataDir} 0755 root root -"
@@ -190,6 +223,11 @@ in {
   environment.etc."harbor/nginx.conf" = {
     mode = "0644";
     source = ./config/nginx.conf;
+  };
+
+  environment.etc."harbor/jobservice.yml" = {
+    mode = "0644";
+    source = ./config/jobservice.yml;
   };
 
   age.secrets.harbor-db-password = {
@@ -282,6 +320,24 @@ in {
       ];
     };
 
+    harbor-jobservice = {
+      image = "goharbor/harbor-jobservice:v2.11.2";
+      autoStart = true;
+      volumes = [
+        "/etc/harbor/jobservice.yml:/etc/jobservice/config.yml:ro"
+        "harbor_job_logs:/var/log/jobs"
+      ];
+      environmentFiles = ["/run/harbor/jobservice.env"];
+      dependsOn = ["harbor-core" "harbor-redis"];
+      extraOptions = [
+        "--network=harbor-net"
+        "--health-cmd=curl -fsS http://localhost:8080/api/v1/stats || exit 1"
+        "--health-interval=30s"
+        "--health-timeout=10s"
+        "--health-retries=3"
+      ];
+    };
+
     harbor-portal = {
       image = "goharbor/harbor-portal:v2.11.2";
       autoStart = true;
@@ -325,6 +381,7 @@ in {
       "podman-harbor-redis.service"
       "podman-harbor-registry.service"
       "podman-harbor-core.service"
+      "podman-harbor-jobservice.service"
       "podman-harbor-portal.service"
       "podman-harbor-trivy.service"
     ];
@@ -333,6 +390,7 @@ in {
       "podman-harbor-redis.service"
       "podman-harbor-registry.service"
       "podman-harbor-core.service"
+      "podman-harbor-jobservice.service"
       "podman-harbor-portal.service"
       "podman-harbor-trivy.service"
     ];
@@ -373,6 +431,12 @@ in {
     serviceConfig.ExecStartPre = ["${generateCoreEnv}"];
   };
 
+  systemd.services.podman-harbor-jobservice = {
+    after = ["podman-harbor-core.service" "podman-harbor-redis.service" "podman-network-harbor.service"];
+    requires = ["podman-network-harbor.service"];
+    serviceConfig.ExecStartPre = ["${generateJobserviceEnv}"];
+  };
+
   systemd.services.podman-harbor-portal = {
     after = ["podman-harbor-core.service" "podman-network-harbor.service"];
     requires = ["podman-network-harbor.service"];
@@ -386,8 +450,8 @@ in {
   systemd.services.harbor-bootstrap = {
     description = "Harbor bootstrap - create projects and retention policies";
     wantedBy = ["multi-user.target"];
-    after = ["podman-harbor-core.service"];
-    requires = ["podman-harbor-core.service"];
+    after = ["podman-harbor-core.service" "podman-harbor-jobservice.service"];
+    requires = ["podman-harbor-core.service" "podman-harbor-jobservice.service"];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
