@@ -20,13 +20,26 @@
     POSTGRESQL_DATABASE=registry
     POSTGRESQL_USERNAME=harbor
     POSTGRESQL_PASSWORD=__DB_PASSWORD__
+    POSTGRESQL_SSLMODE=disable
     REDIS_URL=redis://harbor-redis:6379
     REGISTRY_URL=http://harbor-registry:5000
     CORE_URL=http://harbor-core:8080
+    CORE_LOCAL_URL=http://127.0.0.1:8080
     HARBOR_ADMIN_PASSWORD=__ADMIN_PASSWORD__
     CORE_SECRET=__CORE_SECRET__
     JOBSERVICE_SECRET=__CORE_SECRET__
     _REDIS_URL_CORE=redis://harbor-redis:6379/0
+    _REDIS_URL_REG=redis://harbor-redis:6379/1
+    EXT_ENDPOINT=https://harbor.homelab.local
+    CONFIG_PATH=/etc/core/app.conf
+    LOG_LEVEL=info
+    TOKEN_SERVICE_URL=http://harbor-core:8080/service/token
+    REGISTRY_STORAGE_PROVIDER_NAME=filesystem
+    WITH_TRIVY=true
+    TRIVY_ADAPTER_URL=http://harbor-trivy:8080
+    WITH_NOTARY=false
+    CHART_REPOSITORY_URL=http://harbor-core:8080/chartrepo
+    PERMITTED_REGISTRY_TYPES_FOR_PROXY_CACHE=docker-hub,harbor,azure-acr,aws-ecr,google-gcr,quay,docker-registry,github-ghcr,jfrog-artifactory
   '';
 
   # Script to generate db.env
@@ -175,6 +188,35 @@ in {
         "--network=harbor-net"
       ];
     };
+
+    # Trivy vulnerability scanner
+    harbor-trivy = {
+      image = "goharbor/trivy-adapter-photon:v2.11.2";
+      autoStart = true;
+      volumes = [
+        "harbor_trivy_cache:/home/scanner/.cache"
+      ];
+      environment = {
+        SCANNER_LOG_LEVEL = "info";
+        SCANNER_TRIVY_CACHE_DIR = "/home/scanner/.cache/trivy";
+        SCANNER_TRIVY_REPORTS_DIR = "/home/scanner/.cache/reports";
+        SCANNER_TRIVY_VULN_TYPE = "os,library";
+        SCANNER_TRIVY_SEVERITY = "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL";
+        SCANNER_TRIVY_IGNORE_UNFIXED = "false";
+        SCANNER_TRIVY_SKIP_UPDATE = "false";
+        SCANNER_TRIVY_GITHUB_TOKEN = "";
+        SCANNER_REDIS_URL = "redis://harbor-redis:6379/5";
+        SCANNER_STORE_REDIS_URL = "redis://harbor-redis:6379/5";
+        SCANNER_JOB_QUEUE_REDIS_URL = "redis://harbor-redis:6379/5";
+      };
+      extraOptions = [
+        "--network=harbor-net"
+        "--health-cmd=curl -fsS http://localhost:8080/probe/healthy || exit 1"
+        "--health-interval=30s"
+        "--health-timeout=10s"
+        "--health-retries=3"
+      ];
+    };
   };
 
   # Create the podman network before containers start
@@ -186,6 +228,7 @@ in {
       "podman-harbor-registry.service"
       "podman-harbor-core.service"
       "podman-harbor-portal.service"
+      "podman-harbor-trivy.service"
     ];
     before = [
       "podman-harbor-db.service"
@@ -193,6 +236,7 @@ in {
       "podman-harbor-registry.service"
       "podman-harbor-core.service"
       "podman-harbor-portal.service"
+      "podman-harbor-trivy.service"
     ];
     serviceConfig = {
       Type = "oneshot";
@@ -238,6 +282,11 @@ in {
 
   systemd.services.podman-harbor-portal = {
     after = ["podman-harbor-core.service" "podman-network-harbor.service"];
+    requires = ["podman-network-harbor.service"];
+  };
+
+  systemd.services.podman-harbor-trivy = {
+    after = ["podman-harbor-redis.service" "podman-network-harbor.service"];
     requires = ["podman-network-harbor.service"];
   };
 }
