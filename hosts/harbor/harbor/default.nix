@@ -195,8 +195,9 @@
       ${coreEnvTemplate} > /run/harbor/core.env
     chmod 600 /run/harbor/core.env
     # Create the secret key file for encrypting config values
+    # Harbor requires exactly 16 bytes for AES-128
     # Harbor core runs as UID 10000, needs read access
-    echo -n "$CORE_SECRET" > /run/harbor/secretkey
+    echo -n "$CORE_SECRET" | ${pkgs.coreutils}/bin/head -c 16 > /run/harbor/secretkey
     chmod 644 /run/harbor/secretkey
   '';
 
