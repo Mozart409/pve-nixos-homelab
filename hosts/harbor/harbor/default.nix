@@ -60,7 +60,7 @@
   '';
 
   harborBootstrap = pkgs.writeShellScript "harbor-bootstrap" ''
-    set -euo pipefail
+    set -uo pipefail
 
     HARBOR_URL="http://localhost:8080"
     ADMIN_PASSWORD=$(cat ${config.age.secrets.harbor-admin-password.path})
@@ -90,6 +90,38 @@
       fi
       sleep 5
     done
+
+    # Check current auth mode - if OIDC is already configured, skip project/retention setup
+    # (admin basic auth doesn't work reliably after OIDC is enabled)
+    CURRENT_AUTH=$(${pkgs.curl}/bin/curl -sS -u "admin:$ADMIN_PASSWORD" \
+      "$HARBOR_URL/api/v2.0/configurations" 2>/dev/null | ${pkgs.jq}/bin/jq -r '.auth_mode.value // "db_auth"' 2>/dev/null || echo "unknown")
+
+    if [ "$CURRENT_AUTH" = "oidc_auth" ]; then
+      echo "OIDC already configured, updating settings only..."
+      OIDC_CLIENT_ID=$(cat ${config.age.secrets.harbor-oidc-client-id.path})
+      OIDC_CLIENT_SECRET=$(cat ${config.age.secrets.harbor-oidc-client-secret.path})
+
+      ${pkgs.curl}/bin/curl -sS -X PUT -u "admin:$ADMIN_PASSWORD" \
+        -H "Content-Type: application/json" \
+        "$HARBOR_URL/api/v2.0/configurations" \
+        -d '{
+          "oidc_name": "Pocket ID",
+          "oidc_endpoint": "https://pocketid.dropbear-butterfly.ts.net",
+          "oidc_client_id": "'"$OIDC_CLIENT_ID"'",
+          "oidc_client_secret": "'"$OIDC_CLIENT_SECRET"'",
+          "oidc_groups_claim": "groups",
+          "oidc_admin_group": "admins",
+          "oidc_scope": "openid,offline_access,email,profile,groups",
+          "oidc_verify_cert": true,
+          "oidc_auto_onboard": true,
+          "oidc_user_claim": "email"
+        }' >/dev/null 2>&1 || echo "OIDC update may have failed (auth mode already OIDC)"
+
+      echo "Harbor bootstrap complete (OIDC update only)"
+      exit 0
+    fi
+
+    echo "Fresh install detected, running full bootstrap..."
 
     PROJECT_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
       "$HARBOR_URL/api/v2.0/projects?name=oyabu" | ${pkgs.jq}/bin/jq 'length')
