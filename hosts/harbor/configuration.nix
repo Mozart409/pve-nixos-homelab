@@ -50,7 +50,22 @@
           reverse_proxy localhost:8080
         }
 
-        # Harbor portal and API
+        # Harbor API - direct to core
+        handle /api/* {
+          reverse_proxy localhost:8080
+        }
+
+        # OIDC callbacks - direct to core
+        handle /c/* {
+          reverse_proxy localhost:8080
+        }
+
+        # Service endpoints - direct to core
+        handle /service/* {
+          reverse_proxy localhost:8080
+        }
+
+        # Harbor portal (static UI)
         handle {
           reverse_proxy localhost:8081
         }
@@ -69,7 +84,22 @@
           reverse_proxy localhost:8080
         }
 
-        # Harbor portal and API
+        # Harbor API - direct to core
+        handle /api/* {
+          reverse_proxy localhost:8080
+        }
+
+        # OIDC callbacks - direct to core
+        handle /c/* {
+          reverse_proxy localhost:8080
+        }
+
+        # Service endpoints - direct to core
+        handle /service/* {
+          reverse_proxy localhost:8080
+        }
+
+        # Harbor portal (static UI)
         handle {
           reverse_proxy localhost:8081
         }
