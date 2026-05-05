@@ -12,7 +12,7 @@
     ../../modules/osquery.nix
     ../../modules/podman.nix
     ./uptime-forge
-    # ./harbor  # Disabled - consider dedicated VM
+    ./harbor
   ];
 
   networking.hostName = "homelab-containers";
@@ -61,8 +61,36 @@
           reverse_proxy localhost:3000
         }
 
+        handle /harbor* {
+          uri strip_prefix /harbor
+          reverse_proxy localhost:8081
+        }
+
+        handle /v2/* {
+          reverse_proxy localhost:8080
+        }
+
         handle {
           respond "OK" 200
+        }
+      '';
+    };
+
+    # Harbor registry (dedicated subdomain for docker push/pull)
+    virtualHosts."harbor.dropbear-butterfly.ts.net" = {
+      extraConfig = ''
+        tls {
+          get_certificate tailscale
+        }
+
+        # Docker registry API
+        handle /v2/* {
+          reverse_proxy localhost:8080
+        }
+
+        # Harbor portal and API
+        handle {
+          reverse_proxy localhost:8081
         }
       '';
     };
@@ -78,8 +106,34 @@
           reverse_proxy localhost:3000
         }
 
+        handle /harbor* {
+          uri strip_prefix /harbor
+          reverse_proxy localhost:8081
+        }
+
+        handle /v2/* {
+          reverse_proxy localhost:8080
+        }
+
         handle {
           respond "OK" 200
+        }
+      '';
+    };
+
+    # Harbor registry local
+    virtualHosts."harbor.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        handle /v2/* {
+          reverse_proxy localhost:8080
+        }
+
+        handle {
+          reverse_proxy localhost:8081
         }
       '';
     };
