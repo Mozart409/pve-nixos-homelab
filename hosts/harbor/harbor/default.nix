@@ -27,6 +27,7 @@
     CORE_SECRET=__CORE_SECRET__
     JOBSERVICE_SECRET=__CORE_SECRET__
     JOBSERVICE_URL=http://harbor-jobservice:8080
+    KEY=__CORE_SECRET__
     _REDIS_URL_CORE=redis://harbor-redis:6379/0
     _REDIS_URL_REG=redis://harbor-redis:6379/1
     EXT_ENDPOINT=https://homelab-harbor.dropbear-butterfly.ts.net
@@ -193,6 +194,9 @@
       -e "s/__CORE_SECRET__/$CORE_SECRET/" \
       ${coreEnvTemplate} > /run/harbor/core.env
     chmod 600 /run/harbor/core.env
+    # Create the secret key file for encrypting config values
+    echo -n "$CORE_SECRET" > /run/harbor/secretkey
+    chmod 600 /run/harbor/secretkey
   '';
 
   generateJobserviceEnv = pkgs.writeShellScript "generate-harbor-jobservice-env" ''
@@ -308,7 +312,10 @@ in {
       image = "goharbor/harbor-core:v2.11.2";
       autoStart = true;
       ports = ["8080:8080"];
-      volumes = ["/etc/harbor/core.conf:/etc/core/app.conf:ro"];
+      volumes = [
+        "/etc/harbor/core.conf:/etc/core/app.conf:ro"
+        "/run/harbor/secretkey:/etc/core/key:ro"
+      ];
       environmentFiles = ["/run/harbor/core.env"];
       dependsOn = ["harbor-db" "harbor-redis" "harbor-registry"];
       extraOptions = [
