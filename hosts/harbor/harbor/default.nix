@@ -29,7 +29,7 @@
     JOBSERVICE_URL=http://harbor-jobservice:8080
     _REDIS_URL_CORE=redis://harbor-redis:6379/0
     _REDIS_URL_REG=redis://harbor-redis:6379/1
-    EXT_ENDPOINT=https://harbor.homelab.local
+    EXT_ENDPOINT=https://homelab-harbor.dropbear-butterfly.ts.net
     CONFIG_PATH=/etc/core/app.conf
     LOG_LEVEL=info
     TOKEN_SERVICE_URL=http://harbor-core:8080/service/token
