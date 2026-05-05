@@ -171,7 +171,7 @@
         "oidc_client_id": "'"$OIDC_CLIENT_ID"'",
         "oidc_client_secret": "'"$OIDC_CLIENT_SECRET"'",
         "oidc_groups_claim": "groups",
-        "oidc_admin_group": "admin",
+        "oidc_admin_group": "admins",
         "oidc_scope": "openid,offline_access,email,profile,groups",
         "oidc_verify_cert": true,
         "oidc_auto_onboard": true,
