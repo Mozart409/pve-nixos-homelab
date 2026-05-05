@@ -195,8 +195,9 @@
       ${coreEnvTemplate} > /run/harbor/core.env
     chmod 600 /run/harbor/core.env
     # Create the secret key file for encrypting config values
+    # Harbor core runs as UID 10000, needs read access
     echo -n "$CORE_SECRET" > /run/harbor/secretkey
-    chmod 600 /run/harbor/secretkey
+    chmod 644 /run/harbor/secretkey
   '';
 
   generateJobserviceEnv = pkgs.writeShellScript "generate-harbor-jobservice-env" ''
