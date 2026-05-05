@@ -50,6 +50,99 @@
     chmod 600 /run/harbor/db.env
   '';
 
+  # Bootstrap script to create projects and retention policies
+  harborBootstrap = pkgs.writeShellScript "harbor-bootstrap" ''
+    set -euo pipefail
+
+    HARBOR_URL="http://localhost:8080"
+    ADMIN_PASSWORD=$(cat ${config.age.secrets.harbor-admin-password.path})
+
+    # Wait for Harbor to be healthy
+    echo "Waiting for Harbor to be ready..."
+    for i in $(seq 1 60); do
+      if ${pkgs.curl}/bin/curl -fsS "$HARBOR_URL/api/v2.0/ping" >/dev/null 2>&1; then
+        echo "Harbor is ready"
+        break
+      fi
+      if [ $i -eq 60 ]; then
+        echo "Harbor failed to become ready"
+        exit 1
+      fi
+      sleep 5
+    done
+
+    # Check if project already exists
+    PROJECT_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
+      "$HARBOR_URL/api/v2.0/projects?name=oyabu" | ${pkgs.jq}/bin/jq 'length')
+
+    if [ "$PROJECT_EXISTS" -eq 0 ]; then
+      echo "Creating project 'oyabu'..."
+      ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
+        -H "Content-Type: application/json" \
+        "$HARBOR_URL/api/v2.0/projects" \
+        -d '{"project_name": "oyabu", "public": true, "storage_limit": 10737418240}'
+      echo "Project created"
+    else
+      echo "Project 'oyabu' already exists"
+    fi
+
+    # Get project ID
+    PROJECT_ID=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
+      "$HARBOR_URL/api/v2.0/projects?name=oyabu" | ${pkgs.jq}/bin/jq -r '.[0].project_id')
+
+    # Check if retention policy exists
+    RETENTION_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
+      "$HARBOR_URL/api/v2.0/retentions" 2>/dev/null | ${pkgs.jq}/bin/jq --arg pid "$PROJECT_ID" \
+      '[.[] | select(.scope.ref == ($pid | tonumber))] | length' 2>/dev/null || echo "0")
+
+    if [ "$RETENTION_EXISTS" -eq 0 ]; then
+      echo "Creating retention policy..."
+      ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
+        -H "Content-Type: application/json" \
+        "$HARBOR_URL/api/v2.0/retentions" \
+        -d '{
+          "algorithm": "or",
+          "scope": {
+            "level": "project",
+            "ref": '"$PROJECT_ID"'
+          },
+          "trigger": {
+            "kind": "Schedule",
+            "settings": {
+              "cron": "0 0 0 * * *"
+            }
+          },
+          "rules": [
+            {
+              "disabled": false,
+              "action": "retain",
+              "scope_selectors": {
+                "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
+              },
+              "tag_selectors": [{"kind": "doublestar", "decoration": "matches", "pattern": "**"}],
+              "params": {"latestPushedK": 2},
+              "template": "latestPushedK"
+            },
+            {
+              "disabled": false,
+              "action": "retain",
+              "scope_selectors": {
+                "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
+              },
+              "tag_selectors": [{"kind": "doublestar", "decoration": "untagged", "pattern": ""}],
+              "params": {"nDaysSinceLastPush": 2},
+              "template": "nDaysSinceLastPush"
+            }
+          ]
+        }'
+      echo "Retention policy created: keep last 2 tags, delete untagged after 2 days"
+    else
+      echo "Retention policy already exists"
+    fi
+
+    echo "Harbor bootstrap complete"
+  '';
+
   # Script to generate core.env
   generateCoreEnv = pkgs.writeShellScript "generate-harbor-core-env" ''
     mkdir -p /run/harbor
@@ -288,5 +381,20 @@ in {
   systemd.services.podman-harbor-trivy = {
     after = ["podman-harbor-redis.service" "podman-network-harbor.service"];
     requires = ["podman-network-harbor.service"];
+  };
+
+  # Bootstrap service to create projects and retention policies
+  systemd.services.harbor-bootstrap = {
+    description = "Harbor bootstrap - create projects and retention policies";
+    wantedBy = ["multi-user.target"];
+    after = ["podman-harbor-core.service"];
+    requires = ["podman-harbor-core.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${harborBootstrap}";
+      Restart = "on-failure";
+      RestartSec = "30s";
+    };
   };
 }
