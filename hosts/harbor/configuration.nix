@@ -11,25 +11,17 @@
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
     ../../modules/podman.nix
-    ./uptime-forge
-    # Harbor moved to dedicated VM (hosts/harbor)
+    ./harbor
   ];
 
-  networking.hostName = "homelab-containers";
-
-  # Disable IPv6 - LXC container doesn't have proper IPv6 routing
-  # which breaks Tailscale connections preferring IPv6
-  boot.kernel.sysctl = {
-    "net.ipv6.conf.all.disable_ipv6" = 1;
-    "net.ipv6.conf.default.disable_ipv6" = 1;
-  };
+  networking.hostName = "homelab-harbor";
 
   # Static IP configuration
   networking.interfaces.ens18 = {
     useDHCP = false;
     ipv4.addresses = [
       {
-        address = "192.168.2.149";
+        address = "192.168.2.166";
         prefixLength = 24;
       }
     ];
@@ -37,13 +29,9 @@
   networking.defaultGateway = "192.168.2.1";
 
   # Prometheus exporters
-  services.prometheus = {
-    exporters.node = {
-      enable = true;
-      enabledCollectors = ["systemd" "processes"];
-    };
-    # Postgres exporter is configured in ./uptime-forge/default.nix
-    # because it needs access to agenix secrets for the connection string
+  services.prometheus.exporters.node = {
+    enable = true;
+    enabledCollectors = ["systemd" "processes"];
   };
 
   # Caddy reverse proxy with Tailscale TLS
@@ -51,35 +39,39 @@
     enable = true;
 
     # Tailscale hostname
-    virtualHosts."homelab-containers.dropbear-butterfly.ts.net" = {
+    virtualHosts."homelab-harbor.dropbear-butterfly.ts.net" = {
       extraConfig = ''
         tls {
           get_certificate tailscale
         }
 
-        handle /uptime-forge* {
-          reverse_proxy localhost:3000
+        # Docker registry API
+        handle /v2/* {
+          reverse_proxy localhost:8080
         }
 
+        # Harbor portal and API
         handle {
-          respond "OK" 200
+          reverse_proxy localhost:8081
         }
       '';
     };
 
     # Local network hostname with step-ca certificate
-    virtualHosts."containers.homelab.local" = {
+    virtualHosts."harbor.homelab.local" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
-        handle /uptime-forge* {
-          reverse_proxy localhost:3000
+        # Docker registry API
+        handle /v2/* {
+          reverse_proxy localhost:8080
         }
 
+        # Harbor portal and API
         handle {
-          respond "OK" 200
+          reverse_proxy localhost:8081
         }
       '';
     };
@@ -99,10 +91,10 @@
       22 # SSH
       80 # HTTP
       443 # HTTPS (Caddy)
-      3000 # Uptime Forge
-      5444 # TimescaleDB (external access)
+      5000 # Harbor registry
+      8080 # Harbor core API
+      8081 # Harbor portal
       9100 # Node exporter
-      9187 # Postgres exporter
     ];
   };
 }
