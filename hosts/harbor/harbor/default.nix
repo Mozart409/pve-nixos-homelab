@@ -232,8 +232,9 @@
     echo -n "$CORE_SECRET" | ${pkgs.coreutils}/bin/head -c 16 > /run/harbor/secretkey
     chmod 644 /run/harbor/secretkey
     # Generate RSA private key for JWT token signing (only if not exists)
+    # Harbor requires traditional RSA format (BEGIN RSA PRIVATE KEY), not PKCS#8
     if [ ! -f /run/harbor/private_key.pem ]; then
-      ${pkgs.openssl}/bin/openssl genrsa -out /run/harbor/private_key.pem 4096
+      ${pkgs.openssl}/bin/openssl genrsa -traditional -out /run/harbor/private_key.pem 4096
       chmod 644 /run/harbor/private_key.pem
     fi
   '';
