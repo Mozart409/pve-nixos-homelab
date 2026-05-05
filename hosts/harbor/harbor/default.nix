@@ -4,10 +4,8 @@
   pkgs,
   ...
 }: let
-  # Data directory for harbor
   dataDir = "/var/lib/harbor";
 
-  # Template files for environment variables
   dbEnvTemplate = pkgs.writeText "harbor-db-env-template" ''
     POSTGRES_DB=registry
     POSTGRES_USER=harbor
@@ -42,7 +40,6 @@
     PERMITTED_REGISTRY_TYPES_FOR_PROXY_CACHE=docker-hub,harbor,azure-acr,aws-ecr,google-gcr,quay,docker-registry,github-ghcr,jfrog-artifactory
   '';
 
-  # Script to generate db.env
   generateDbEnv = pkgs.writeShellScript "generate-harbor-db-env" ''
     mkdir -p /run/harbor
     DB_PASSWORD=$(cat ${config.age.secrets.harbor-db-password.path})
@@ -50,14 +47,12 @@
     chmod 600 /run/harbor/db.env
   '';
 
-  # Bootstrap script to create projects and retention policies
   harborBootstrap = pkgs.writeShellScript "harbor-bootstrap" ''
     set -euo pipefail
 
     HARBOR_URL="http://localhost:8080"
     ADMIN_PASSWORD=$(cat ${config.age.secrets.harbor-admin-password.path})
 
-    # Wait for Harbor to be healthy
     echo "Waiting for Harbor to be ready..."
     for i in $(seq 1 60); do
       if ${pkgs.curl}/bin/curl -fsS "$HARBOR_URL/api/v2.0/ping" >/dev/null 2>&1; then
@@ -71,7 +66,6 @@
       sleep 5
     done
 
-    # Check if project already exists
     PROJECT_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
       "$HARBOR_URL/api/v2.0/projects?name=oyabu" | ${pkgs.jq}/bin/jq 'length')
 
@@ -86,11 +80,9 @@
       echo "Project 'oyabu' already exists"
     fi
 
-    # Get project ID
     PROJECT_ID=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
       "$HARBOR_URL/api/v2.0/projects?name=oyabu" | ${pkgs.jq}/bin/jq -r '.[0].project_id')
 
-    # Check if retention policy exists
     RETENTION_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
       "$HARBOR_URL/api/v2.0/retentions" 2>/dev/null | ${pkgs.jq}/bin/jq --arg pid "$PROJECT_ID" \
       '[.[] | select(.scope.ref == ($pid | tonumber))] | length' 2>/dev/null || echo "0")
@@ -140,7 +132,6 @@
       echo "Retention policy already exists"
     fi
 
-    # Configure OIDC authentication
     OIDC_CLIENT_ID=$(cat ${config.age.secrets.harbor-oidc-client-id.path})
     OIDC_CLIENT_SECRET=$(cat ${config.age.secrets.harbor-oidc-client-secret.path})
 
@@ -167,7 +158,6 @@
     echo "Harbor bootstrap complete"
   '';
 
-  # Script to generate core.env
   generateCoreEnv = pkgs.writeShellScript "generate-harbor-core-env" ''
     mkdir -p /run/harbor
     DB_PASSWORD=$(cat ${config.age.secrets.harbor-db-password.path})
@@ -181,14 +171,12 @@
     chmod 600 /run/harbor/core.env
   '';
 in {
-  # Create directories
   systemd.tmpfiles.rules = [
     "d ${dataDir} 0755 root root -"
     "d ${dataDir}/registry 0755 root root -"
     "d ${dataDir}/database 0755 root root -"
   ];
 
-  # Harbor configuration files
   environment.etc."harbor/registry.yml" = {
     mode = "0644";
     source = ./config/registry.yml;
@@ -204,7 +192,6 @@ in {
     source = ./config/nginx.conf;
   };
 
-  # Load secrets via agenix
   age.secrets.harbor-db-password = {
     file = ../../../secrets/harbor-db-password.age;
     mode = "0440";
@@ -235,15 +222,11 @@ in {
     group = "root";
   };
 
-  # OCI Containers
   virtualisation.oci-containers.containers = {
-    # Harbor PostgreSQL database
     harbor-db = {
       image = "postgres:13-alpine";
       autoStart = true;
-      volumes = [
-        "harbor_db:/var/lib/postgresql/data"
-      ];
+      volumes = ["harbor_db:/var/lib/postgresql/data"];
       environmentFiles = ["/run/harbor/db.env"];
       extraOptions = [
         "--network=harbor-net"
@@ -254,7 +237,6 @@ in {
       ];
     };
 
-    # Harbor Redis
     harbor-redis = {
       image = "redis:7-alpine";
       autoStart = true;
@@ -267,7 +249,6 @@ in {
       ];
     };
 
-    # Harbor Registry
     harbor-registry = {
       image = "goharbor/registry-photon:v2.11.2";
       autoStart = true;
@@ -285,14 +266,11 @@ in {
       ];
     };
 
-    # Harbor Core (main API service)
     harbor-core = {
       image = "goharbor/harbor-core:v2.11.2";
       autoStart = true;
       ports = ["8080:8080"];
-      volumes = [
-        "/etc/harbor/core.conf:/etc/core/app.conf:ro"
-      ];
+      volumes = ["/etc/harbor/core.conf:/etc/core/app.conf:ro"];
       environmentFiles = ["/run/harbor/core.env"];
       dependsOn = ["harbor-db" "harbor-redis" "harbor-registry"];
       extraOptions = [
@@ -304,27 +282,19 @@ in {
       ];
     };
 
-    # Harbor Portal (UI)
     harbor-portal = {
       image = "goharbor/harbor-portal:v2.11.2";
       autoStart = true;
       ports = ["8081:8080"];
-      volumes = [
-        "/etc/harbor/nginx.conf:/etc/nginx/nginx.conf:ro"
-      ];
+      volumes = ["/etc/harbor/nginx.conf:/etc/nginx/nginx.conf:ro"];
       dependsOn = ["harbor-core"];
-      extraOptions = [
-        "--network=harbor-net"
-      ];
+      extraOptions = ["--network=harbor-net"];
     };
 
-    # Trivy vulnerability scanner
     harbor-trivy = {
       image = "goharbor/trivy-adapter-photon:v2.11.2";
       autoStart = true;
-      volumes = [
-        "harbor_trivy_cache:/home/scanner/.cache"
-      ];
+      volumes = ["harbor_trivy_cache:/home/scanner/.cache"];
       environment = {
         SCANNER_LOG_LEVEL = "info";
         SCANNER_TRIVY_CACHE_DIR = "/home/scanner/.cache/trivy";
@@ -348,7 +318,6 @@ in {
     };
   };
 
-  # Create the podman network before containers start
   systemd.services.podman-network-harbor = {
     description = "Create podman network for harbor";
     wantedBy = [
@@ -377,13 +346,10 @@ in {
     '';
   };
 
-  # Configure container services with ExecStartPre to generate env files
   systemd.services.podman-harbor-db = {
     after = ["podman-network-harbor.service"];
     requires = ["podman-network-harbor.service"];
-    serviceConfig = {
-      ExecStartPre = ["${generateDbEnv}"];
-    };
+    serviceConfig.ExecStartPre = ["${generateDbEnv}"];
   };
 
   systemd.services.podman-harbor-redis = {
@@ -404,9 +370,7 @@ in {
       "podman-network-harbor.service"
     ];
     requires = ["podman-network-harbor.service"];
-    serviceConfig = {
-      ExecStartPre = ["${generateCoreEnv}"];
-    };
+    serviceConfig.ExecStartPre = ["${generateCoreEnv}"];
   };
 
   systemd.services.podman-harbor-portal = {
@@ -419,7 +383,6 @@ in {
     requires = ["podman-network-harbor.service"];
   };
 
-  # Bootstrap service to create projects and retention policies
   systemd.services.harbor-bootstrap = {
     description = "Harbor bootstrap - create projects and retention policies";
     wantedBy = ["multi-user.target"];

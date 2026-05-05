@@ -86,6 +86,10 @@
         local = "192.168.2.164";
         tailscale = "homelab-fleet";
       };
+      harbor = {
+        local = "192.168.2.166";
+        tailscale = "homelab-harbor";
+      };
       # Raspberry Pi hosts (update IP after first boot)
       "rpi4-1" = {
         local = "192.168.2.170";
@@ -122,6 +126,7 @@
         # k3s-agent-1 = mkHost "k3s-agent-1";
         ca = mkHost "ca";
         fleet = mkHost "fleet";
+        harbor = mkHost "harbor";
         # Raspberry Pi 4 (aarch64) - build with: nix build '.#nixosConfigurations.rpi4.config.system.build.sdImage'
         rpi4 = nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
@@ -327,6 +332,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/fleet/configuration.nix
+          ];
+        };
+
+        harbor = {
+          deployment = {
+            targetHost = targetHost "harbor";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["registry" "harbor"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/harbor/configuration.nix
           ];
         };
 

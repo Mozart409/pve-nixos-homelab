@@ -11,13 +11,17 @@ let
   hostK3sWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMtwgQdHZdj7KSSmzc5nI02kzRIUqV26A2B4D/dbEpj7 root@homelab-minimal root@k3s-worker-1";
   hostCa = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP8qC6ErJ2PUjNlIwchBMyAWeRDVB6to2cNSnnDqmD+x root@homelab-ca";
   hostFleet = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICLI6UX6dd+pyXOd8TIQ3NY3Ryff2gCH4oTd1YWjvzm8 root@homelab-fleet";
-  users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet];
+  # TODO: Replace with actual SSH key after deploying harbor VM with nixos-anywhere
+  hostHarbor = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlaceholderKeyReplaceAfterDeploy root@homelab-harbor";
+  users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet hostHarbor];
 in {
   "tailscale-auth-key.age".publicKeys = users;
   "uptime-forge-db-password.age".publicKeys = [amadeus hostContainers];
-  "harbor-db-password.age".publicKeys = [amadeus hostContainers];
-  "harbor-admin-password.age".publicKeys = [amadeus hostContainers];
-  "harbor-core-secret.age".publicKeys = [amadeus hostContainers];
+  "harbor-db-password.age".publicKeys = [amadeus hostHarbor];
+  "harbor-admin-password.age".publicKeys = [amadeus hostHarbor];
+  "harbor-core-secret.age".publicKeys = [amadeus hostHarbor];
+  "harbor-oidc-client-id.age".publicKeys = [amadeus hostHarbor];
+  "harbor-oidc-client-secret.age".publicKeys = [amadeus hostHarbor];
   "homeassistant-token.age".publicKeys = [amadeus hostMcp];
   "grafana-secret-key.age".publicKeys = [amadeus hostOtel];
   "grafana-oidc-secret.age".publicKeys = [amadeus hostOtel];
