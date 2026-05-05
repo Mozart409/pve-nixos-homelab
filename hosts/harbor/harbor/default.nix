@@ -199,6 +199,11 @@
     # Harbor core runs as UID 10000, needs read access
     echo -n "$CORE_SECRET" | ${pkgs.coreutils}/bin/head -c 16 > /run/harbor/secretkey
     chmod 644 /run/harbor/secretkey
+    # Generate RSA private key for JWT token signing (only if not exists)
+    if [ ! -f /run/harbor/private_key.pem ]; then
+      ${pkgs.openssl}/bin/openssl genrsa -out /run/harbor/private_key.pem 4096
+      chmod 644 /run/harbor/private_key.pem
+    fi
   '';
 
   generateJobserviceEnv = pkgs.writeShellScript "generate-harbor-jobservice-env" ''
@@ -317,6 +322,7 @@ in {
       volumes = [
         "/etc/harbor/core.conf:/etc/core/app.conf:ro"
         "/run/harbor/secretkey:/etc/core/key:ro"
+        "/run/harbor/private_key.pem:/etc/core/private_key.pem:ro"
       ];
       environmentFiles = ["/run/harbor/core.env"];
       dependsOn = ["harbor-db" "harbor-redis" "harbor-registry"];
