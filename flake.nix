@@ -87,7 +87,7 @@
         tailscale = "homelab-fleet";
       };
       harbor = {
-        local = "192.168.2.166";
+        local = "192.168.2.174";
         tailscale = "homelab-harbor";
       };
       # Raspberry Pi hosts (update IP after first boot)
