@@ -11,8 +11,7 @@ let
   hostK3sWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMtwgQdHZdj7KSSmzc5nI02kzRIUqV26A2B4D/dbEpj7 root@homelab-minimal root@k3s-worker-1";
   hostCa = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP8qC6ErJ2PUjNlIwchBMyAWeRDVB6to2cNSnnDqmD+x root@homelab-ca";
   hostFleet = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICLI6UX6dd+pyXOd8TIQ3NY3Ryff2gCH4oTd1YWjvzm8 root@homelab-fleet";
-  # TODO: Replace with actual SSH key after deploying harbor VM with nixos-anywhere
-  hostHarbor = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPlaceholderKeyReplaceAfterDeploy root@homelab-harbor";
+  hostHarbor = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBJmT6FxRSlang9smAuBoq1QhYGtQ4adP4kK1lkLn8Ip root@homelab-harbor";
   users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet hostHarbor];
 in {
   "tailscale-auth-key.age".publicKeys = users;
