@@ -733,7 +733,7 @@ resource "proxmox_virtual_environment_vm" "cache_vm" {
     datastore_id = "zfs_pool"
     file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
-    size         = 128
+    size         = 200
   }
 
   network_device {
