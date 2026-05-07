@@ -706,55 +706,46 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
   on_boot = true
 }
 
-# Debian 12 LXC Template Download
-resource "proxmox_virtual_environment_download_file" "debian_lxc_template" {
-  content_type = "vztmpl"
-  datastore_id = "local"
-  node_name    = "pve-gigabyte"
-
-  url       = "http://download.proxmox.com/images/system/debian-12-standard_12.7-1_amd64.tar.zst"
-  file_name = "debian-12-standard_12.7-1_amd64.tar.zst"
-  overwrite = false
-}
-
-# Forgejo LXC (Git forge - uses external Postgres on database host)
-resource "proxmox_virtual_environment_container" "forgejo_lxc" {
-  description = "Forgejo Git Forge - NixOS LXC"
-  tags        = ["terraform", "nixos-target", "forgejo", "git"]
+# Forgejo VM (Git forge - uses external Postgres on database host)
+resource "proxmox_virtual_environment_vm" "forgejo_vm" {
+  name        = "forgejo"
+  description = "Forgejo Git Forge - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target", "forgejo", "git"]
 
   node_name = "pve-gigabyte"
   vm_id     = 4341
 
-  unprivileged  = true
-  started       = true
-  start_on_boot = true
+  bios = "seabios"
+
+  keyboard_layout = "de"
 
   cpu {
     cores = 2
+    type  = "host"
   }
 
   memory {
     dedicated = 4096
-    swap      = 512
+    floating  = 4096
   }
 
   disk {
     datastore_id = "zfs_pool"
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    interface    = "scsi0"
     size         = 40
   }
 
-  network_interface {
-    name   = "eth0"
+  network_device {
     bridge = "vmbr0"
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_lxc_template.id
-    type             = "debian"
+    type = "l26"
   }
 
   initialization {
-    hostname = "forgejo"
+    datastore_id = "local-lvm"
 
     ip_config {
       ipv4 {
@@ -763,53 +754,63 @@ resource "proxmox_virtual_environment_container" "forgejo_lxc" {
     }
 
     user_account {
-      keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
     }
   }
 
-  features {
-    nesting = true
+  serial_device {}
+
+  agent {
+    enabled = true
+    timeout = "60s"
   }
+
+  started = true
+
+  on_boot = true
 }
 
-# Buildbot Master LXC (CI scheduler - uses external Postgres on database host)
-resource "proxmox_virtual_environment_container" "buildbot_master_lxc" {
-  description = "Buildbot Master - NixOS LXC"
-  tags        = ["terraform", "nixos-target", "buildbot", "ci"]
+# Buildbot Master VM (CI scheduler - uses external Postgres on database host)
+resource "proxmox_virtual_environment_vm" "buildbot_master_vm" {
+  name        = "buildbot-master"
+  description = "Buildbot Master - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target", "buildbot", "ci"]
 
   node_name = "pve-gigabyte"
   vm_id     = 4342
 
-  unprivileged  = true
-  started       = true
-  start_on_boot = true
+  bios = "seabios"
+
+  keyboard_layout = "de"
 
   cpu {
     cores = 2
+    type  = "host"
   }
 
   memory {
     dedicated = 2048
-    swap      = 512
+    floating  = 2048
   }
 
   disk {
     datastore_id = "zfs_pool"
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    interface    = "scsi0"
     size         = 20
   }
 
-  network_interface {
-    name   = "eth0"
+  network_device {
     bridge = "vmbr0"
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_lxc_template.id
-    type             = "debian"
+    type = "l26"
   }
 
   initialization {
-    hostname = "buildbot-master"
+    datastore_id = "local-lvm"
 
     ip_config {
       ipv4 {
@@ -818,53 +819,63 @@ resource "proxmox_virtual_environment_container" "buildbot_master_lxc" {
     }
 
     user_account {
-      keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
     }
   }
 
-  features {
-    nesting = true
+  serial_device {}
+
+  agent {
+    enabled = true
+    timeout = "60s"
   }
+
+  started = true
+
+  on_boot = true
 }
 
-# Buildbot Worker 1 LXC (Heavy builds - Rust, Haskell)
-resource "proxmox_virtual_environment_container" "buildbot_worker_1_lxc" {
-  description = "Buildbot Worker 1 - NixOS LXC for heavy builds"
-  tags        = ["terraform", "nixos-target", "buildbot", "ci", "worker"]
+# Buildbot Worker 1 VM (Heavy builds - Rust, Haskell)
+resource "proxmox_virtual_environment_vm" "buildbot_worker_1_vm" {
+  name        = "buildbot-worker-1"
+  description = "Buildbot Worker 1 - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target", "buildbot", "ci", "worker"]
 
   node_name = "pve-gigabyte"
   vm_id     = 4343
 
-  unprivileged  = true
-  started       = true
-  start_on_boot = true
+  bios = "seabios"
+
+  keyboard_layout = "de"
 
   cpu {
     cores = 4
+    type  = "host"
   }
 
   memory {
     dedicated = 8192
-    swap      = 1024
+    floating  = 8192
   }
 
   disk {
     datastore_id = "zfs_pool"
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    interface    = "scsi0"
     size         = 60
   }
 
-  network_interface {
-    name   = "eth0"
+  network_device {
     bridge = "vmbr0"
   }
 
   operating_system {
-    template_file_id = proxmox_virtual_environment_download_file.debian_lxc_template.id
-    type             = "debian"
+    type = "l26"
   }
 
   initialization {
-    hostname = "buildbot-worker-1"
+    datastore_id = "local-lvm"
 
     ip_config {
       ipv4 {
@@ -873,13 +884,21 @@ resource "proxmox_virtual_environment_container" "buildbot_worker_1_lxc" {
     }
 
     user_account {
-      keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
     }
   }
 
-  features {
-    nesting = true
+  serial_device {}
+
+  agent {
+    enabled = true
+    timeout = "60s"
   }
+
+  started = true
+
+  on_boot = true
 }
 
 # Cache VM (Garage S3 + Attic Nix Binary Cache)
@@ -1110,7 +1129,10 @@ output "vm_ipv4_addresses" {
     ca        = proxmox_virtual_environment_vm.ca_vm.ipv4_addresses
     fleet     = proxmox_virtual_environment_vm.fleet_vm.ipv4_addresses
     harbor    = proxmox_virtual_environment_vm.harbor_vm.ipv4_addresses
-    cache     = proxmox_virtual_environment_vm.cache_vm.ipv4_addresses
+    cache            = proxmox_virtual_environment_vm.cache_vm.ipv4_addresses
+    forgejo          = proxmox_virtual_environment_vm.forgejo_vm.ipv4_addresses
+    buildbot_master  = proxmox_virtual_environment_vm.buildbot_master_vm.ipv4_addresses
+    buildbot_worker_1 = proxmox_virtual_environment_vm.buildbot_worker_1_vm.ipv4_addresses
     # k3s_server_1 = proxmox_virtual_environment_vm.k3s_server_1_vm.ipv4_addresses
     # k3s_agent_1  = proxmox_virtual_environment_vm.k3s_agent_1_vm.ipv4_addresses
   }
