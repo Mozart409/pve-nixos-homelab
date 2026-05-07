@@ -725,8 +725,8 @@ resource "proxmox_virtual_environment_container" "forgejo_lxc" {
   node_name = "pve-gigabyte"
   vm_id     = 4341
 
-  unprivileged = true
-  started      = true
+  unprivileged  = true
+  started       = true
   start_on_boot = true
 
   cpu {
@@ -778,8 +778,8 @@ resource "proxmox_virtual_environment_container" "buildbot_master_lxc" {
   node_name = "pve-gigabyte"
   vm_id     = 4342
 
-  unprivileged = true
-  started      = true
+  unprivileged  = true
+  started       = true
   start_on_boot = true
 
   cpu {
@@ -831,8 +831,8 @@ resource "proxmox_virtual_environment_container" "buildbot_worker_1_lxc" {
   node_name = "pve-gigabyte"
   vm_id     = 4343
 
-  unprivileged = true
-  started      = true
+  unprivileged  = true
+  started       = true
   start_on_boot = true
 
   cpu {
@@ -1110,11 +1110,3 @@ output "vm_ipv4_addresses" {
   }
 }
 
-output "lxc_ipv4_addresses" {
-  description = "Primary IPv4 addresses per LXC container"
-  value = {
-    forgejo          = "192.168.2.176"
-    buildbot_master  = "192.168.2.177"
-    buildbot_worker_1 = "192.168.2.178"
-  }
-}
