@@ -746,10 +746,6 @@ resource "proxmox_virtual_environment_container" "forgejo_lxc" {
   network_interface {
     name   = "eth0"
     bridge = "vmbr0"
-    ipv4 {
-      address = "192.168.2.176/24"
-      gateway = "192.168.2.1"
-    }
   }
 
   operating_system {
@@ -759,6 +755,12 @@ resource "proxmox_virtual_environment_container" "forgejo_lxc" {
 
   initialization {
     hostname = "forgejo"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
 
     user_account {
       keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
@@ -799,10 +801,6 @@ resource "proxmox_virtual_environment_container" "buildbot_master_lxc" {
   network_interface {
     name   = "eth0"
     bridge = "vmbr0"
-    ipv4 {
-      address = "192.168.2.177/24"
-      gateway = "192.168.2.1"
-    }
   }
 
   operating_system {
@@ -812,6 +810,12 @@ resource "proxmox_virtual_environment_container" "buildbot_master_lxc" {
 
   initialization {
     hostname = "buildbot-master"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
 
     user_account {
       keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
@@ -852,10 +856,6 @@ resource "proxmox_virtual_environment_container" "buildbot_worker_1_lxc" {
   network_interface {
     name   = "eth0"
     bridge = "vmbr0"
-    ipv4 {
-      address = "192.168.2.178/24"
-      gateway = "192.168.2.1"
-    }
   }
 
   operating_system {
@@ -865,6 +865,12 @@ resource "proxmox_virtual_environment_container" "buildbot_worker_1_lxc" {
 
   initialization {
     hostname = "buildbot-worker-1"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
 
     user_account {
       keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
