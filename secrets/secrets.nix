@@ -12,7 +12,8 @@ let
   hostCa = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP8qC6ErJ2PUjNlIwchBMyAWeRDVB6to2cNSnnDqmD+x root@homelab-ca";
   hostFleet = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICLI6UX6dd+pyXOd8TIQ3NY3Ryff2gCH4oTd1YWjvzm8 root@homelab-fleet";
   hostHarbor = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBJmT6FxRSlang9smAuBoq1QhYGtQ4adP4kK1lkLn8Ip root@homelab-harbor";
-  users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet hostHarbor];
+  hostCache = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOGz7r0Bh5tow1LL3utnazsqSpEICKaXB3pGxfbGJLFy root@homelab-cache";
+  users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet hostHarbor hostCache];
 in {
   "tailscale-auth-key.age".publicKeys = users;
   "uptime-forge-db-password.age".publicKeys = [amadeus hostContainers];
@@ -32,4 +33,6 @@ in {
   "step-ca-password.age".publicKeys = [amadeus hostCa];
   "fleet-enroll-secret.age".publicKeys = users;
   "fleet-mysql-password.age".publicKeys = [amadeus hostFleet];
+  "garage-rpc-secret.age".publicKeys = [amadeus hostCache];
+  "attic-server-token.age".publicKeys = [amadeus hostCache];
 }
