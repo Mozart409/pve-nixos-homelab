@@ -706,6 +706,73 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
   on_boot = true
 }
 
+# Cache VM (Garage S3 + Attic Nix Binary Cache)
+resource "proxmox_virtual_environment_vm" "cache_vm" {
+  name        = "cache"
+  description = "Garage S3 + Attic Nix Binary Cache - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target", "cache", "s3", "nix"]
+
+  node_name = "pve-gigabyte"
+  vm_id     = 4340
+
+  bios = "seabios"
+
+  keyboard_layout = "de"
+
+  cpu {
+    cores = 2
+    type  = "host"
+  }
+
+  memory {
+    dedicated = 4096
+    floating  = 4096
+  }
+
+  disk {
+    datastore_id = "zfs_pool"
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    interface    = "scsi0"
+    size         = 128
+  }
+
+  network_device {
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  initialization {
+    datastore_id = "local-lvm"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.2.175/24"
+        gateway = "192.168.2.1"
+      }
+    }
+
+    user_account {
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
+  }
+
+  serial_device {}
+
+  # Enable QEMU Guest Agent
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
+
+  started = true
+
+  on_boot = true
+}
+
 # # K3s Server (Control Plane) VM
 # resource "proxmox_virtual_environment_vm" "k3s_server_1_vm" {
 #   name        = "k3s-server-1"
@@ -867,6 +934,7 @@ output "vm_ipv4_addresses" {
     ca        = proxmox_virtual_environment_vm.ca_vm.ipv4_addresses
     fleet     = proxmox_virtual_environment_vm.fleet_vm.ipv4_addresses
     harbor    = proxmox_virtual_environment_vm.harbor_vm.ipv4_addresses
+    cache     = proxmox_virtual_environment_vm.cache_vm.ipv4_addresses
     # k3s_server_1 = proxmox_virtual_environment_vm.k3s_server_1_vm.ipv4_addresses
     # k3s_agent_1  = proxmox_virtual_environment_vm.k3s_agent_1_vm.ipv4_addresses
   }
