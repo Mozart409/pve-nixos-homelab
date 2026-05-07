@@ -90,6 +90,10 @@
         local = "192.168.2.174";
         tailscale = "homelab-harbor";
       };
+      cache = {
+        local = "192.168.2.175";
+        tailscale = "homelab-cache";
+      };
       # Raspberry Pi hosts (update IP after first boot)
       "rpi4-1" = {
         local = "192.168.2.170";
@@ -127,6 +131,7 @@
         ca = mkHost "ca";
         fleet = mkHost "fleet";
         harbor = mkHost "harbor";
+        cache = mkHost "cache";
         # Raspberry Pi 4 (aarch64) - build with: nix build '.#nixosConfigurations.rpi4.config.system.build.sdImage'
         rpi4 = nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
@@ -346,6 +351,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/harbor/configuration.nix
+          ];
+        };
+
+        cache = {
+          deployment = {
+            targetHost = targetHost "cache";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["cache" "s3" "nix"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/cache/configuration.nix
           ];
         };
 
