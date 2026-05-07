@@ -394,6 +394,18 @@
           }
         ];
       }
+      # Cache host exporters (Garage + Attic)
+      {
+        job_name = "cache-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.175:9100"];
+            labels = {
+              instance = "homelab-cache";
+            };
+          }
+        ];
+      }
       # Hofvarpnir
       {
         job_name = "hofvarpnir";
