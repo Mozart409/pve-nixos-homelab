@@ -706,6 +706,176 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
   on_boot = true
 }
 
+# Debian 12 LXC Template Download
+resource "proxmox_virtual_environment_download_file" "debian_lxc_template" {
+  content_type = "vztmpl"
+  datastore_id = "local"
+  node_name    = "pve-gigabyte"
+
+  url       = "http://download.proxmox.com/images/system/debian-12-standard_12.7-1_amd64.tar.zst"
+  file_name = "debian-12-standard_12.7-1_amd64.tar.zst"
+  overwrite = false
+}
+
+# Forgejo LXC (Git forge - uses external Postgres on database host)
+resource "proxmox_virtual_environment_container" "forgejo_lxc" {
+  description = "Forgejo Git Forge - NixOS LXC"
+  tags        = ["terraform", "nixos-target", "forgejo", "git"]
+
+  node_name = "pve-gigabyte"
+  vm_id     = 4341
+
+  unprivileged = true
+  started      = true
+  start_on_boot = true
+
+  cpu {
+    cores = 2
+  }
+
+  memory {
+    dedicated = 4096
+    swap      = 512
+  }
+
+  disk {
+    datastore_id = "zfs_pool"
+    size         = 40
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+    ipv4 {
+      address = "192.168.2.176/24"
+      gateway = "192.168.2.1"
+    }
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_download_file.debian_lxc_template.id
+    type             = "debian"
+  }
+
+  initialization {
+    hostname = "forgejo"
+
+    user_account {
+      keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
+  }
+
+  features {
+    nesting = true
+  }
+}
+
+# Buildbot Master LXC (CI scheduler - uses external Postgres on database host)
+resource "proxmox_virtual_environment_container" "buildbot_master_lxc" {
+  description = "Buildbot Master - NixOS LXC"
+  tags        = ["terraform", "nixos-target", "buildbot", "ci"]
+
+  node_name = "pve-gigabyte"
+  vm_id     = 4342
+
+  unprivileged = true
+  started      = true
+  start_on_boot = true
+
+  cpu {
+    cores = 2
+  }
+
+  memory {
+    dedicated = 2048
+    swap      = 512
+  }
+
+  disk {
+    datastore_id = "zfs_pool"
+    size         = 20
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+    ipv4 {
+      address = "192.168.2.177/24"
+      gateway = "192.168.2.1"
+    }
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_download_file.debian_lxc_template.id
+    type             = "debian"
+  }
+
+  initialization {
+    hostname = "buildbot-master"
+
+    user_account {
+      keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
+  }
+
+  features {
+    nesting = true
+  }
+}
+
+# Buildbot Worker 1 LXC (Heavy builds - Rust, Haskell)
+resource "proxmox_virtual_environment_container" "buildbot_worker_1_lxc" {
+  description = "Buildbot Worker 1 - NixOS LXC for heavy builds"
+  tags        = ["terraform", "nixos-target", "buildbot", "ci", "worker"]
+
+  node_name = "pve-gigabyte"
+  vm_id     = 4343
+
+  unprivileged = true
+  started      = true
+  start_on_boot = true
+
+  cpu {
+    cores = 4
+  }
+
+  memory {
+    dedicated = 8192
+    swap      = 1024
+  }
+
+  disk {
+    datastore_id = "zfs_pool"
+    size         = 60
+  }
+
+  network_interface {
+    name   = "eth0"
+    bridge = "vmbr0"
+    ipv4 {
+      address = "192.168.2.178/24"
+      gateway = "192.168.2.1"
+    }
+  }
+
+  operating_system {
+    template_file_id = proxmox_virtual_environment_download_file.debian_lxc_template.id
+    type             = "debian"
+  }
+
+  initialization {
+    hostname = "buildbot-worker-1"
+
+    user_account {
+      keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
+  }
+
+  features {
+    nesting = true
+  }
+}
+
 # Cache VM (Garage S3 + Attic Nix Binary Cache)
 resource "proxmox_virtual_environment_vm" "cache_vm" {
   name        = "cache"
@@ -937,5 +1107,14 @@ output "vm_ipv4_addresses" {
     cache     = proxmox_virtual_environment_vm.cache_vm.ipv4_addresses
     # k3s_server_1 = proxmox_virtual_environment_vm.k3s_server_1_vm.ipv4_addresses
     # k3s_agent_1  = proxmox_virtual_environment_vm.k3s_agent_1_vm.ipv4_addresses
+  }
+}
+
+output "lxc_ipv4_addresses" {
+  description = "Primary IPv4 addresses per LXC container"
+  value = {
+    forgejo          = "192.168.2.176"
+    buildbot_master  = "192.168.2.177"
+    buildbot_worker_1 = "192.168.2.178"
   }
 }
