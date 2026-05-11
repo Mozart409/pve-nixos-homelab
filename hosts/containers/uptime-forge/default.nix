@@ -166,7 +166,13 @@ in {
           exec ${pkgs.prometheus-postgres-exporter}/bin/postgres_exporter \
             --web.listen-address=0.0.0.0:9187 \
             --web.telemetry-path=/metrics \
-            --auto-discover-databases
+            --auto-discover-databases \
+            --collector.database_wraparound \
+            --collector.long_running_transactions \
+            --collector.postmaster \
+            --collector.process_idle \
+            --collector.stat_activity_autovacuum \
+            --collector.statio_user_indexes
         '';
       in "${wrapper}";
       Restart = "on-failure";
