@@ -968,6 +968,82 @@ resource "proxmox_virtual_environment_vm" "cache_vm" {
   on_boot = true
 }
 
+# Jellyfin Media Server VM
+resource "proxmox_virtual_environment_vm" "jellyfin_vm" {
+  name        = "jellyfin"
+  description = "Jellyfin Media Server - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target", "media", "jellyfin"]
+
+  node_name = "pve-gigabyte"
+  vm_id     = 4344
+
+  bios = "seabios"
+
+  keyboard_layout = "de"
+
+  cpu {
+    cores = 4
+    type  = "host"
+  }
+
+  memory {
+    dedicated = 4096
+    floating  = 4096
+  }
+
+  # OS disk
+  disk {
+    datastore_id = "zfs_pool"
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    interface    = "scsi0"
+    size         = 32
+  }
+
+  # Media storage disk (ZFS)
+  disk {
+    datastore_id = "zfs_pool"
+    interface    = "scsi1"
+    size         = 768
+    file_format  = "raw"
+  }
+
+  network_device {
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  initialization {
+    datastore_id = "local-lvm"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.2.180/24"
+        gateway = "192.168.2.1"
+      }
+    }
+
+    user_account {
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
+  }
+
+  serial_device {}
+
+  # Enable QEMU Guest Agent
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
+
+  started = true
+
+  on_boot = true
+}
+
 # # K3s Server (Control Plane) VM
 # resource "proxmox_virtual_environment_vm" "k3s_server_1_vm" {
 #   name        = "k3s-server-1"
@@ -1133,6 +1209,7 @@ output "vm_ipv4_addresses" {
     forgejo           = proxmox_virtual_environment_vm.forgejo_vm.ipv4_addresses
     buildbot_master   = proxmox_virtual_environment_vm.buildbot_master_vm.ipv4_addresses
     buildbot_worker_1 = proxmox_virtual_environment_vm.buildbot_worker_1_vm.ipv4_addresses
+    jellyfin          = proxmox_virtual_environment_vm.jellyfin_vm.ipv4_addresses
     # k3s_server_1 = proxmox_virtual_environment_vm.k3s_server_1_vm.ipv4_addresses
     # k3s_agent_1  = proxmox_virtual_environment_vm.k3s_agent_1_vm.ipv4_addresses
   }
