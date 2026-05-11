@@ -94,6 +94,10 @@
         local = "192.168.2.175";
         tailscale = "homelab-cache";
       };
+      jellyfin = {
+        local = "192.168.2.180";
+        tailscale = "homelab-jellyfin";
+      };
       # Raspberry Pi hosts (update IP after first boot)
       "rpi4-1" = {
         local = "192.168.2.170";
@@ -132,6 +136,7 @@
         fleet = mkHost "fleet";
         harbor = mkHost "harbor";
         cache = mkHost "cache";
+        jellyfin = mkHost "jellyfin";
         # Raspberry Pi 4 (aarch64) - build with: nix build '.#nixosConfigurations.rpi4.config.system.build.sdImage'
         rpi4 = nixpkgs.lib.nixosSystem {
           system = "aarch64-linux";
@@ -365,6 +370,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/cache/configuration.nix
+          ];
+        };
+
+        jellyfin = {
+          deployment = {
+            targetHost = targetHost "jellyfin";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["media" "jellyfin"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/jellyfin/configuration.nix
           ];
         };
 
