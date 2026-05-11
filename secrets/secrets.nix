@@ -35,4 +35,5 @@ in {
   "fleet-mysql-password.age".publicKeys = [amadeus hostFleet];
   "garage-rpc-secret.age".publicKeys = [amadeus hostCache];
   "attic-server-token.age".publicKeys = [amadeus hostCache];
+  "open-webui-env.age".publicKeys = [amadeus hostContainers];
 }
