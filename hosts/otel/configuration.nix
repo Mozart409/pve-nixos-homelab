@@ -406,6 +406,18 @@
           }
         ];
       }
+      # Jellyfin host exporters
+      {
+        job_name = "jellyfin-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.180:9100"];
+            labels = {
+              instance = "homelab-jellyfin";
+            };
+          }
+        ];
+      }
       # Hofvarpnir
       {
         job_name = "hofvarpnir";
