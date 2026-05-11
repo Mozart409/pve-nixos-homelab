@@ -114,7 +114,34 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
 -   **OpenTofu**: Infrastructure provisioning (fork of Terraform).
 -   **Proxmox**: Virtualization platform target.
 
-## 5. Common Pitfalls
+## 5. Adding New Hosts Checklist
+
+When adding a new host to the homelab, ensure the following are updated:
+
+1. **Host Configuration**: Create `hosts/<hostname>/configuration.nix`
+2. **Flake Registration**:
+   - Add to `hostAddrs` with local IP and Tailscale name
+   - Add to `nixosConfigurations` using `mkHost`
+   - Add to `colmenaHive` with deployment settings
+3. **Infrastructure (OpenTofu)**: Add VM resource in `iac/main.tf` and update outputs
+4. **DNS Entry**: Add A record and PTR record in `hosts/dns/configuration.nix`:
+   - `local-data`: `''"<hostname>.homelab.local. A <ip>"''`
+   - `local-data-ptr`: `''"<ip> <hostname>.homelab.local"''`
+5. **Prometheus Monitoring**: Add scrape config in `hosts/otel/configuration.nix`:
+   ```nix
+   {
+     job_name = "<hostname>-node";
+     static_configs = [
+       {
+         targets = ["<ip>:9100"];
+         labels = { instance = "homelab-<hostname>"; };
+       }
+     ];
+   }
+   ```
+6. **Git**: Stage new files with `git add` before running `nix flake check`
+
+## 6. Common Pitfalls
 
 ### Caddy Path Handling
 When configuring Caddy reverse proxies, be careful with `handle` vs `handle_path`:
