@@ -166,20 +166,7 @@ in {
           exec ${pkgs.prometheus-postgres-exporter}/bin/postgres_exporter \
             --web.listen-address=0.0.0.0:9187 \
             --web.telemetry-path=/metrics \
-            --collector.database \
-            --collector.bgwriter \
-            --collector.locks \
-            --collector.replication \
-            --collector.replication_slot \
-            --collector.stat_user_tables \
-            --collector.statio_user_tables \
-            --collector.stat_bgwriter \
-            --collector.stat_database \
-            --collector.stat_activity_autovacuum \
-            --collector.long_running_transactions \
-            --collector.postmaster \
-            --collector.process_idle \
-            --collector.wal
+            --auto-discover-databases
         '';
       in "${wrapper}";
       Restart = "on-failure";
