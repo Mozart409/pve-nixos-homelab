@@ -165,7 +165,21 @@ in {
           export DATA_SOURCE_NAME="postgresql://uptime:$(cat ${config.age.secrets.uptime-forge-db-password.path})@localhost:5444/uptime_forge?sslmode=disable"
           exec ${pkgs.prometheus-postgres-exporter}/bin/postgres_exporter \
             --web.listen-address=0.0.0.0:9187 \
-            --web.telemetry-path=/metrics
+            --web.telemetry-path=/metrics \
+            --collector.database \
+            --collector.bgwriter \
+            --collector.locks \
+            --collector.replication \
+            --collector.replication_slot \
+            --collector.stat_user_tables \
+            --collector.statio_user_tables \
+            --collector.stat_bgwriter \
+            --collector.stat_database \
+            --collector.stat_activity_autovacuum \
+            --collector.long_running_transactions \
+            --collector.postmaster \
+            --collector.process_idle \
+            --collector.wal
         '';
       in "${wrapper}";
       Restart = "on-failure";
