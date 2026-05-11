@@ -46,6 +46,37 @@
     # because it needs access to agenix secrets for the connection string
   };
 
+  # Open WebUI - LLM chat interface (external APIs only)
+  services.open-webui = {
+    enable = true;
+    port = 8080;
+    environment = {
+      WEBUI_AUTH = "true";
+      ENABLE_OLLAMA_API = "false";
+      ENABLE_OPENAI_API = "true";
+      # OIDC authentication
+      ENABLE_OAUTH_SIGNUP = "true";
+      OAUTH_PROVIDER_NAME = "Pocket ID";
+      OPENID_PROVIDER_URL = "https://pocketid.dropbear-butterfly.ts.net/.well-known/openid-configuration";
+      OAUTH_SCOPES = "openid email profile groups";
+      ENABLE_OAUTH_ROLE_MANAGEMENT = "true";
+      OAUTH_ROLES_CLAIM = "groups";
+      OAUTH_ADMIN_ROLES = "admins";
+    };
+    # Secrets file should contain:
+    # OAUTH_CLIENT_ID=...
+    # OAUTH_CLIENT_SECRET=...
+    # OPENAI_API_KEY=sk-...  (optional)
+    environmentFile = config.age.secrets.open-webui-env.path;
+  };
+
+  # Open WebUI secrets
+  age.secrets.open-webui-env = {
+    file = ../../secrets/open-webui-env.age;
+    owner = "open-webui";
+    group = "open-webui";
+  };
+
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
     enable = true;
@@ -59,6 +90,11 @@
 
         handle /uptime-forge* {
           reverse_proxy localhost:3000
+        }
+
+        handle /open-webui* {
+          uri strip_prefix /open-webui
+          reverse_proxy localhost:8080
         }
 
         handle {
@@ -76,6 +112,11 @@
 
         handle /uptime-forge* {
           reverse_proxy localhost:3000
+        }
+
+        handle /open-webui* {
+          uri strip_prefix /open-webui
+          reverse_proxy localhost:8080
         }
 
         handle {
@@ -101,6 +142,7 @@
       443 # HTTPS (Caddy)
       3000 # Uptime Forge
       5444 # TimescaleDB (external access)
+      8080 # Open WebUI
       9100 # Node exporter
       9187 # Postgres exporter
     ];
