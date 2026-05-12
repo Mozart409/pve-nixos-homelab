@@ -26,7 +26,7 @@
     # Change sources - poll Forgejo for new commits
     c["change_source"] = [
         changes.GitPoller(
-            repourl="https://homelab-forgejo.dropbear-butterfly.ts.net/amadeus/pve-nixos-homelab.git",
+            repourl="https://forgejo.homelab.local/amadeus/pve-nixos-homelab.git",
             branches=True,  # poll all branches (covers PR branches too)
             pollInterval=120,  # check every 2 minutes
             project="pve-nixos-homelab",
@@ -59,7 +59,7 @@
     # Build factory for nix flake check
     nix_check_factory = util.BuildFactory()
     nix_check_factory.addStep(steps.Git(
-        repourl="https://homelab-forgejo.dropbear-butterfly.ts.net/amadeus/pve-nixos-homelab.git",
+        repourl="https://forgejo.homelab.local/amadeus/pve-nixos-homelab.git",
         mode="full",
         method="clobber",
         submodules=True,
