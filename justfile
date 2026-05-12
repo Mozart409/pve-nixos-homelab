@@ -86,7 +86,7 @@ get-host-key ip:
 
 [working-directory: 'secrets']
 reencrypt: clear
-  agenix -r
+  agenix -r -i ~/.config/age/keys.txt
 
 # Raspberry Pi SD image build (specify model: rpi4 or rpi5)
 rpi-build model: clear
