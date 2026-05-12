@@ -140,8 +140,8 @@
   # Set password for buildbot user after PostgreSQL creates the user
   systemd.services.postgresql-buildbot-password = {
     description = "Set Buildbot PostgreSQL user password";
-    after = ["postgresql-ensure-users.service" "agenix.service"];
-    requires = ["postgresql-ensure-users.service"];
+    after = ["postgresql.service" "agenix.service"];
+    requires = ["postgresql.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
