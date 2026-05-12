@@ -135,6 +135,10 @@ in {
       git
       nix
     ];
+    pythonPackages = python3Packages:
+      with python3Packages; [
+        psycopg2
+      ];
   };
 
   # Create buildbot directories with correct ownership
@@ -181,7 +185,7 @@ in {
         }
 
         handle {
-          reverse_proxy localhost:8010
+          reverse_proxy 127.0.0.1:8010
         }
       '';
     };
@@ -194,7 +198,7 @@ in {
         }
 
         handle {
-          reverse_proxy localhost:8010
+          reverse_proxy 127.0.0.1:8010
         }
       '';
     };
