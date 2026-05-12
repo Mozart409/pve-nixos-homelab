@@ -40,4 +40,6 @@ in {
   "attic-server-token.age".publicKeys = [amadeus hostCache];
   "open-webui-env.age".publicKeys = [amadeus hostContainers];
   "forgejo-db-password.age".publicKeys = [amadeus hostForgejo hostDatabase];
+  "buildbot-db-password.age".publicKeys = [amadeus hostBuildBotMaster hostDatabase];
+  "buildbot-worker-password.age".publicKeys = [amadeus hostBuildBotMaster hostBuildBotWorker1];
 }
