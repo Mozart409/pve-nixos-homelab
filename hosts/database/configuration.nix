@@ -137,10 +137,27 @@
     '';
   };
 
+  # Set password for buildbot user after PostgreSQL creates the user
+  systemd.services.postgresql-buildbot-password = {
+    description = "Set Buildbot PostgreSQL user password";
+    after = ["postgresql-ensure-users.service" "agenix.service"];
+    requires = ["postgresql-ensure-users.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "postgres";
+    };
+    script = ''
+      PASSWORD=$(cat ${config.age.secrets.buildbot-db-password.path})
+      ${config.services.postgresql.package}/bin/psql -c "ALTER USER buildbot WITH PASSWORD '$PASSWORD';"
+    '';
+  };
+
   # Backup configuration
   services.postgresqlBackup = {
     enable = true;
-    databases = ["appdb" "terraform" "forgejo"];
+    databases = ["appdb" "terraform" "forgejo" "buildbot"];
     location = "/var/backup/postgresql";
     startAt = "03:00";
     compression = "zstd";
