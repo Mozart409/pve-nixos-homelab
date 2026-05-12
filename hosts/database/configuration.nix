@@ -40,6 +40,13 @@
     group = "postgres";
   };
 
+  # Buildbot database password
+  age.secrets.buildbot-db-password = {
+    file = ../../secrets/buildbot-db-password.age;
+    owner = "postgres";
+    group = "postgres";
+  };
+
   # PostgreSQL configuration
   services.postgresql = {
     enable = true;
@@ -73,7 +80,7 @@
     '';
 
     # Initial databases (names must match usernames when using ensureDBOwnership)
-    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo"];
+    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo" "buildbot"];
 
     # Initial users
     ensureUsers = [
@@ -87,6 +94,10 @@
       }
       {
         name = "forgejo";
+        ensureDBOwnership = true;
+      }
+      {
+        name = "buildbot";
         ensureDBOwnership = true;
       }
     ];
