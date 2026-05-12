@@ -57,6 +57,11 @@
     ];
   };
 
+  # Create buildbot-worker directory with correct ownership
+  systemd.tmpfiles.rules = [
+    "d /var/lib/buildbot-worker 0750 buildbot-worker buildbot-worker -"
+  ];
+
   # Allow buildbot-worker to use Nix
   nix.settings.trusted-users = ["buildbot-worker"];
 
