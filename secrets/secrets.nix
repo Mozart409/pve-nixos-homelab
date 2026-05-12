@@ -13,7 +13,7 @@ let
   hostFleet = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICLI6UX6dd+pyXOd8TIQ3NY3Ryff2gCH4oTd1YWjvzm8 root@homelab-fleet";
   hostHarbor = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBJmT6FxRSlang9smAuBoq1QhYGtQ4adP4kK1lkLn8Ip root@homelab-harbor";
   hostCache = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOGz7r0Bh5tow1LL3utnazsqSpEICKaXB3pGxfbGJLFy root@homelab-cache";
-  hostForgejo = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOZwwPt+EtsK0f+MVcfeByzNHT/T1ZWBFzMkrhd8kdxD root@forgejo";
+  hostForgejo = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIByBR3nP+bKlGcC6p62Pg5w1cPZsdh1FHBE6RUfbchDo root@homelab-forgejo";
   hostBuildBotMaster = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIwy8ohPS5E6ElmFvYoNYNBfbiYjAfFQBVtBA5hePSiN root@homelab-buildbot-master";
   hostBuildBotWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICOaRMAXPff5yfFPo0sVij3Q73I3YLokmpBrGU/3AXVu root@homelab-buildbot-worker-1";
   users = [amadeus hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet hostHarbor hostCache hostBuildBotMaster hostBuildBotWorker1];
