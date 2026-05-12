@@ -23,50 +23,62 @@
 
     c["protocols"] = {"pb": {"port": 9989}}
 
-    # Change sources - Forgejo webhook
+    # Read webhook secret at runtime
+    webhook_secret_file = "/run/agenix/buildbot-webhook-secret"
+    with open(webhook_secret_file) as f:
+        webhook_secret = f.read().strip()
+
+    # Change sources - Forgejo uses Gitea-compatible webhook format
     c["change_source"] = []
 
     # Schedulers
     c["schedulers"] = [
+        # Main branch pushes
         schedulers.SingleBranchScheduler(
-            name="all",
-            change_filter=util.ChangeFilter(branch="main"),
+            name="main-push",
+            change_filter=util.ChangeFilter(branch="main", category=None),
             treeStableTimer=60,
-            builderNames=["nix-build"],
+            builderNames=["nix-flake-check"],
         ),
+        # Pull requests (Gitea/Forgejo sends category="pull")
+        schedulers.AnyBranchScheduler(
+            name="pull-request",
+            change_filter=util.ChangeFilter(category="pull"),
+            treeStableTimer=10,
+            builderNames=["nix-flake-check"],
+        ),
+        # Manual trigger
         schedulers.ForceScheduler(
             name="force",
-            builderNames=["nix-build"],
+            builderNames=["nix-flake-check"],
         ),
     ]
 
-    # Build factory for Nix builds
-    nix_factory = util.BuildFactory()
-    nix_factory.addStep(steps.Git(
-        repourl=util.Property("repository", default=""),
-        mode="incremental",
+    # Build factory for nix flake check
+    nix_check_factory = util.BuildFactory()
+    nix_check_factory.addStep(steps.Git(
+        repourl=util.Property("repository"),
+        mode="full",
+        method="clobber",
         submodules=True,
+        haltOnFailure=True,
     ))
-    nix_factory.addStep(steps.ShellCommand(
+    nix_check_factory.addStep(steps.ShellCommand(
         name="nix flake check",
-        command=["nix", "flake", "check"],
+        command=["nix", "flake", "check", "--show-trace", "--print-build-logs"],
         haltOnFailure=True,
-    ))
-    nix_factory.addStep(steps.ShellCommand(
-        name="nix build",
-        command=["nix", "build"],
-        haltOnFailure=True,
+        timeout=3600,
     ))
 
     c["builders"] = [
         util.BuilderConfig(
-            name="nix-build",
+            name="nix-flake-check",
             workernames=["worker-1"],
-            factory=nix_factory,
+            factory=nix_check_factory,
         ),
     ]
 
-    # Web interface
+    # Web interface with Forgejo/Gitea webhook receiver
     c["www"] = {
         "port": 8010,
         "plugins": {
@@ -74,6 +86,13 @@
             "console_view": {},
             "grid_view": {},
         },
+        "change_hook_dialects": {
+            "gitea": {
+                "secret": webhook_secret,
+                "onlyIncludePushCommit": True,
+            },
+        },
+        "allowed_origins": ["*"],
     }
 
     # Database - PostgreSQL (read password at runtime)
@@ -123,6 +142,12 @@ in {
 
   age.secrets.buildbot-db-password = {
     file = ../../secrets/buildbot-db-password.age;
+    owner = "buildbot";
+    group = "buildbot";
+  };
+
+  age.secrets.buildbot-webhook-secret = {
+    file = ../../secrets/buildbot-webhook-secret.age;
     owner = "buildbot";
     group = "buildbot";
   };

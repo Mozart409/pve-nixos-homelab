@@ -43,4 +43,5 @@ in {
   "forgejo-db-password.age".publicKeys = [amadeus amadeusAge hostForgejo hostDatabase];
   "buildbot-db-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostDatabase];
   "buildbot-worker-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostBuildBotWorker1];
+  "buildbot-webhook-secret.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster];
 }
