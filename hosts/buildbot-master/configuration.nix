@@ -76,13 +76,14 @@
         },
     }
 
-    # Database - PostgreSQL with secret from file
-    c["secretsProviders"] = [
-        secrets.SecretInAFile(dirname="/var/lib/buildbot/master/secrets"),
-    ]
+    # Database - PostgreSQL (read password at runtime)
+    db_password_file = "/run/agenix/buildbot-db-password"
+    with open(db_password_file) as f:
+        db_password = f.read().strip()
 
+    from urllib.parse import quote_plus
     c["db"] = {
-        "db_url": "postgresql+psycopg2://buildbot:%(secret:db_password)s@192.168.2.134/buildbot",
+        "db_url": f"postgresql+psycopg2://buildbot:{quote_plus(db_password)}@192.168.2.134/buildbot",
     }
 
     # Project identity
@@ -145,27 +146,7 @@ in {
   systemd.tmpfiles.rules = [
     "d /var/lib/buildbot 0750 buildbot buildbot -"
     "d /var/lib/buildbot/master 0750 buildbot buildbot -"
-    "d /var/lib/buildbot/master/secrets 0700 buildbot buildbot -"
   ];
-
-  # Write DB password to secrets file for Buildbot
-  systemd.services.buildbot-master-secrets = {
-    description = "Setup Buildbot secrets";
-    after = ["agenix.service"];
-    before = ["buildbot-master.service"];
-    wantedBy = ["buildbot-master.service"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "buildbot";
-      Group = "buildbot";
-    };
-    script = ''
-      mkdir -p /var/lib/buildbot/master/secrets
-      cp ${config.age.secrets.buildbot-db-password.path} /var/lib/buildbot/master/secrets/db_password
-      chmod 600 /var/lib/buildbot/master/secrets/db_password
-    '';
-  };
 
   # Prometheus exporters
   services.prometheus.exporters.node = {
