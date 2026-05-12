@@ -59,15 +59,15 @@
 
   # Create buildbot-worker directory with correct ownership
   systemd.tmpfiles.rules = [
-    "d /var/lib/buildbot-worker 0750 buildbot-worker buildbot-worker -"
+    "d /var/lib/buildbot-worker 0750 bbworker bbworker -"
   ];
 
   # Ensure directory exists before buildbot-worker starts
   systemd.services.buildbot-worker.serviceConfig.StateDirectory = "buildbot-worker";
   systemd.services.buildbot-worker.serviceConfig.StateDirectoryMode = "0750";
 
-  # Allow buildbot-worker to use Nix
-  nix.settings.trusted-users = ["buildbot-worker"];
+  # Allow bbworker to use Nix
+  nix.settings.trusted-users = ["bbworker"];
 
   # Prometheus exporters
   services.prometheus.exporters.node = {
