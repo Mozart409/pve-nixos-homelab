@@ -33,6 +33,13 @@
     group = "postgres";
   };
 
+  # Forgejo database password
+  age.secrets.forgejo-db-password = {
+    file = ../../secrets/forgejo-db-password.age;
+    owner = "postgres";
+    group = "postgres";
+  };
+
   # PostgreSQL configuration
   services.postgresql = {
     enable = true;
@@ -66,7 +73,7 @@
     '';
 
     # Initial databases (names must match usernames when using ensureDBOwnership)
-    ensureDatabases = ["appdb" "appuser" "terraform"];
+    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo"];
 
     # Initial users
     ensureUsers = [
@@ -76,6 +83,10 @@
       }
       {
         name = "terraform";
+        ensureDBOwnership = true;
+      }
+      {
+        name = "forgejo";
         ensureDBOwnership = true;
       }
     ];
@@ -98,10 +109,27 @@
     '';
   };
 
+  # Set password for forgejo user after PostgreSQL creates the user
+  systemd.services.postgresql-forgejo-password = {
+    description = "Set Forgejo PostgreSQL user password";
+    after = ["postgresql-ensure-users.service" "agenix.service"];
+    requires = ["postgresql-ensure-users.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "postgres";
+    };
+    script = ''
+      PASSWORD=$(cat ${config.age.secrets.forgejo-db-password.path})
+      ${config.services.postgresql.package}/bin/psql -c "ALTER USER forgejo WITH PASSWORD '$PASSWORD';"
+    '';
+  };
+
   # Backup configuration
   services.postgresqlBackup = {
     enable = true;
-    databases = ["appdb" "terraform"];
+    databases = ["appdb" "terraform" "forgejo"];
     location = "/var/backup/postgresql";
     startAt = "03:00";
     compression = "zstd";
