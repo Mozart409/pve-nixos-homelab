@@ -137,8 +137,10 @@ in {
     ];
   };
 
-  # Create secrets directory for buildbot
+  # Create buildbot directories with correct ownership
   systemd.tmpfiles.rules = [
+    "d /var/lib/buildbot 0750 buildbot buildbot -"
+    "d /var/lib/buildbot/master 0750 buildbot buildbot -"
     "d /var/lib/buildbot/master/secrets 0700 buildbot buildbot -"
   ];
 
