@@ -29,8 +29,8 @@
   # Buildbot secrets
   age.secrets.buildbot-worker-password = {
     file = ../../secrets/buildbot-worker-password.age;
-    owner = "buildbot-worker";
-    group = "buildbot-worker";
+    owner = "bbworker";
+    group = "bbworker";
   };
 
   # Buildbot Worker
