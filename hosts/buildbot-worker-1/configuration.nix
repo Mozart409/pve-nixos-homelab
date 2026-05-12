@@ -63,20 +63,8 @@
   ];
 
   # Ensure directory exists before buildbot-worker starts
-  systemd.services.buildbot-worker-setup = {
-    description = "Setup Buildbot Worker directory";
-    before = ["buildbot-worker.service"];
-    wantedBy = ["buildbot-worker.service"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-    };
-    script = ''
-      mkdir -p /var/lib/buildbot-worker
-      chown buildbot-worker:buildbot-worker /var/lib/buildbot-worker
-      chmod 750 /var/lib/buildbot-worker
-    '';
-  };
+  systemd.services.buildbot-worker.serviceConfig.StateDirectory = "buildbot-worker";
+  systemd.services.buildbot-worker.serviceConfig.StateDirectoryMode = "0750";
 
   # Allow buildbot-worker to use Nix
   nix.settings.trusted-users = ["buildbot-worker"];
