@@ -406,6 +406,42 @@
           }
         ];
       }
+      # Buildbot Master host exporters
+      {
+        job_name = "buildbot-master-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.177:9100"];
+            labels = {
+              instance = "homelab-buildbot-master";
+            };
+          }
+        ];
+      }
+      # Forgejo host exporters
+      {
+        job_name = "forgejo-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.178:9100"];
+            labels = {
+              instance = "homelab-forgejo";
+            };
+          }
+        ];
+      }
+      # Buildbot Worker 1 host exporters
+      {
+        job_name = "buildbot-worker-1-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.179:9100"];
+            labels = {
+              instance = "homelab-buildbot-worker-1";
+            };
+          }
+        ];
+      }
       # Jellyfin host exporters
       {
         job_name = "jellyfin-node";

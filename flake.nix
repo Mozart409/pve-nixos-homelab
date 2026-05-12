@@ -94,6 +94,18 @@
         local = "192.168.2.175";
         tailscale = "homelab-cache";
       };
+      forgejo = {
+        local = "192.168.2.178";
+        tailscale = "homelab-forgejo";
+      };
+      buildbot-master = {
+        local = "192.168.2.177";
+        tailscale = "homelab-buildbot-master";
+      };
+      buildbot-worker-1 = {
+        local = "192.168.2.179";
+        tailscale = "homelab-buildbot-worker-1";
+      };
       # jellyfin = {
       #   local = "192.168.2.180";
       #   tailscale = "homelab-jellyfin";
@@ -136,6 +148,9 @@
         fleet = mkHost "fleet";
         harbor = mkHost "harbor";
         cache = mkHost "cache";
+        forgejo = mkHost "forgejo";
+        buildbot-master = mkHost "buildbot-master";
+        buildbot-worker-1 = mkHost "buildbot-worker-1";
         # jellyfin = mkHost "jellyfin";
         # Raspberry Pi 4 (aarch64) - build with: nix build '.#nixosConfigurations.rpi4.config.system.build.sdImage'
         rpi4 = nixpkgs.lib.nixosSystem {
@@ -370,6 +385,48 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/cache/configuration.nix
+          ];
+        };
+
+        forgejo = {
+          deployment = {
+            targetHost = targetHost "forgejo";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["forgejo" "git"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/forgejo/configuration.nix
+          ];
+        };
+
+        buildbot-master = {
+          deployment = {
+            targetHost = targetHost "buildbot-master";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["buildbot" "ci"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/buildbot-master/configuration.nix
+          ];
+        };
+
+        buildbot-worker-1 = {
+          deployment = {
+            targetHost = targetHost "buildbot-worker-1";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["buildbot" "ci" "worker"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/buildbot-worker-1/configuration.nix
           ];
         };
 

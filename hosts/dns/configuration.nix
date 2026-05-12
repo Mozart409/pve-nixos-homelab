@@ -104,6 +104,9 @@
           ''"k3s-server-1.homelab.local. A 192.168.2.165"''
           ''"harbor.homelab.local. A 192.168.2.174"''
           ''"cache.homelab.local. A 192.168.2.175"''
+          ''"buildbot-master.homelab.local. A 192.168.2.177"''
+          ''"forgejo.homelab.local. A 192.168.2.178"''
+          ''"buildbot-worker-1.homelab.local. A 192.168.2.179"''
           ''"jellyfin.homelab.local. A 192.168.2.180"''
         ];
         local-data-ptr = [
@@ -122,6 +125,9 @@
           ''"192.168.2.165 k3s-server-1.homelab.local"''
           ''"192.168.2.174 harbor.homelab.local"''
           ''"192.168.2.175 cache.homelab.local"''
+          ''"192.168.2.177 buildbot-master.homelab.local"''
+          ''"192.168.2.178 forgejo.homelab.local"''
+          ''"192.168.2.179 buildbot-worker-1.homelab.local"''
           ''"192.168.2.180 jellyfin.homelab.local"''
         ];
       };
