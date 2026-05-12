@@ -38,14 +38,14 @@
         # Main branch pushes
         schedulers.SingleBranchScheduler(
             name="main-push",
-            change_filter=util.ChangeFilter(branch="main"),
+            change_filter=util.ChangeFilter(branch="refs/heads/main"),
             treeStableTimer=60,
             builderNames=["nix-flake-check"],
         ),
         # All other branches (PR branches)
         schedulers.AnyBranchScheduler(
             name="branches",
-            change_filter=util.ChangeFilter(branch_fn=lambda b: b != "main"),
+            change_filter=util.ChangeFilter(branch_fn=lambda b: b != "refs/heads/main"),
             treeStableTimer=30,
             builderNames=["nix-flake-check"],
         ),
