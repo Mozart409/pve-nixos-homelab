@@ -87,9 +87,9 @@
             "grid_view": {},
         },
         "change_hook_dialects": {
-            "gitea": {
+            "github": {
                 "secret": webhook_secret,
-                "onlyIncludePushCommit": True,
+                "strict": True,
             },
         },
         "allowed_origins": ["*"],
