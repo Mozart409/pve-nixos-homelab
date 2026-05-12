@@ -23,28 +23,30 @@
 
     c["protocols"] = {"pb": {"port": 9989}}
 
-    # Read webhook secret at runtime
-    webhook_secret_file = "/run/agenix/buildbot-webhook-secret"
-    with open(webhook_secret_file) as f:
-        webhook_secret = f.read().strip()
-
-    # Change sources - Forgejo uses Gitea-compatible webhook format
-    c["change_source"] = []
+    # Change sources - poll Forgejo for new commits
+    c["change_source"] = [
+        changes.GitPoller(
+            repourl="https://homelab-forgejo.dropbear-butterfly.ts.net/amadeus/pve-nixos-homelab.git",
+            branches=True,  # poll all branches (covers PR branches too)
+            pollInterval=120,  # check every 2 minutes
+            project="pve-nixos-homelab",
+        ),
+    ]
 
     # Schedulers
     c["schedulers"] = [
         # Main branch pushes
         schedulers.SingleBranchScheduler(
             name="main-push",
-            change_filter=util.ChangeFilter(branch="main", category=None),
+            change_filter=util.ChangeFilter(branch="main"),
             treeStableTimer=60,
             builderNames=["nix-flake-check"],
         ),
-        # Pull requests (Gitea/Forgejo sends category="pull")
+        # All other branches (PR branches)
         schedulers.AnyBranchScheduler(
-            name="pull-request",
-            change_filter=util.ChangeFilter(category="pull"),
-            treeStableTimer=10,
+            name="branches",
+            change_filter=util.ChangeFilter(branch_fn=lambda b: b != "main"),
+            treeStableTimer=30,
             builderNames=["nix-flake-check"],
         ),
         # Manual trigger
@@ -57,7 +59,7 @@
     # Build factory for nix flake check
     nix_check_factory = util.BuildFactory()
     nix_check_factory.addStep(steps.Git(
-        repourl=util.Property("repository"),
+        repourl="https://homelab-forgejo.dropbear-butterfly.ts.net/amadeus/pve-nixos-homelab.git",
         mode="full",
         method="clobber",
         submodules=True,
@@ -78,7 +80,7 @@
         ),
     ]
 
-    # Web interface with Forgejo/Gitea webhook receiver
+    # Web interface
     c["www"] = {
         "port": 8010,
         "plugins": {
@@ -86,13 +88,6 @@
             "console_view": {},
             "grid_view": {},
         },
-        "change_hook_dialects": {
-            "github": {
-                "secret": webhook_secret,
-                "strict": True,
-            },
-        },
-        "allowed_origins": ["*"],
     }
 
     # Database - PostgreSQL (read password at runtime)
@@ -142,12 +137,6 @@ in {
 
   age.secrets.buildbot-db-password = {
     file = ../../secrets/buildbot-db-password.age;
-    owner = "buildbot";
-    group = "buildbot";
-  };
-
-  age.secrets.buildbot-webhook-secret = {
-    file = ../../secrets/buildbot-webhook-secret.age;
     owner = "buildbot";
     group = "buildbot";
   };
