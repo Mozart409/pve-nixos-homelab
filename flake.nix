@@ -129,6 +129,7 @@
         modules = [
           disko.nixosModules.disko
           agenix.nixosModules.default
+          ./modules/nix-gc.nix
           ./hosts/${hostname}/configuration.nix
         ];
       };
@@ -157,6 +158,7 @@
           system = "aarch64-linux";
           modules = [
             nixos-hardware.nixosModules.raspberry-pi-4
+            ./modules/nix-gc.nix
             ./hosts/rpi/configuration.nix
           ];
         };
@@ -165,6 +167,7 @@
           system = "aarch64-linux";
           modules = [
             nixos-hardware.nixosModules.raspberry-pi-5
+            ./modules/nix-gc.nix
             ./hosts/rpi/configuration.nix
           ];
         };
