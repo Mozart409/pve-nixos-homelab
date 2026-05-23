@@ -18,7 +18,8 @@
   networking.hostName = "homelab-containers";
 
   # open-webui ships under a non-free license; required for the uptime-forge stack
-  nixpkgs.config.allowUnfree = true;
+  # Disabled along with services.open-webui below — re-enable when open-webui is in use again.
+  # nixpkgs.config.allowUnfree = true;
 
   # Disable IPv6 - LXC container doesn't have proper IPv6 routing
   # which breaks Tailscale connections preferring IPv6
@@ -50,35 +51,38 @@
   };
 
   # Open WebUI - LLM chat interface (external APIs only)
-  services.open-webui = {
-    enable = true;
-    port = 8080;
-    environment = {
-      WEBUI_AUTH = "true";
-      ENABLE_OLLAMA_API = "false";
-      ENABLE_OPENAI_API = "true";
-      # OIDC authentication
-      ENABLE_OAUTH_SIGNUP = "true";
-      OAUTH_PROVIDER_NAME = "Pocket ID";
-      OPENID_PROVIDER_URL = "https://pocketid.dropbear-butterfly.ts.net/.well-known/openid-configuration";
-      OAUTH_SCOPES = "openid email profile groups";
-      ENABLE_OAUTH_ROLE_MANAGEMENT = "true";
-      OAUTH_ROLES_CLAIM = "groups";
-      OAUTH_ADMIN_ROLES = "admins";
-    };
-    # Secrets file should contain:
-    # OAUTH_CLIENT_ID=...
-    # OAUTH_CLIENT_SECRET=...
-    # OPENAI_API_KEY=sk-...  (optional)
-    environmentFile = config.age.secrets.open-webui-env.path;
-  };
+  # TEMPORARILY DISABLED: nixpkgs open-webui-0.9.5 frontend build is broken
+  # (bits-ui peer dep '@internationalized/date' missing in derivation).
+  # Re-enable once nixpkgs ships a fixed open-webui package.
+  # services.open-webui = {
+  #   enable = true;
+  #   port = 8080;
+  #   environment = {
+  #     WEBUI_AUTH = "true";
+  #     ENABLE_OLLAMA_API = "false";
+  #     ENABLE_OPENAI_API = "true";
+  #     # OIDC authentication
+  #     ENABLE_OAUTH_SIGNUP = "true";
+  #     OAUTH_PROVIDER_NAME = "Pocket ID";
+  #     OPENID_PROVIDER_URL = "https://pocketid.dropbear-butterfly.ts.net/.well-known/openid-configuration";
+  #     OAUTH_SCOPES = "openid email profile groups";
+  #     ENABLE_OAUTH_ROLE_MANAGEMENT = "true";
+  #     OAUTH_ROLES_CLAIM = "groups";
+  #     OAUTH_ADMIN_ROLES = "admins";
+  #   };
+  #   # Secrets file should contain:
+  #   # OAUTH_CLIENT_ID=...
+  #   # OAUTH_CLIENT_SECRET=...
+  #   # OPENAI_API_KEY=sk-...  (optional)
+  #   environmentFile = config.age.secrets.open-webui-env.path;
+  # };
 
   # Open WebUI secrets
-  age.secrets.open-webui-env = {
-    file = ../../secrets/open-webui-env.age;
-    owner = "open-webui";
-    group = "open-webui";
-  };
+  # age.secrets.open-webui-env = {
+  #   file = ../../secrets/open-webui-env.age;
+  #   owner = "open-webui";
+  #   group = "open-webui";
+  # };
 
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
@@ -95,10 +99,10 @@
           reverse_proxy localhost:3000
         }
 
-        handle /open-webui* {
-          uri strip_prefix /open-webui
-          reverse_proxy localhost:8080
-        }
+        # handle /open-webui* {
+        #   uri strip_prefix /open-webui
+        #   reverse_proxy localhost:8080
+        # }
 
         handle {
           respond "OK" 200
@@ -117,10 +121,10 @@
           reverse_proxy localhost:3000
         }
 
-        handle /open-webui* {
-          uri strip_prefix /open-webui
-          reverse_proxy localhost:8080
-        }
+        # handle /open-webui* {
+        #   uri strip_prefix /open-webui
+        #   reverse_proxy localhost:8080
+        # }
 
         handle {
           respond "OK" 200
@@ -145,7 +149,7 @@
       443 # HTTPS (Caddy)
       3000 # Uptime Forge
       5444 # TimescaleDB (external access)
-      8080 # Open WebUI
+      # 8080 # Open WebUI (disabled — see services.open-webui above)
       9100 # Node exporter
       9187 # Postgres exporter
     ];
