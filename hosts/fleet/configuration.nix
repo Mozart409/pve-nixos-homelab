@@ -45,6 +45,9 @@
     };
   };
 
+  # InnoDB recovery on this host can exceed the default 90s start window.
+  systemd.services.mysql.serviceConfig.TimeoutStartSec = "180s";
+
   # Redis for Fleet
   services.redis.servers.fleet = {
     enable = true;
