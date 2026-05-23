@@ -17,6 +17,9 @@
 
   networking.hostName = "homelab-containers";
 
+  # open-webui ships under a non-free license; required for the uptime-forge stack
+  nixpkgs.config.allowUnfree = true;
+
   # Disable IPv6 - LXC container doesn't have proper IPv6 routing
   # which breaks Tailscale connections preferring IPv6
   boot.kernel.sysctl = {
