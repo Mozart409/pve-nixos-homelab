@@ -12,6 +12,7 @@
     ../../modules/osquery.nix
     ../../modules/podman.nix
     ./uptime-forge
+    ./albyhub
     # Harbor moved to dedicated VM (hosts/harbor)
   ];
 
@@ -99,6 +100,10 @@
           reverse_proxy localhost:3000
         }
 
+        handle_path /albyhub* {
+          reverse_proxy localhost:8080
+        }
+
         # handle /open-webui* {
         #   uri strip_prefix /open-webui
         #   reverse_proxy localhost:8080
@@ -119,6 +124,10 @@
 
         handle /uptime-forge* {
           reverse_proxy localhost:3000
+        }
+
+        handle_path /albyhub* {
+          reverse_proxy localhost:8080
         }
 
         # handle /open-webui* {
@@ -149,7 +158,7 @@
       443 # HTTPS (Caddy)
       3000 # Uptime Forge
       5444 # TimescaleDB (external access)
-      # 8080 # Open WebUI (disabled — see services.open-webui above)
+      8080 # AlbyHub
       9100 # Node exporter
       9187 # Postgres exporter
     ];
