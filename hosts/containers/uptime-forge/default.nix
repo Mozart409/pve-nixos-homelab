@@ -101,11 +101,6 @@ in {
       dependsOn = ["uptime-forge-db"];
       extraOptions = [
         "--network=uptime-forge-net"
-        "--health-cmd=curl -fsS http://localhost:3000/health"
-        "--health-interval=30s"
-        "--health-timeout=10s"
-        "--health-start-period=60s"
-        "--health-retries=3"
       ];
     };
   };
