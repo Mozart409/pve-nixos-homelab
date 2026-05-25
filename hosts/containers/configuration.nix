@@ -100,10 +100,6 @@
           reverse_proxy localhost:3000
         }
 
-        handle_path /albyhub* {
-          reverse_proxy localhost:8080
-        }
-
         # handle /open-webui* {
         #   uri strip_prefix /open-webui
         #   reverse_proxy localhost:8080
@@ -126,10 +122,6 @@
           reverse_proxy localhost:3000
         }
 
-        handle_path /albyhub* {
-          reverse_proxy localhost:8080
-        }
-
         # handle /open-webui* {
         #   uri strip_prefix /open-webui
         #   reverse_proxy localhost:8080
@@ -138,6 +130,17 @@
         handle {
           respond "OK" 200
         }
+      '';
+    };
+
+    # AlbyHub on its own hostname (SPA expects to be served at root)
+    virtualHosts."albyhub.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:8080
       '';
     };
   };
