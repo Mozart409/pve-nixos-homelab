@@ -22,6 +22,10 @@
       WEBUI_URL = "https://homelab-containers.dropbear-butterfly.ts.net";
       # CORS must list every origin used to reach the UI, or WebSockets break.
       CORS_ALLOW_ORIGIN = "https://homelab-containers.dropbear-butterfly.ts.net;https://containers.homelab.local";
+      # Disable the local email/password signup form. Account creation is only
+      # via OAuth (Pocket ID), which stays enabled below so group members can
+      # still provision accounts on first login.
+      ENABLE_SIGNUP = "false";
       # OIDC authentication
       ENABLE_OAUTH_SIGNUP = "true";
       OAUTH_PROVIDER_NAME = "Pocket ID";
