@@ -33,10 +33,12 @@
     environmentFile = config.age.secrets.open-webui-env.path;
   };
 
-  # Open WebUI secrets
+  # Open WebUI secrets.
+  # The open-webui service runs as a systemd DynamicUser, so there is no static
+  # "open-webui" user/group to chown to. systemd reads EnvironmentFile as root
+  # before dropping privileges, so root-only access is sufficient (cf. hermes).
   age.secrets.open-webui-env = {
     file = ../../../secrets/open-webui-env.age;
-    owner = "open-webui";
-    group = "open-webui";
+    mode = "0400";
   };
 }
