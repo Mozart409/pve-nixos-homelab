@@ -8,7 +8,8 @@
   nixpkgs.config.allowUnfree = true;
 
   # Open WebUI - LLM chat interface (external APIs only)
-  # Served behind Caddy at /open-webui (see ../configuration.nix).
+  # Served behind Caddy at the host root (see ../configuration.nix); the SPA's
+  # build-time base path is "/", so it cannot live under a subpath.
   # Port 8088 because AlbyHub occupies 8080.
   services.open-webui = {
     enable = true;
@@ -17,6 +18,10 @@
       WEBUI_AUTH = "true";
       ENABLE_OLLAMA_API = "false";
       ENABLE_OPENAI_API = "true";
+      # External URL used for OAuth redirects and absolute links.
+      WEBUI_URL = "https://homelab-containers.dropbear-butterfly.ts.net";
+      # CORS must list every origin used to reach the UI, or WebSockets break.
+      CORS_ALLOW_ORIGIN = "https://homelab-containers.dropbear-butterfly.ts.net;https://containers.homelab.local";
       # OIDC authentication
       ENABLE_OAUTH_SIGNUP = "true";
       OAUTH_PROVIDER_NAME = "Pocket ID";

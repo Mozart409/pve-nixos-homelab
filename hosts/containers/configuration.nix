@@ -65,13 +65,11 @@
           reverse_proxy localhost:3000
         }
 
-        handle /open-webui* {
-          uri strip_prefix /open-webui
-          reverse_proxy localhost:8088
-        }
-
+        # Open WebUI is a SvelteKit SPA with a build-time base path of "/",
+        # so it must be served at the host root (not a subpath). It is the
+        # catch-all here; uptime-forge keeps its own /uptime-forge prefix above.
         handle {
-          respond "OK" 200
+          reverse_proxy localhost:8088
         }
       '';
     };
@@ -87,13 +85,11 @@
           reverse_proxy localhost:3000
         }
 
-        handle /open-webui* {
-          uri strip_prefix /open-webui
-          reverse_proxy localhost:8088
-        }
-
+        # Open WebUI is a SvelteKit SPA with a build-time base path of "/",
+        # so it must be served at the host root (not a subpath). It is the
+        # catch-all here; uptime-forge keeps its own /uptime-forge prefix above.
         handle {
-          respond "OK" 200
+          reverse_proxy localhost:8088
         }
       '';
     };
