@@ -64,8 +64,10 @@
           tls:
             insecure: true
 
-        loki:
-          endpoint: "http://127.0.0.1:3100/loki/api/v1/push"
+        otlphttp/loki:
+          endpoint: "http://127.0.0.1:3100/otlp"
+          tls:
+            insecure: true
 
       service:
         pipelines:
@@ -80,7 +82,7 @@
           logs:
             receivers: [otlp]
             processors: [batch]
-            exporters: [loki, debug]
+            exporters: [otlphttp/loki, debug]
     '';
   };
 
