@@ -52,7 +52,8 @@
       # vLLM accepts by default (no --api-key set).
       # Note: custom endpoint names/tags cannot be set via env vars; they
       # live in the OPENAI_API_CONFIGS database table which is UI-managed.
-      OPENAI_API_BASE_URLS = "https://api.openai.com/v1;http://wotan.homelab.local:10808/v1";
+      OPENAI_API_BASE_URLS = "http://wotan.homelab.local:10808/v1";
+      # OPENAI_API_BASE_URLS = "https://api.openai.com/v1;http://wotan.homelab.local:10808/v1";
     };
     # Secrets file should contain:
     # OAUTH_CLIENT_ID=...
