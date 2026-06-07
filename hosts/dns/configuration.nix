@@ -90,6 +90,7 @@
         local-data = [
           ''"homeassistant.local. A 192.168.2.208"''
           ''"pve-gigabyte.local. A 192.168.2.42"''
+          ''"wotan.homelab.local. A 192.168.2.71"''
           # Homelab services with step-ca certificates
           ''"ca.homelab.local. A 192.168.2.160"''
           ''"database.homelab.local. A 192.168.2.134"''
@@ -113,6 +114,7 @@
         local-data-ptr = [
           ''"192.168.2.208 homeassistant.local"''
           ''"192.168.2.42 pve-gigabyte.local"''
+          ''"192.168.2.71 wotan.homelab.local"''
           ''"192.168.2.160 ca.homelab.local"''
           ''"192.168.2.134 database.homelab.local"''
           ''"192.168.2.135 otel.homelab.local"''
