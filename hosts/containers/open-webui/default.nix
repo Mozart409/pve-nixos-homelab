@@ -38,6 +38,9 @@
       ENABLE_RAG_WEB_SEARCH = "true";
       RAG_WEB_SEARCH_ENGINE = "searxng";
       SEARXNG_QUERY_URL = "http://127.0.0.1:8089/search?q=<query>&format=json";
+      # vLLM endpoint on wotan (OpenAI-compatible)
+      OPENAI_API_BASE_URLS = "http://wotan.homelab.local:10808/v1";
+      OPENAI_API_BASE_URLS_NAME = "vllm";
     };
     # Secrets file should contain:
     # OAUTH_CLIENT_ID=...
