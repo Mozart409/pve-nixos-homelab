@@ -15,6 +15,11 @@
     enable = true;
     port = 8088;
     environment = {
+      # Force env vars to always take precedence over database-stored config.
+      # Without this, ConfigVar settings (web search, API endpoints) are read
+      # from the SQLite DB on restart and env vars are silently ignored.
+      ENABLE_PERSISTENT_CONFIG = "false";
+
       WEBUI_AUTH = "true";
       ENABLE_OLLAMA_API = "false";
       ENABLE_OPENAI_API = "true";
@@ -35,12 +40,19 @@
       OAUTH_ROLES_CLAIM = "groups";
       OAUTH_ADMIN_ROLES = "admins";
       # Web search via local SearXNG instance
-      ENABLE_RAG_WEB_SEARCH = "true";
-      RAG_WEB_SEARCH_ENGINE = "searxng";
+      ENABLE_WEB_SEARCH = "true";
+      WEB_SEARCH_ENGINE = "searxng";
       SEARXNG_QUERY_URL = "http://127.0.0.1:8089/search?q=<query>&format=json";
-      # vLLM endpoint on wotan (OpenAI-compatible)
-      OPENAI_API_BASE_URLS = "http://wotan.homelab.local:10808/v1";
-      OPENAI_API_BASE_URLS_NAME = "vllm";
+      # vLLM endpoint on wotan (OpenAI-compatible).
+      # OPENAI_API_BASE_URLS is a semicolon-separated list. The first entry
+      # is the standard OpenAI endpoint (key comes from OPENAI_API_KEY in the
+      # env file); the second is the local vLLM instance. Open WebUI pads the
+      # key list with empty strings when fewer keys than URLs are provided.
+      # An empty key for vLLM means no Authorization header is sent, which
+      # vLLM accepts by default (no --api-key set).
+      # Note: custom endpoint names/tags cannot be set via env vars; they
+      # live in the OPENAI_API_CONFIGS database table which is UI-managed.
+      OPENAI_API_BASE_URLS = "https://api.openai.com/v1;http://wotan.homelab.local:10808/v1";
     };
     # Secrets file should contain:
     # OAUTH_CLIENT_ID=...
