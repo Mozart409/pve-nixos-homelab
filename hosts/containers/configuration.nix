@@ -14,6 +14,7 @@
     ./uptime-forge
     ./albyhub
     ./open-webui
+    ./searxng
     # Harbor moved to dedicated VM (hosts/harbor)
   ];
 

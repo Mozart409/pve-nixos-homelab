@@ -34,6 +34,10 @@
       ENABLE_OAUTH_ROLE_MANAGEMENT = "true";
       OAUTH_ROLES_CLAIM = "groups";
       OAUTH_ADMIN_ROLES = "admins";
+      # Web search via local SearXNG instance
+      ENABLE_RAG_WEB_SEARCH = "true";
+      RAG_WEB_SEARCH_ENGINE = "searxng";
+      SEARXNG_QUERY_URL = "http://127.0.0.1:8089/search?q=<query>&format=json";
     };
     # Secrets file should contain:
     # OAUTH_CLIENT_ID=...
