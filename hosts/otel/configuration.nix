@@ -454,6 +454,18 @@
           }
         ];
       }
+      # vLLM metrics endpoint
+      {
+        job_name = "vllm";
+        static_configs = [
+          {
+            targets = ["wotan.homelab.local:10808"];
+            labels = {
+              instance = "homelab-wotan";
+            };
+          }
+        ];
+      }
       # Hofvarpnir
       {
         job_name = "hofvarpnir";
