@@ -107,6 +107,7 @@
     # keep-sorted start
 
     bind
+    busybox
     curl
     fd
     file
