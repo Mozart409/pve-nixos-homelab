@@ -161,3 +161,26 @@ handle /loki* {
   reverse_proxy localhost:3100  # Sends /loki/api/v1/push as expected
 }
 ```
+
+### Tailscale MagicDNS Does Not Resolve Between Homelab VMs
+
+The `*.dropbear-butterfly.ts.net` MagicDNS names do **not** resolve from the
+homelab VMs (e.g. `hermes` cannot resolve `homelab-mcp.dropbear-butterfly.ts.net`
+→ `Name or service not known`). For service-to-service URLs between hosts, use
+the local DNS names (`<host>.homelab.local`, served by the `dns` host) instead.
+These carry step-ca TLS certs, which are trusted on any host importing
+`modules/step-ca-trust.nix`.
+
+- **WRONG** (in `services.hermes-agent.mcpServers`):
+  `url = "https://homelab-mcp.dropbear-butterfly.ts.net/mcp";`  # NXDOMAIN from hermes
+- **CORRECT**:
+  `url = "https://mcp.homelab.local/mcp";`  # resolves + step-ca TLS trusted
+
+### hermes-agent: config-only changes may not restart the service
+
+`services.hermes-agent` renders `settings`/`mcpServers` into the config.yaml that
+the running process reads at startup. A config-only `colmena apply` (one that
+doesn't change the systemd unit itself) rewrites that file but may leave the old
+process running, so the change does not take effect. If a `provider`, `model`, or
+`mcpServers` change doesn't apply after deploy, force it:
+`sudo systemctl restart hermes-agent`.
