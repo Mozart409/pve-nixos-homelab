@@ -43,22 +43,27 @@
       ENABLE_WEB_SEARCH = "true";
       WEB_SEARCH_ENGINE = "searxng";
       SEARXNG_QUERY_URL = "http://127.0.0.1:8089/search?q=<query>&format=json";
-      # vLLM endpoint on wotan (OpenAI-compatible).
-      # OPENAI_API_BASE_URLS is a semicolon-separated list. The first entry
-      # is the standard OpenAI endpoint (key comes from OPENAI_API_KEY in the
-      # env file); the second is the local vLLM instance. Open WebUI pads the
-      # key list with empty strings when fewer keys than URLs are provided.
-      # An empty key for vLLM means no Authorization header is sent, which
-      # vLLM accepts by default (no --api-key set).
+      # OpenAI-compatible endpoints. OPENAI_API_BASE_URLS is a semicolon-
+      # separated list mapped positionally to OPENAI_API_KEYS (set in the
+      # secrets env file). Open WebUI pads the key list with empty strings
+      # when fewer keys than URLs are provided.
+      #   1. wotan vLLM   — empty key (vLLM runs without --api-key).
+      #   2. hermes agent — requires the hermes API_SERVER_KEY as a bearer
+      #      token, so its key MUST be the 2nd entry in OPENAI_API_KEYS.
+      # hermes binds 127.0.0.1:8642 and is reached via its Caddy vhost on 443
+      # (step-ca TLS, trusted on this host). The Tailscale name does not
+      # resolve from here, so use the local DNS name. The model surfaces in
+      # the UI as "hermes-agent" (API_SERVER_MODEL_NAME default).
       # Note: custom endpoint names/tags cannot be set via env vars; they
       # live in the OPENAI_API_CONFIGS database table which is UI-managed.
-      OPENAI_API_BASE_URLS = "http://wotan.homelab.local:10808/v1";
-      # OPENAI_API_BASE_URLS = "https://api.openai.com/v1;http://wotan.homelab.local:10808/v1";
+      OPENAI_API_BASE_URLS = "http://wotan.homelab.local:10808/v1;https://hermes.homelab.local/v1";
     };
     # Secrets file should contain:
     # OAUTH_CLIENT_ID=...
     # OAUTH_CLIENT_SECRET=...
-    # OPENAI_API_KEY=sk-...  (optional)
+    # OPENAI_API_KEYS=;<hermes API_SERVER_KEY>
+    #   Semicolon-separated, positional to OPENAI_API_BASE_URLS above:
+    #   1st empty (wotan vLLM, no auth), 2nd = hermes API_SERVER_KEY.
     environmentFile = config.age.secrets.open-webui-env.path;
   };
 
