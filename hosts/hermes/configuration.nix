@@ -82,6 +82,17 @@
       # OPENCODE_ZEN_API_KEY in hermes-opencode-zen-key.age).
       provider = "deepseek";
       model = "deepseek-chat";
+
+      # External memory provider: Holographic — fully local, no deps/infra.
+      # Stores facts in a local SQLite FTS5 DB at $HERMES_HOME/memory_store.db.
+      # NumPy (optional) enables HRR algebra (probe/reason); add via
+      # extraPythonPackages if those advanced queries are wanted.
+      memory.provider = "holographic";
+      plugins.hermes-memory-store = {
+        # Auto-extract facts from the conversation at session end.
+        auto_extract = true;
+        default_trust = 0.5;
+      };
     };
 
     # System prompt and user context
