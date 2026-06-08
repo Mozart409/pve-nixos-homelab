@@ -32,7 +32,9 @@
     enabledCollectors = ["systemd" "processes"];
   };
 
-  # Agenix secrets - contains OPENAI_API_KEY and OPENAI_BASE_URL for OpenCode Zen
+  # OpenCode Zen provider key. To activate opencode-zen as the named provider,
+  # re-key this file to contain OPENCODE_ZEN_API_KEY=... (currently holds the
+  # legacy OPENAI_API_KEY/OPENAI_BASE_URL from the old custom-provider setup).
   age.secrets.hermes-opencode-zen-key = {
     file = ../../secrets/hermes-opencode-zen-key.age;
     mode = "0400";
@@ -44,29 +46,42 @@
     mode = "0400";
   };
 
+  # DeepSeek provider key (file contains DEEPSEEK_API_KEY=...)
+  age.secrets.hermes-deepseek-key = {
+    file = ../../secrets/hermes-deepseek-key.age;
+    mode = "0400";
+  };
+
   # Hermes Agent - Native mode with security hardening
   services.hermes-agent = {
     enable = true;
 
-    # Load API keys from secrets (files contain KEY=value format)
+    # Load provider keys from secrets (files contain KEY=value format).
+    # Both providers' keys are loaded so the active provider can be switched
+    # via settings.provider below without touching secrets.
     environmentFiles = [
       config.age.secrets.hermes-opencode-zen-key.path
+      config.age.secrets.hermes-deepseek-key.path
       config.age.secrets.hermes-api-server-key.path
     ];
 
-    # OpenCode Zen base URL and API server config (not secrets)
+    # API server config (not secrets). Named providers carry their own
+    # base_url, so OPENAI_BASE_URL is no longer needed.
     environment = {
-      OPENAI_BASE_URL = "https://opencode.ai/zen/v1";
       API_SERVER_ENABLED = "true";
       # hermes API server default port; Caddy reverse_proxy targets this.
       API_SERVER_PORT = "8642";
     };
 
-    # Declarative configuration
+    # Declarative configuration. The API server uses this single configured
+    # provider/model (the model field Open WebUI sends is ignored for routing).
+    # Switch providers by changing provider/model here and redeploying.
     settings = {
-      # OpenCode Zen with MiniMax M2.5 - $0.30/$1.20 per 1M tokens
-      provider = "custom";
-      model = "minimax-m2.5";
+      # DeepSeek (uses DEEPSEEK_API_KEY, base_url https://api.deepseek.com/v1).
+      # Alt: provider = "opencode-zen"; model = "minimax-m2.5"; (needs
+      # OPENCODE_ZEN_API_KEY in hermes-opencode-zen-key.age).
+      provider = "deepseek";
+      model = "deepseek-chat";
     };
 
     # System prompt and user context
