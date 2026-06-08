@@ -58,6 +58,8 @@
     environment = {
       OPENAI_BASE_URL = "https://opencode.ai/zen/v1";
       API_SERVER_ENABLED = "true";
+      # hermes API server default port; Caddy reverse_proxy targets this.
+      API_SERVER_PORT = "8642";
     };
 
     # Declarative configuration
@@ -127,7 +129,7 @@
         }
 
         handle {
-          reverse_proxy http://localhost:8080
+          reverse_proxy http://localhost:8642
         }
       '';
     };
@@ -140,7 +142,7 @@
         }
 
         handle {
-          reverse_proxy http://localhost:8080
+          reverse_proxy http://localhost:8642
         }
       '';
     };

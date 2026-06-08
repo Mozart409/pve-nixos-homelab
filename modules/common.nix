@@ -105,7 +105,6 @@
   # Common packages
   environment.systemPackages = with pkgs; [
     # keep-sorted start
-
     bind
     busybox
     curl
