@@ -180,15 +180,15 @@
         #     ./hosts/rpi4-1/configuration.nix
         #   ];
         # };
-        # hermes = nixpkgs.lib.nixosSystem {
-        #   inherit system;
-        #   modules = [
-        #     disko.nixosModules.disko
-        #     agenix.nixosModules.default
-        #     hermes-agent.nixosModules.default
-        #     ./hosts/hermes/configuration.nix
-        #   ];
-        # };
+        hermes = nixpkgs.lib.nixosSystem {
+          inherit system;
+          modules = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            hermes-agent.nixosModules.default
+            ./hosts/hermes/configuration.nix
+          ];
+        };
       };
 
       # Colmena Hive for deployment
@@ -292,20 +292,20 @@
           ];
         };
 
-        # hermes = {
-        #   deployment = {
-        #     targetHost = "192.168.2.155";
-        #     targetUser = "amadeus";
-        #     buildOnTarget = false;
-        #     tags = ["ai" "hermes"];
-        #   };
-        #   imports = [
-        #     disko.nixosModules.disko
-        #     agenix.nixosModules.default
-        #     hermes-agent.nixosModules.default
-        #     ./hosts/hermes/configuration.nix
-        #   ];
-        # };
+        hermes = {
+          deployment = {
+            targetHost = "192.168.2.155";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["ai" "hermes"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            hermes-agent.nixosModules.default
+            ./hosts/hermes/configuration.nix
+          ];
+        };
 
         # k3s-server-1 = {
         #   deployment = {
