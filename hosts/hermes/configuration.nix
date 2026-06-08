@@ -85,8 +85,8 @@
 
       # External memory provider: Holographic — fully local, no deps/infra.
       # Stores facts in a local SQLite FTS5 DB at $HERMES_HOME/memory_store.db.
-      # NumPy (optional) enables HRR algebra (probe/reason); add via
-      # extraPythonPackages if those advanced queries are wanted.
+      # NumPy (added via extraPythonPackages below) enables HRR algebra
+      # (probe/reason compositional queries).
       memory.provider = "holographic";
       plugins.hermes-memory-store = {
         # Auto-extract facts from the conversation at session end.
@@ -94,6 +94,10 @@
         default_trust = 0.5;
       };
     };
+
+    # NumPy enables Holographic's HRR algebra (probe/reason). Matches the
+    # agent's Python 3.12 env.
+    extraPythonPackages = [pkgs.python312Packages.numpy];
 
     # System prompt and user context
     documents = {
