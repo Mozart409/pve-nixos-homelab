@@ -114,10 +114,13 @@
       '';
     };
 
-    # MCP Servers - Home Assistant integration
+    # MCP Servers - Home Assistant integration.
+    # Use the local DNS name (homelab DNS + step-ca TLS, trusted via
+    # step-ca-trust.nix) — the Tailscale MagicDNS name does not resolve
+    # from this host.
     mcpServers = {
       homeassistant = {
-        url = "https://homelab-mcp.dropbear-butterfly.ts.net/mcp";
+        url = "https://mcp.homelab.local/mcp";
         # No auth required currently
       };
     };
