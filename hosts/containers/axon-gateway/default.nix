@@ -47,7 +47,7 @@
   virtualisation.oci-containers.containers = {
     axon-gateway = {
       # Pin to a released tag for reproducibility — never :latest.
-      image = "ghcr.io/mozart409/axon-gateway:v0.1.7";
+      image = "ghcr.io/mozart409/axon-gateway:v0.1.8";
       autoStart = true;
 
       # Container :8080 -> host 127.0.0.1:8091. Bound to loopback so it is only
@@ -77,12 +77,13 @@
       environmentFiles = [config.age.secrets.axon-gateway-env.path];
 
       extraOptions = [
-        # No container healthcheck: the minimal Wolfi runtime image ships no
-        # wget/curl (the upstream compose.yml healthcheck is broken for the same
-        # reason). App health is observed via Prometheus (scraped /metrics on the
-        # otel host) and the gateway's own backend health monitoring; the systemd
-        # unit restarts the container if the process exits.
-        #
+        # wget was added to the runtime image in v0.1.8, so the compose-style
+        # healthcheck works again (it was a no-op/broken on v0.1.7's Wolfi base).
+        "--health-cmd=wget -q --spider http://localhost:8080/health || exit 1"
+        "--health-interval=30s"
+        "--health-timeout=5s"
+        "--health-retries=3"
+        "--health-start-period=10s"
         # Give in-flight MCP sessions time to drain on stop.
         "--stop-timeout=30"
       ];
