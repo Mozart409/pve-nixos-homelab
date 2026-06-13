@@ -15,6 +15,7 @@
     ./albyhub
     ./open-webui
     ./searxng
+    ./axon-gateway
     # Harbor moved to dedicated VM (hosts/harbor)
   ];
 
@@ -116,6 +117,19 @@
         }
 
         reverse_proxy localhost:8089
+      '';
+    };
+
+    # axon-gateway MCP gateway. The container binds 127.0.0.1:8091, so Caddy is
+    # the only thing that proxies to it. Agents connect at
+    # https://axon.homelab.local/mcp (step-ca TLS, trusted on any homelab host).
+    virtualHosts."axon.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:8091
       '';
     };
   };
