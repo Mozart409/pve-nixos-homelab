@@ -52,9 +52,14 @@
     install -m 600 ${vaultGitConfig} ${hermesHome}/.gitconfig
   '';
 
-  # Clone-or-sync: clones on first successful run, otherwise commits local agent
-  # edits, rebases on top of your Obsidian edits, and pushes. Idempotent and
-  # self-healing — exits 0 on a missing remote so the timer simply retries.
+  # Clone-or-sync: clones on first run, then PULLS your Obsidian edits and PUSHES
+  # the agent's commits. It no longer commits anything itself — the agent authors
+  # commits in-jail with meaningful messages (see SOUL.md); this host-side service
+  # only moves them, since push/pull need the Forgejo SSH key that we deliberately
+  # keep out of the agent's container. `--autostash` tucks away any uncommitted
+  # agent edits across the rebase. Triggered by (a) a path unit on .git/logs/HEAD
+  # when the agent commits (outbound) and (b) a slow timer (inbound). Idempotent
+  # and self-healing — exits 0 on a missing remote so the trigger simply retries.
   vaultSync = pkgs.writeShellScript "hermes-vault-sync" ''
     set -u
     export GIT_SSH_COMMAND='${gitSshCmd}'
@@ -67,11 +72,7 @@
       fi
     fi
     cd ${vaultPath} || exit 0
-    $git add -A
-    if ! $git diff --cached --quiet; then
-      $git commit -m "hermes: sync $(${pkgs.coreutils}/bin/date -Iseconds)" --quiet || true
-    fi
-    if ! $git pull --rebase --quiet; then
+    if ! $git pull --rebase --autostash --quiet; then
       $git rebase --abort 2>/dev/null || true
       echo "hermes-vault-sync: rebase conflict, manual resolution needed" >&2
       exit 0
@@ -164,6 +165,10 @@ in {
       # Served by Caddy on the containers host; step-ca TLS is trusted here via
       # step-ca-trust.nix. Local DNS name — MagicDNS does not resolve from hermes.
       SEARXNG_URL = "https://searxng.homelab.local";
+      # Point Hermes' container backend at rootless podman. find_docker() honors
+      # this override first (before searching PATH for docker/podman), which the
+      # module's restricted service PATH would otherwise hide.
+      HERMES_DOCKER_BINARY = "${pkgs.podman}/bin/podman";
     };
 
     # Declarative configuration. The API server uses this single configured
@@ -203,14 +208,50 @@ in {
         "session_search"
       ];
 
-      # Terminal tool backend. `local` executes shell commands directly as the
-      # hardened `hermes` systemd user — NoNewPrivileges, ProtectSystem=strict,
-      # and PrivateTmp from the service hardening still apply. `timeout` caps
-      # each command at 180s. (Alt backends: docker/ssh/modal/daytona/
-      # singularity — docker needs container.enable for full sandboxing.)
+      # Approval mode. Default is "manual": dangerous shell/subprocess commands
+      # (from `terminal` and `execute_code`) fire an interactive `approval.request`
+      # and BLOCK waiting for a POST /v1/runs/{id}/approval response. The Open
+      # WebUI chat-completions gateway never sends that, so those calls hang for
+      # the 60s timeout and fail silently ("hitting the approval guard"). With a
+      # headless API server there is no one to answer the prompt, so disable it.
+      # The sandbox that replaces the approval prompt is the rootless-Podman jail
+      # below (terminal.backend = "docker"): injected shell/code can only touch
+      # what we bind-mount. The non-bypassable "hardline" floor in Hermes also
+      # still blocks catastrophic commands (rm -rf /, fork bombs, /dev/sd writes,
+      # sudo -S without SUDO_PASSWORD) regardless of this setting.
+      approvals.mode = "off";
+
+      # Terminal tool backend = rootless Podman (see Tier 2 plan).
+      # This governs `terminal`, `execute_code`, AND the file tools
+      # (read_file/write_file/search_files all bind to the same backend), so
+      # every shell/code/file operation runs inside an ephemeral container as the
+      # `hermes` user (container-root maps to host-hermes via userns). The agent
+      # can therefore reach ONLY the bind-mounts below — not the agenix secrets,
+      # the Forgejo deploy key in ~/.ssh, or any other host path.
+      #   - find_docker() picks up podman via HERMES_DOCKER_BINARY (environment).
+      #   - docker_volumes: the Obsidian vault at the SAME path so
+      #     $OBSIDIAN_VAULT_PATH resolves in-container, plus the host gitconfig
+      #     (read-only) so the agent's in-jail `git commit` carries the bot
+      #     identity. NO ssh key is mounted: commits are local; the host-side
+      #     hermes-vault-sync service does the key-bearing push/pull.
+      #   - Image confirmed to ship git+python3+node (needed for execute_code
+      #     RPC and in-jail commits). Network left ON so pip/curl/commit work.
       terminal = {
-        backend = "local";
+        backend = "docker";
         timeout = 180;
+        container_persistent = true;
+        docker_image = "nikolaik/python-nodejs:python3.11-nodejs20";
+        docker_volumes = [
+          "${vaultPath}:${vaultPath}"
+          "${hermesHome}/.gitconfig:/root/.gitconfig:ro"
+        ];
+        # The container does not inherit the agent's env. Set the vault path
+        # inside it so the agent's `git -C "$OBSIDIAN_VAULT_PATH" commit` (per
+        # SOUL.md) resolves. Same value as the host env var; the bind above puts
+        # the vault at this exact path in-container.
+        docker_env = {
+          OBSIDIAN_VAULT_PATH = vaultPath;
+        };
       };
 
       # External memory provider: Holographic — fully local, no deps/infra.
@@ -256,11 +297,18 @@ in {
           and `[[wikilinks]]` to connect notes.
         - There is no built-in todo tool; track all tasks, todos, and lists as
           checkboxes in the vault.
-        - The vault is git-synced with Forgejo and also edited by the user from
-          Obsidian. A background timer pulls/pushes every ~90s, so your edits
-          and theirs converge automatically. If a read looks stale, you may run
-          `git -C "$OBSIDIAN_VAULT_PATH" pull --rebase` via the terminal first.
-        - Keep commits small; never run `git reset --hard` in the vault.
+        - SAVING YOUR EDITS: after changing notes, commit them via the terminal:
+          `git -C "$OBSIDIAN_VAULT_PATH" add -A && git -C "$OBSIDIAN_VAULT_PATH"
+          commit -m "<concise description of the change>"`. Write a meaningful
+          message (e.g. "add eggs + milk to grocery list"), not a generic one.
+          The commit is local; a host service pushes it to Forgejo automatically
+          within seconds — you do NOT push, pull, or use the SSH key yourself
+          (your sandbox has neither network to Forgejo nor the key).
+        - The user also edits the vault from Obsidian; a host service pulls those
+          changes in for you, so your view refreshes on its own. Just re-read a
+          note if it looks stale.
+        - Keep commits small; never run `git reset --hard` or `git push`/`pull`
+          in the vault.
 
         ## Guidelines
         - Be concise and helpful
@@ -295,8 +343,9 @@ in {
   };
 
   # Ensure hermes starts after secrets are available and the vault is set up.
-  # `path` puts git + ssh on the agent's PATH so its terminal tool can run the
-  # pull-nudge described in SOUL.md.
+  # `path` puts git + ssh + podman on the agent's PATH (the module restricts the
+  # service PATH, so podman must be added explicitly even though find_docker also
+  # honors the HERMES_DOCKER_BINARY override above).
   systemd.services.hermes-agent = {
     wants = ["agenix.target" "hermes-vault-sync.service"];
     after = [
@@ -305,7 +354,38 @@ in {
       "hermes-vault-git-setup.service"
       "hermes-vault-sync.service"
     ];
-    path = [pkgs.git pkgs.openssh];
+    path = [pkgs.git pkgs.openssh pkgs.podman];
+    serviceConfig = {
+      # Rootless podman maps multiple sub-UIDs via the setuid newuidmap/newgidmap
+      # helpers; NoNewPrivileges=true (set by the hermes module) makes the kernel
+      # ignore their setuid bit, breaking userns setup. Relax it here — the risky
+      # shell/code now runs jailed inside the podman container, so NNP on the host
+      # agent process buys little once the container backend is in place.
+      NoNewPrivileges = lib.mkForce false;
+    };
+  };
+
+  # ── Rootless Podman (terminal/code/file-tool sandbox backend) ─────────────
+  # Daemonless, no docker group (= no host-root-equivalent). The hermes-agent
+  # service points its container backend here via HERMES_DOCKER_BINARY above.
+  virtualisation.podman.enable = true;
+
+  # Rootless podman needs sub-UID/GID ranges for the hermes user to map the
+  # container's users (incl. its root) onto unprivileged host UIDs. The module
+  # creates `hermes` as a system user; extend it with the mapping ranges.
+  users.users.hermes = {
+    subUidRanges = [
+      {
+        startUid = 100000;
+        count = 65536;
+      }
+    ];
+    subGidRanges = [
+      {
+        startGid = 100000;
+        count = 65536;
+      }
+    ];
   };
 
   # ── Knowledge-base vault sync ─────────────────────────────────────────────
@@ -339,13 +419,30 @@ in {
     };
   };
 
+  # Inbound sync: a SLOW timer pulls your Obsidian edits in. It used to run every
+  # 90s and commit a timestamped "hermes: sync …" noise commit each time; now the
+  # agent authors commits and this only pulls/pushes, so a relaxed cadence is
+  # fine and produces no junk history.
   systemd.timers.hermes-vault-sync = {
-    description = "Periodic hermes Obsidian vault sync";
+    description = "Periodic hermes Obsidian vault pull/push";
     wantedBy = ["timers.target"];
     timerConfig = {
       OnBootSec = "2min";
-      OnUnitActiveSec = "90s";
-      AccuracySec = "30s";
+      OnUnitActiveSec = "5min";
+      AccuracySec = "1min";
+    };
+  };
+
+  # Outbound sync: fire the pull/push service the moment the agent commits inside
+  # the jail. `.git/logs/HEAD` is appended on every commit (more reliable than
+  # watching a packed ref), so PathModified gives us near-instant pushes with the
+  # agent's own commit messages.
+  systemd.paths.hermes-vault-sync = {
+    description = "Push the hermes Obsidian vault when the agent commits";
+    wantedBy = ["multi-user.target"];
+    pathConfig = {
+      PathModified = "${vaultPath}/.git/logs/HEAD";
+      Unit = "hermes-vault-sync.service";
     };
   };
 
