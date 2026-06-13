@@ -105,6 +105,19 @@
         reverse_proxy localhost:8080
       '';
     };
+
+    # SearXNG on its own hostname so off-host clients (e.g. hermes-agent's
+    # web_search backend) can reach it. SearXNG binds 127.0.0.1:8089, so Caddy
+    # — running on this host — is the only thing that proxies to it.
+    virtualHosts."searxng.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:8089
+      '';
+    };
   };
 
   # Allow Caddy to get Tailscale certs
