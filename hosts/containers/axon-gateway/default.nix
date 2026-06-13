@@ -77,12 +77,12 @@
       environmentFiles = [config.age.secrets.axon-gateway-env.path];
 
       extraOptions = [
-        # Mirror the upstream compose.yml healthcheck.
-        "--health-cmd=wget -q --spider http://localhost:8080/health || exit 1"
-        "--health-interval=30s"
-        "--health-timeout=5s"
-        "--health-retries=3"
-        "--health-start-period=10s"
+        # No container healthcheck: the minimal Wolfi runtime image ships no
+        # wget/curl (the upstream compose.yml healthcheck is broken for the same
+        # reason). App health is observed via Prometheus (scraped /metrics on the
+        # otel host) and the gateway's own backend health monitoring; the systemd
+        # unit restarts the container if the process exits.
+        #
         # Give in-flight MCP sessions time to drain on stop.
         "--stop-timeout=30"
       ];
