@@ -143,6 +143,26 @@ When adding a new host to the homelab, ensure the following are updated:
 
 ## 6. Common Pitfalls
 
+### agenix Must Be Run From Inside `secrets/`
+
+`agenix` resolves its rules file as `./secrets.nix` relative to the current
+directory, and secret names are the bare filename (no `secrets/` prefix). Running
+it from the repo root fails:
+
+```
+error: path '/home/amadeus/code/pve-nixos-homelab/secrets.nix' does not exist
+```
+
+- **WRONG** (from repo root): `agenix -e secrets/axon-gateway-env.age`
+- **CORRECT**:
+  ```bash
+  cd secrets
+  agenix -e axon-gateway-env.age
+  ```
+
+The matching entry in `secrets/secrets.nix` is keyed with the bare filename too
+(e.g. `"axon-gateway-env.age".publicKeys = [...]`).
+
 ### Caddy Path Handling
 When configuring Caddy reverse proxies, be careful with `handle` vs `handle_path`:
 - **`handle /path*`**: Preserves the full path when proxying. Use this for services that expect their prefix in the URL (e.g., Loki expects `/loki/api/v1/push`, Tempo expects `/tempo/api/...`).
