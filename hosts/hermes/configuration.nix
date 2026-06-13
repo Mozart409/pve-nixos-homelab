@@ -386,6 +386,11 @@ in {
         count = 65536;
       }
     ];
+    # Enable lingering so logind keeps a persistent user session + /run/user/<uid>
+    # for the (non-login) hermes system user. This gives rootless podman a stable
+    # runtime dir and a session bus, so it uses the systemd cgroup manager instead
+    # of falling back to cgroupfs + an ephemeral /tmp runroot.
+    linger = true;
   };
 
   # ── Knowledge-base vault sync ─────────────────────────────────────────────
