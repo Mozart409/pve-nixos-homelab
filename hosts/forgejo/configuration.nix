@@ -122,6 +122,13 @@
         }
       '';
     };
+
+    # Redirect plain HTTP to HTTPS for the local hostname.
+    virtualHosts."http://forgejo.homelab.local" = {
+      extraConfig = ''
+        redir https://{host}{uri} permanent
+      '';
+    };
   };
 
   # Allow Caddy to get Tailscale certs
@@ -136,6 +143,7 @@
     trustedInterfaces = ["tailscale0"];
     allowedTCPPorts = [
       22 # SSH
+      80 # HTTP (Caddy redirect to HTTPS)
       443 # HTTPS (Caddy)
       2222 # Forgejo SSH
       3000 # Forgejo HTTP
