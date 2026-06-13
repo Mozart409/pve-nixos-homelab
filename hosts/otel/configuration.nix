@@ -481,6 +481,22 @@
           }
         ];
       }
+      # axon-gateway MCP gateway metrics. The container binds 127.0.0.1:8091 on
+      # the containers host, so it is only reachable via its Caddy vhost over
+      # HTTPS (step-ca cert, trusted here via modules/step-ca-trust.nix).
+      {
+        job_name = "axon-gateway";
+        scheme = "https";
+        metrics_path = "/metrics";
+        static_configs = [
+          {
+            targets = ["axon.homelab.local"];
+            labels = {
+              instance = "homelab-containers";
+            };
+          }
+        ];
+      }
     ];
   };
 
