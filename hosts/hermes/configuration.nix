@@ -343,9 +343,16 @@ in {
   };
 
   # Ensure hermes starts after secrets are available and the vault is set up.
-  # `path` puts git + ssh + podman on the agent's PATH (the module restricts the
-  # service PATH, so podman must be added explicitly even though find_docker also
-  # honors the HERMES_DOCKER_BINARY override above).
+  # The module restricts the service PATH, so we extend it for the podman backend:
+  #   - pkgs.podman: the rootless runtime (also pinned via HERMES_DOCKER_BINARY).
+  #   - "/run/wrappers": the SETUID newuidmap/newgidmap wrappers live in
+  #     /run/wrappers/bin. Rootless podman with multiple sub-UID/GID mappings
+  #     shells out to these and they must be the setuid versions (NixOS puts them
+  #     here). NB: the `path` option appends "/bin" to each entry, so we list the
+  #     PARENT "/run/wrappers" (→ /run/wrappers/bin), NOT "/run/wrappers/bin"
+  #     (which would wrongly become /run/wrappers/bin/bin). Without this, `podman
+  #     version` fails: command required for rootless mode with multiple IDs:
+  #     exec: "newuidmap": executable file not found in $PATH.
   systemd.services.hermes-agent = {
     wants = ["agenix.target" "hermes-vault-sync.service"];
     after = [
@@ -354,7 +361,7 @@ in {
       "hermes-vault-git-setup.service"
       "hermes-vault-sync.service"
     ];
-    path = [pkgs.git pkgs.openssh pkgs.podman];
+    path = [pkgs.git pkgs.openssh pkgs.podman "/run/wrappers"];
     serviceConfig = {
       # Rootless podman maps multiple sub-UIDs via the setuid newuidmap/newgidmap
       # helpers; NoNewPrivileges=true (set by the hermes module) makes the kernel
