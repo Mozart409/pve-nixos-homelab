@@ -21,6 +21,7 @@
   environment.etc."axon-gateway/config.toml".text = ''
     [gateway]
     bind = "0.0.0.0:8080"
+    base_url = "https://axon.homelab.local"
     # Bearer token clients must present to use the gateway.
     auth_token = "''${AXON_GATEWAY_TOKEN}"
 
