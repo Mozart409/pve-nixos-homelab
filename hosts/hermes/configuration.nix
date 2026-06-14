@@ -128,6 +128,12 @@ in {
     mode = "0400";
   };
 
+  # Axon MCP gateway bearer token (file contains AXON_GATEWAY_TOKEN=...).
+  age.secrets.axon-gateway-env = {
+    file = ../../secrets/axon-gateway-env.age;
+    mode = "0400";
+  };
+
   # SSH private key for the hermes-bot Forgejo account, used to clone/push the
   # Obsidian knowledge-base vault. Owned by the hermes user (not root) because
   # ssh reads IdentityFile as the running agent/sync process. The matching
@@ -150,6 +156,7 @@ in {
       config.age.secrets.hermes-opencode-zen-key.path
       config.age.secrets.hermes-deepseek-key.path
       config.age.secrets.hermes-api-server-key.path
+      config.age.secrets.axon-gateway-env.path
     ];
 
     # API server config (not secrets). Named providers carry their own
@@ -327,14 +334,13 @@ in {
       '';
     };
 
-    # MCP Servers - Home Assistant integration.
-    # Use the local DNS name (homelab DNS + step-ca TLS, trusted via
-    # step-ca-trust.nix) — the Tailscale MagicDNS name does not resolve
-    # from this host.
+    # MCP Servers - axon-gateway aggregates the homelab MCP backends behind one
+    # authenticated endpoint. The header value is expanded by Hermes from the
+    # agenix-loaded AXON_GATEWAY_TOKEN environment variable at runtime.
     mcpServers = {
-      homeassistant = {
-        url = "https://mcp.homelab.local/mcp";
-        # No auth required currently
+      axon-gateway = {
+        url = "https://axon.homelab.local/mcp";
+        headers.Authorization = "Bearer \${AXON_GATEWAY_TOKEN}";
       };
     };
 
