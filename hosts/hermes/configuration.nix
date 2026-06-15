@@ -79,6 +79,28 @@
     fi
     $git push --quiet || echo "hermes-vault-sync: push failed" >&2
   '';
+
+  # Guard against the rootless-podman "cannot re-exec process to join the existing
+  # user namespace" failure (see AGENTS.md → Common Pitfalls). A stale pause.pid that
+  # references a dead pid makes EVERY podman invocation abort, breaking the
+  # terminal/code/file backend until the file is removed by hand. podman auto-uses
+  # /run/user/<uid> whenever it exists (linger is on) regardless of XDG_RUNTIME_DIR,
+  # so check there AND the /tmp fallback. Removing a stale pidfile is safe: podman
+  # recreates a fresh pause process on next use. Only removes it when its pid is NOT
+  # alive, so a healthy running backend is never disturbed.
+  podmanPauseGuard = pkgs.writeShellScript "hermes-podman-pause-guard" ''
+    set -u
+    uid=$(${pkgs.coreutils}/bin/id -u)
+    for rt in "/run/user/$uid" "/tmp/storage-run-$uid"; do
+      pidfile="$rt/libpod/tmp/pause.pid"
+      [ -f "$pidfile" ] || continue
+      pid=$(${pkgs.coreutils}/bin/cat "$pidfile" 2>/dev/null || true)
+      if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+        echo "hermes-podman-pause-guard: removing stale $pidfile (pid='$pid' not alive)"
+        rm -f "$pidfile"
+      fi
+    done
+  '';
 in {
   imports = [
     ../../modules/common.nix
@@ -369,6 +391,11 @@ in {
     ];
     path = [pkgs.git pkgs.openssh pkgs.podman "/run/wrappers"];
     serviceConfig = {
+      # Self-heal a stale rootless-podman pause.pid before the agent starts, so the
+      # "cannot re-exec process to join the existing user namespace" failure cannot
+      # recur across reboots/redeploys. Runs as the hermes service user (owns the
+      # runtime dir). See podmanPauseGuard above + AGENTS.md.
+      ExecStartPre = ["${podmanPauseGuard}"];
       # Rootless podman maps multiple sub-UIDs via the setuid newuidmap/newgidmap
       # helpers; NoNewPrivileges=true (set by the hermes module) makes the kernel
       # ignore their setuid bit, breaking userns setup. Relax it here — the risky
