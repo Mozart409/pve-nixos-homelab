@@ -235,3 +235,26 @@ cd /tmp && sudo -u hermes env HOME=/var/lib/hermes podman version
 Always invoke podman for this user as `cd /tmp && sudo -u hermes env
 HOME=/var/lib/hermes podman ...` — the service sets `HOME=/var/lib/hermes` and does
 **not** set `XDG_RUNTIME_DIR`, so reproduce its exact environment when debugging.
+
+### Hermes API Server (Open WebUI) Ignores Top-Level `toolsets`
+
+The Open WebUI chat-completions gateway is the `api_server` *platform*. Per
+`hermes_cli/tools_config.py` (`_get_platform_tools`), every gateway platform resolves
+its enabled tools from **`platform_toolsets.<platform>`** in `config.yaml`, and the
+top-level `toolsets` list is **never consulted by the API server**. When
+`platform_toolsets.api_server` is absent, the platform falls back to its built-in
+`default_toolset` preset (`hermes-api-server`), which is why Open WebUI showed only a
+trimmed ~13-tool set despite a fuller top-level `toolsets`.
+
+- **Fix (declarative):** set `services.hermes-agent.settings.platform_toolsets.api_server`
+  to the desired toolset keys (mirror the top-level `toolsets`). Each name must be a
+  `CONFIGURABLE_TOOLSETS` key (`file`, `web`, `browser`, `terminal`, `code_execution`,
+  `skills`, `memory`, `session_search`, `delegation`, …).
+- **Do NOT** use `hermes config set` / hand-edit `~/.hermes/config.yaml` — that file is
+  **merged** from the Nix store config on every activation by `hermes-config-merge`
+  (`deep_merge(existing, nix)`, Nix wins for keys it sets), so manual edits to
+  Nix-managed keys are overwritten on the next deploy. Note the merge only *adds/updates*
+  keys; it never prunes, so keys removed from the Nix config (e.g. a retired
+  `mcp_servers` entry) linger in the live file until removed by hand.
+- **Verify live:** `GET http://localhost:8642/v1/toolsets` (Bearer = the API-server key)
+  lists every toolset with its `enabled` flag for the `api_server` platform.
