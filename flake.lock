@@ -34,11 +34,11 @@
         "stable": "stable"
       },
       "locked": {
-        "lastModified": 1762034856,
-        "narHash": "sha256-QVey3iP3UEoiFVXgypyjTvCrsIlA4ecx6Acaz5C8/PQ=",
+        "lastModified": 1781446832,
+        "narHash": "sha256-/6+NHQstxRqkbNjtNcQgCojzu59SEbdwwpWqBw7Fm9s=",
         "owner": "zhaofengli",
         "repo": "colmena",
-        "rev": "349b035a5027f23d88eeb3bc41085d7ee29f18ed",
+        "rev": "938cb5cdd9b25d9774b6168e5f03d0afd04d321f",
         "type": "github"
       },
       "original": {
@@ -249,11 +249,11 @@
         "uv2nix": "uv2nix_2"
       },
       "locked": {
-        "lastModified": 1781356372,
-        "narHash": "sha256-mEi8qpbV0uVTRGwJmlpTSd1MyydPoeGeVYnbc77T4wA=",
+        "lastModified": 1781548515,
+        "narHash": "sha256-rNX2qmEci4zkCFXztgkJS4Qd/a/+F6SqMy/MDp72WMA=",
         "owner": "NousResearch",
         "repo": "hermes-agent",
-        "rev": "6f43ff5572d31d7bc7a98cdc7da3ad94ccc21ce2",
+        "rev": "5f6be7f31bd7ef53f92d030b060325783f84f169",
         "type": "github"
       },
       "original": {
