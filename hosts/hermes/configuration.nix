@@ -237,6 +237,27 @@ in {
         "session_search"
       ];
 
+      # IMPORTANT: the top-level `toolsets` above is NOT consulted by the Open
+      # WebUI (chat-completions) API server. Per hermes_cli/tools_config.py
+      # (`_get_platform_tools`), every gateway *platform* resolves its tools from
+      # `platform_toolsets.<platform>`; when that key is absent it falls back to
+      # the platform's built-in `default_toolset` preset. For `api_server` that
+      # preset is the trimmed `hermes-api-server` set — i.e. the ~13 tools that
+      # showed up in Open WebUI instead of the list above. So the API server must
+      # be configured explicitly here. Each name must be a CONFIGURABLE_TOOLSETS
+      # key; this mirrors the toolsets list above so chat and CLI match.
+      platform_toolsets.api_server = [
+        "file"
+        "memory"
+        "skills"
+        "web"
+        "terminal"
+        "browser"
+        "code_execution"
+        "delegation"
+        "session_search"
+      ];
+
       # Approval mode. Default is "manual": dangerous shell/subprocess commands
       # (from `terminal` and `execute_code`) fire an interactive `approval.request`
       # and BLOCK waiting for a POST /v1/runs/{id}/approval response. The Open
