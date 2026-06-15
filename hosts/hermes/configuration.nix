@@ -237,26 +237,70 @@ in {
         "session_search"
       ];
 
-      # IMPORTANT: the top-level `toolsets` above is NOT consulted by the Open
-      # WebUI (chat-completions) API server. Per hermes_cli/tools_config.py
-      # (`_get_platform_tools`), every gateway *platform* resolves its tools from
-      # `platform_toolsets.<platform>`; when that key is absent it falls back to
-      # the platform's built-in `default_toolset` preset. For `api_server` that
-      # preset is the trimmed `hermes-api-server` set — i.e. the ~13 tools that
-      # showed up in Open WebUI instead of the list above. So the API server must
-      # be configured explicitly here. Each name must be a CONFIGURABLE_TOOLSETS
-      # key; this mirrors the toolsets list above so chat and CLI match.
-      platform_toolsets.api_server = [
-        "file"
-        "memory"
-        "skills"
-        "web"
-        "terminal"
-        "browser"
-        "code_execution"
-        "delegation"
-        "session_search"
-      ];
+      # Per-platform tool configuration. The top-level `toolsets` above is NOT
+      # consulted per-platform: per hermes_cli/tools_config.py
+      # (`_get_platform_tools`), every gateway *platform* resolves its tools ONLY
+      # from `platform_toolsets.<platform>`. When a platform's key is absent it
+      # falls back to that platform's built-in `default_toolset` preset
+      # (`hermes-api-server` / `hermes-cli` / `hermes-cron`) — which is why Open
+      # WebUI originally showed only the trimmed api-server preset. We pin each
+      # platform explicitly so the tool surface is deterministic across redeploys.
+      # Platform keys come from hermes_cli/platforms.py; every list entry must be
+      # a CONFIGURABLE_TOOLSETS key.
+      platform_toolsets = {
+        # Open WebUI (chat-completions) gateway. Interactive set + `cronjob` so
+        # schedules can be created straight from chat. `clarify` is omitted — the
+        # chat-completions gateway can't answer an interactive clarify/approval
+        # prompt (matches hermes-api-server). NB: no `todo` — SOUL.md routes all
+        # todos/lists through the Obsidian vault as `- [ ]` checkboxes, so the
+        # built-in ephemeral todo tool would compete with that.
+        api_server = [
+          "file"
+          "memory"
+          "skills"
+          "web"
+          "terminal"
+          "browser"
+          "code_execution"
+          "delegation"
+          "session_search"
+          "cronjob"
+        ];
+
+        # Interactive terminal sessions (`hermes chat`). Full sane set including
+        # `clarify` (a human is present to answer) and `cronjob` for managing
+        # scheduled tasks. No `todo` — todos live in the Obsidian vault per SOUL.md.
+        cli = [
+          "file"
+          "memory"
+          "skills"
+          "web"
+          "terminal"
+          "browser"
+          "code_execution"
+          "delegation"
+          "session_search"
+          "clarify"
+          "cronjob"
+        ];
+
+        # Scheduled cron jobs run UNATTENDED in a fresh session, driven by the
+        # gateway daemon's 60s tick (no extra service needed; jobs persist in
+        # ~/.hermes/cron/jobs.json). Deliberately LEAN: the docs warn that heavy
+        # toolsets (browser/delegation/moa) bloat the tool-schema prompt on every
+        # LLM call of every job. `clarify` is useless unattended, and `cronjob`
+        # is force-disabled inside cron runs anyway (anti-recursion guard).
+        # Per-job `enabled_toolsets` on cronjob.create still overrides this.
+        cron = [
+          "file"
+          "memory"
+          "skills"
+          "web"
+          "terminal"
+          "code_execution"
+          "session_search"
+        ];
+      };
 
       # Approval mode. Default is "manual": dangerous shell/subprocess commands
       # (from `terminal` and `execute_code`) fire an interactive `approval.request`
