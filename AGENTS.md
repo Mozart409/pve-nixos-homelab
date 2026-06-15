@@ -196,11 +196,42 @@ These carry step-ca TLS certs, which are trusted on any host importing
 - **CORRECT**:
   `url = "https://mcp.homelab.local/mcp";`  # resolves + step-ca TLS trusted
 
-### hermes-agent: config-only changes may not restart the service
+### Hermes Rootless Podman: Stale `pause.pid` Breaks the Code/Terminal Backend
 
-`services.hermes-agent` renders `settings`/`mcpServers` into the config.yaml that
-the running process reads at startup. A config-only `colmena apply` (one that
-doesn't change the systemd unit itself) rewrites that file but may leave the old
-process running, so the change does not take effect. If a `provider`, `model`, or
-`mcpServers` change doesn't apply after deploy, force it:
-`sudo systemctl restart hermes-agent`.
+On `hermes` (192.168.2.155) the rootless-podman backend for the `terminal` /
+`execute_code` / file tools can break with:
+
+```
+Error: cannot re-exec process to join the existing user namespace   (podman exit 125)
+```
+
+which Hermes surfaces as `execute_code` → *"Docker command is available but 'docker
+version' failed. Check your Docker installation."*
+
+**Root cause:** podman auto-selects `/run/user/995` as its runtime dir whenever that
+directory exists (lingering is enabled for the `hermes` user, uid `995`), **regardless
+of whether `XDG_RUNTIME_DIR` is set**. A stale `/run/user/995/libpod/tmp/pause.pid` left
+over from a previous run points at a dead pid, so every new podman invocation tries to
+join a user namespace that no longer exists and aborts. The `/tmp/storage-run-995`
+runroot is a red herring, and `podman system migrate` does **not** help — it can't start
+either while the stale pidfile is present.
+
+**Surgical fix (no data loss — image storage under
+`/var/lib/hermes/.local/share/containers/storage` is preserved):**
+
+```bash
+# run podman as the agent does: HOME set, XDG_RUNTIME_DIR unset, from a neutral cwd
+sudo systemctl stop hermes-agent
+sudo pkill -9 -u hermes -f conmon; sudo pkill -9 -u hermes -f pasta
+sudo pkill -9 -u hermes -f run/podman-init           # kill June-leftover orphan container
+sudo rm /run/user/995/libpod/tmp/pause.pid           # the ONE stale file
+cd /tmp && sudo -u hermes env HOME=/var/lib/hermes podman rm -f <stale-container>  # if a dead
+                                                     # persistent container record holds a lock
+sudo systemctl start hermes-agent
+# verify:
+cd /tmp && sudo -u hermes env HOME=/var/lib/hermes podman version
+```
+
+Always invoke podman for this user as `cd /tmp && sudo -u hermes env
+HOME=/var/lib/hermes podman ...` — the service sets `HOME=/var/lib/hermes` and does
+**not** set `XDG_RUNTIME_DIR`, so reproduce its exact environment when debugging.
