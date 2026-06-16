@@ -45,6 +45,10 @@ colmena-apply-tag tag: clear
   @echo "Deploying to hosts tagged with {{tag}}..."
   colmena apply --on @{{tag}}
 
+colmena-build-host host: clear
+  @echo "Building {{host}} configurations..."
+  colmena build --on {{host}}
+
 colmena-build: clear
   @echo "Building all configurations..."
   colmena build
