@@ -80,17 +80,29 @@
     $git push --quiet || echo "hermes-vault-sync: push failed" >&2
   '';
 
-  # Guard against the rootless-podman "cannot re-exec process to join the existing
-  # user namespace" failure (see AGENTS.md → Common Pitfalls). A stale pause.pid that
-  # references a dead pid makes EVERY podman invocation abort, breaking the
-  # terminal/code/file backend until the file is removed by hand. podman auto-uses
-  # /run/user/<uid> whenever it exists (linger is on) regardless of XDG_RUNTIME_DIR,
-  # so check there AND the /tmp fallback. Removing a stale pidfile is safe: podman
-  # recreates a fresh pause process on next use. Only removes it when its pid is NOT
-  # alive, so a healthy running backend is never disturbed.
+  # Guard against rootless-podman failures that wedge the terminal/code/file backend
+  # until cleaned by hand (see AGENTS.md → Common Pitfalls). Runs at ExecStartPre as
+  # the hermes user, BEFORE the agent starts — so there is never a legitimate live
+  # container at this point, which makes the cleanup below unambiguously safe.
+  #
+  # Two leftovers from a crashed/previous instance can wedge podman:
+  #   1. Orphan conmon/pasta/podman-init helpers still holding the rootless user
+  #      namespace + storage flocks → new podman aborts with "cannot re-exec process
+  #      to join the existing user namespace" (and surfaces as execute_code's "Docker
+  #      version failed"). Killing them releases the locks/namespace. This is the
+  #      actual recurring root cause — a stale pause.pid alone did not explain it.
+  #   2. A stale pause.pid pointing at a dead pid → every podman invocation aborts.
+  #      Removed only when its pid is NOT alive. podman auto-uses /run/user/<uid>
+  #      when it exists (linger is on) AND the /tmp fallback, so check both.
   podmanPauseGuard = pkgs.writeShellScript "hermes-podman-pause-guard" ''
     set -u
     uid=$(${pkgs.coreutils}/bin/id -u)
+    # (1) Reap orphan helpers left by a prior instance (the agent is not running yet,
+    #     so any of these owned by this user are stale and safe to kill).
+    for proc in conmon pasta podman-init catatonit; do
+      ${pkgs.procps}/bin/pkill -9 -u "$uid" -f "$proc" 2>/dev/null || true
+    done
+    # (2) Remove a stale pause.pid (only when its pid is no longer alive).
     for rt in "/run/user/$uid" "/tmp/storage-run-$uid"; do
       pidfile="$rt/libpod/tmp/pause.pid"
       [ -f "$pidfile" ] || continue
@@ -455,15 +467,6 @@ in {
       "hermes-vault-sync.service"
     ];
     path = [pkgs.git pkgs.openssh pkgs.podman "/run/wrappers"];
-    # Pin rootless podman's runtime dir to the hermes user's lingering session.
-    # Without this, when hermes-agent loses the startup race against the linger
-    # session (i.e. /run/user/<uid> not yet present), podman falls back to a
-    # /tmp/storage-run-<uid> runroot. That path later vanishes, leaving orphan
-    # conmon/pasta/podman-init procs and a dead container lock, which breaks
-    # execute_code with "RunRoot ... not writable" (see AGENTS.md). The uid is
-    # pinned to 995 on users.users.hermes above (it is null at eval otherwise), so
-    # this derivation resolves to a concrete /run/user/995.
-    environment.XDG_RUNTIME_DIR = "/run/user/${toString config.users.users.hermes.uid}";
     serviceConfig = {
       # Self-heal a stale rootless-podman pause.pid before the agent starts, so the
       # "cannot re-exec process to join the existing user namespace" failure cannot
@@ -488,12 +491,6 @@ in {
   # container's users (incl. its root) onto unprivileged host UIDs. The module
   # creates `hermes` as a system user; extend it with the mapping ranges.
   users.users.hermes = {
-    # Pin the uid so it is known at eval time. System users get an auto-allocated
-    # uid at *activation* (null during eval), which made the derived
-    # `XDG_RUNTIME_DIR` below evaluate to an empty "/run/user/". 995 is the value
-    # already allocated for hermes (see /run/user/995), so pinning it is a no-op at
-    # runtime — no chown/migration — but makes the runtime-dir reference concrete.
-    uid = 995;
     subUidRanges = [
       {
         startUid = 100000;
