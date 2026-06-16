@@ -479,6 +479,13 @@ in {
       # shell/code now runs jailed inside the podman container, so NNP on the host
       # agent process buys little once the container backend is in place.
       NoNewPrivileges = lib.mkForce false;
+      # The hermes module ships TimeoutStopSec=90s, but the gateway drains for up to
+      # drain_timeout=180s on stop/restart. With only 90s systemd SIGKILLs the agent
+      # mid-drain, interrupting podman's container teardown and leaving orphan
+      # conmon/pasta/podman-init — the root cause the ExecStartPre guard above mops up.
+      # Give the drain room (>= 180s + margin) so shutdowns are clean and no orphans
+      # are created in the first place. mkForce overrides the module's 90s.
+      TimeoutStopSec = lib.mkForce 210;
     };
   };
 

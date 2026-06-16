@@ -246,6 +246,16 @@ namespace`, surfaced by `execute_code` as *"Docker version failed"*. `podman ps`
 also show the storage runroot at `/tmp/storage-run-<uid>` reporting `RunRoot ... not
 writable` once that dir is disturbed.
 
+**Why the orphans appear:** the gateway logs `Stale systemd unit detected:
+hermes-agent.service has TimeoutStopSec=90s but drain_timeout=180s (expected >=210s).
+systemd may SIGKILL the gateway mid-drain.` The hermes module ships
+`TimeoutStopSec=90s`, but the agent drains for up to 180s on stop/restart — so on
+every restart/redeploy systemd **SIGKILLs the agent mid-drain**, interrupting podman's
+container teardown and orphaning the helpers. They accumulate across deploys until
+podman wedges. Fixed declaratively by `TimeoutStopSec = lib.mkForce 210;` on the
+service (prevents the unclean kill); the `ExecStartPre` guard below is the safety net
+for any that still slip through.
+
 Note the storage **runRoot stays on `/tmp/storage-run-<uid>`** and that is fine —
 Hermes invokes podman with a sanitised environment that drops `XDG_RUNTIME_DIR`, so a
 unit-level `environment.XDG_RUNTIME_DIR` pin does **not** move it (verified: conmon's
