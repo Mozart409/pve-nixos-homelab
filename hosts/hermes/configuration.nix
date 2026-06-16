@@ -455,6 +455,15 @@ in {
       "hermes-vault-sync.service"
     ];
     path = [pkgs.git pkgs.openssh pkgs.podman "/run/wrappers"];
+    # Pin rootless podman's runtime dir to the hermes user's lingering session.
+    # Without this, when hermes-agent loses the startup race against the linger
+    # session (i.e. /run/user/<uid> not yet present), podman falls back to a
+    # /tmp/storage-run-<uid> runroot. That path later vanishes, leaving orphan
+    # conmon/pasta/podman-init procs and a dead container lock, which breaks
+    # execute_code with "RunRoot ... not writable" (see AGENTS.md). The uid is
+    # pinned to 995 on users.users.hermes above (it is null at eval otherwise), so
+    # this derivation resolves to a concrete /run/user/995.
+    environment.XDG_RUNTIME_DIR = "/run/user/${toString config.users.users.hermes.uid}";
     serviceConfig = {
       # Self-heal a stale rootless-podman pause.pid before the agent starts, so the
       # "cannot re-exec process to join the existing user namespace" failure cannot
@@ -479,6 +488,12 @@ in {
   # container's users (incl. its root) onto unprivileged host UIDs. The module
   # creates `hermes` as a system user; extend it with the mapping ranges.
   users.users.hermes = {
+    # Pin the uid so it is known at eval time. System users get an auto-allocated
+    # uid at *activation* (null during eval), which made the derived
+    # `XDG_RUNTIME_DIR` below evaluate to an empty "/run/user/". 995 is the value
+    # already allocated for hermes (see /run/user/995), so pinning it is a no-op at
+    # runtime — no chown/migration — but makes the runtime-dir reference concrete.
+    uid = 995;
     subUidRanges = [
       {
         startUid = 100000;
