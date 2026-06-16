@@ -233,8 +233,22 @@ cd /tmp && sudo -u hermes env HOME=/var/lib/hermes podman version
 ```
 
 Always invoke podman for this user as `cd /tmp && sudo -u hermes env
-HOME=/var/lib/hermes podman ...` — the service sets `HOME=/var/lib/hermes` and does
-**not** set `XDG_RUNTIME_DIR`, so reproduce its exact environment when debugging.
+HOME=/var/lib/hermes podman ...` — the service sets `HOME=/var/lib/hermes`, so
+reproduce its environment when debugging. SSH in as `amadeus@192.168.2.155` (root
+login is disabled) and prefix privileged steps with `sudo`.
+
+**Second variant — runroot falls back to `/tmp` (fixed 2026-06-16):** podman uses
+`/run/user/<uid>` as its runroot only if that dir exists when it first initialises.
+If `hermes-agent` wins the startup race against the `hermes` linger session, podman
+falls back to `/tmp/storage-run-<uid>`; that path later vanishes, leaving orphan
+`conmon`/`pasta`/`/run/podman-init` procs + a dead container lock, and `podman ps`
+then reports `RunRoot ... not writable` / `mkdir /tmp/storage-run-<uid>: no such
+file or directory`. The `ExecStartPre` pause-guard does NOT clear these, so a plain
+restart won't heal it: stop the agent, `sudo pkill -9 -u hermes` the orphans,
+`rm -rf /tmp/storage-run-<uid>` + the stale `pause.pid`, then `podman rm -f -a`
+(pass `XDG_RUNTIME_DIR=/run/user/<uid>` for a writable runroot) and restart. Now
+prevented declaratively by pinning `environment.XDG_RUNTIME_DIR` on the
+`hermes-agent` service in `hosts/hermes/configuration.nix`.
 
 ### Hermes API Server (Open WebUI) Ignores Top-Level `toolsets`
 
