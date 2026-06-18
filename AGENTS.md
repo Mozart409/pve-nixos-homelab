@@ -291,3 +291,39 @@ trimmed ~13-tool set despite a fuller top-level `toolsets`.
   `mcp_servers` entry) linger in the live file until removed by hand.
 - **Verify live:** `GET http://localhost:8642/v1/toolsets` (Bearer = the API-server key)
   lists every toolset with its `enabled` flag for the `api_server` platform.
+
+### Open WebUI 0.9.6+ Derives the OAuth Callback From the Request Host (not `WEBUI_URL`)
+
+Pocket ID (OIDC) sign-in to Open WebUI fails with *"Invalid callback URL, it might be
+necessary for an admin to fix this"* after upgrading Open WebUI to **0.9.6** (e.g. the
+`0.9.5 → 0.9.6` bump in the `chore(flake): upgrade pkgs` flake update).
+
+**Root cause:** 0.9.6 changed OAuth redirect-URI handling ([#23203](https://github.com/open-webui/open-webui/pull/23203),
+[#23128](https://github.com/open-webui/open-webui/issues/23128)). The callback **path is
+unchanged** (`/oauth/oidc/callback`), but the full URL is now derived from the **actual
+incoming request host** (forwarded through Caddy) rather than being pinned to `WEBUI_URL`.
+The `containers` host is reachable from **two** origins (see `CORS_ALLOW_ORIGIN` in
+`hosts/containers/open-webui/default.nix`):
+
+- `https://homelab-containers.dropbear-butterfly.ts.net` (the `WEBUI_URL`)
+- `https://containers.homelab.local`
+
+Pre-0.9.6 the `redirect_uri` was always the `WEBUI_URL` one regardless of how you reached
+the UI. Post-0.9.6, reaching the UI via `containers.homelab.local` sends
+`redirect_uri=https://containers.homelab.local/oauth/oidc/callback`, which Pocket ID
+rejects unless that exact URL is a registered callback.
+
+**Confirm:** on the failing login, the browser address bar (when it bounces to Pocket ID)
+shows the exact `redirect_uri=` query param Open WebUI is sending.
+
+**Fix (Pocket ID admin UI — NOT a repo change):** in the Open WebUI OIDC client's allowed
+**Callback URLs**, register *every* origin you use, each with the `/oauth/oidc/callback`
+path:
+
+```
+https://homelab-containers.dropbear-butterfly.ts.net/oauth/oidc/callback
+https://containers.homelab.local/oauth/oidc/callback
+```
+
+No Open WebUI restart needed — retry login immediately. The Nix config is correct; this is
+purely the new 0.9.6 behavior surfacing the second origin.
