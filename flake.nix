@@ -22,6 +22,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     hermes-agent = {
+      # Heads up: revs 426f321e8406 and ef4b897a1843 (hermes-agent 0.16.0) ship a
+      # stale npmDepsHash that doesn't match their package-lock.json, so the
+      # npm-deps fixed-output derivation fails with a hash mismatch and the build
+      # breaks. Last-good rev is 5f6be7f31bd7. If a `nix flake update` breaks the
+      # hermes build, roll this input back to a working rev until upstream fixes it.
       url = "github:NousResearch/hermes-agent";
       inputs.nixpkgs.follows = "nixpkgs";
     };
