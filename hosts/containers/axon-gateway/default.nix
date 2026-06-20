@@ -48,7 +48,7 @@
   virtualisation.oci-containers.containers = {
     axon-gateway = {
       # Pin to a released tag for reproducibility — never :latest.
-      image = "ghcr.io/mozart409/axon-gateway:v0.1.8";
+      image = "ghcr.io/mozart409/axon-gateway:v0.2.0";
       autoStart = true;
 
       # Container :8080 -> host 127.0.0.1:8091. Bound to loopback so it is only
