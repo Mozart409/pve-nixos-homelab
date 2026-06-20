@@ -437,10 +437,12 @@ in {
     # authenticated endpoint. The header value is expanded by Hermes from the
     # agenix-loaded AXON_GATEWAY_TOKEN environment variable at runtime.
     mcpServers = {
-      axon-gateway = {
+      /*
+         axon-gateway = {
         url = "https://axon.homelab.local/mcp";
         headers.Authorization = "Bearer \${AXON_GATEWAY_TOKEN}";
       };
+      */
     };
 
     # Keep CLI available for debugging
