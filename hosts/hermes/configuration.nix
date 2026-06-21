@@ -16,6 +16,18 @@
   vaultRepoName = "obsidian-kb";
   hermesHome = "/var/lib/hermes"; # services.hermes-agent.stateDir default == $HOME
   vaultPath = "${hermesHome}/workspace/vault"; # inside the file-tool sandbox root
+
+  # ── Extra (declarative) skills ────────────────────────────────────────────
+  # Custom skills shipped from this repo, exposed to Hermes read-only via the
+  # `skills.external_dirs` config key (see settings below). Hermes' skill loader
+  # (agent/skill_utils.py: get_all_skills_dirs) scans local ~/.hermes/skills
+  # first, then every external_dirs entry, rglob-ing each for <name>/SKILL.md.
+  # Pointing at this immutable store path keeps the skills reproducible and out
+  # of the mutable, hub-managed ~/.hermes/skills tree. These skills are
+  # instruction-only (they direct the agent's existing file/terminal tools), so
+  # they do NOT need to be bind-mounted into the podman sandbox — the loader
+  # reads them host-side when building the prompt.
+  extraSkillsDir = ./skills;
   # NOTE: the SSH user is "forgejo" (the built-in Forgejo SSH server's configured
   # user), NOT "git". Connecting as git@ is silently rejected by the server.
   vaultRemote = "ssh://forgejo@forgejo.homelab.local:2222/${vaultOwner}/${vaultRepoName}.git";
@@ -299,6 +311,13 @@ in {
         "delegation"
         "session_search"
       ];
+
+      # Extra skill directories scanned read-only in addition to the mutable
+      # ~/.hermes/skills tree. Each entry is rglob-ed for <name>/SKILL.md by the
+      # skill loader. Sourced from this repo (extraSkillsDir) so custom skills
+      # are declarative and reproducible. The `skills` toolset must stay enabled
+      # (it is, in toolsets + every platform_toolsets) for the agent to see them.
+      skills.external_dirs = ["${extraSkillsDir}"];
 
       # Per-platform tool configuration. The top-level `toolsets` above is NOT
       # consulted per-platform: per hermes_cli/tools_config.py
