@@ -80,6 +80,55 @@
     $git push --quiet || echo "hermes-vault-sync: push failed" >&2
   '';
 
+  # ── Deterministic rootless-podman runroot ────────────────────────────────
+  # The recurring "execute_code → Docker version failed" wedge is NOT (only) a
+  # stale pause.pid — its real cause is an UNDETERMINED runroot. Hermes invokes
+  # podman with XDG_RUNTIME_DIR stripped, so podman computes the runroot from the
+  # environment on each fresh init: it uses /run/user/995 when that exists, else
+  # falls back to /tmp/storage-run-995. Whichever it sees FIRST gets baked into
+  # the libpod DB (db.sql) and from then on podman *enforces* it, overriding the
+  # other and aborting with "database configuration mismatch" / an unwritable
+  # /tmp runroot. `podman system migrate` only papers over it until the next init
+  # re-bakes a divergent path. The fix is to PIN the runroot so it is identical
+  # no matter how (or how early) podman is invoked.
+  #
+  # We pin it to /run/hermes-podman, created deterministically by systemd's
+  # RuntimeDirectory= for the hermes-agent unit (owned by the service user, mode
+  # 0700, on tmpfs, materialised BEFORE ExecStartPre, cleaned per boot) — exactly
+  # what a runroot should be, with no dependence on logind's lingering session.
+  podmanRunRoot = "/run/hermes-podman";
+  podmanStorageConf = pkgs.writeText "hermes-storage.conf" ''
+    [storage]
+    driver = "overlay"
+    graphroot = "${hermesHome}/.local/share/containers/storage"
+    runroot = "${podmanRunRoot}"
+  '';
+  # Force the cgroupfs cgroup manager. podman defaults to the *systemd* manager,
+  # where crun creates the container's cgroup scope by calling StartTransientUnit
+  # on the hermes user's systemd over the session D-Bus (/run/user/995/bus). But
+  # Hermes invokes podman with XDG_RUNTIME_DIR stripped, so crun can't find that
+  # bus, falls back to the SYSTEM bus as the unprivileged hermes uid, and is
+  # denied — surfacing as `podman run` exit code 126 ("crun: sd-bus call:
+  # Permission denied") and Hermes' "couldn't start the sandbox container".
+  # cgroupfs makes crun manage cgroups directly under the unit's delegated
+  # subtree (see Delegate=true on the service) with no D-Bus call, so containers
+  # start headlessly regardless of the session bus. Verified: `podman run
+  # --cgroup-manager=cgroupfs ...` launches the sandbox image and returns output.
+  podmanContainersConf = pkgs.writeText "hermes-containers.conf" ''
+    [engine]
+    cgroup_manager = "cgroupfs"
+  '';
+  # Install ~/.config/containers/{storage,containers}.conf for the hermes user.
+  # podman reads these regardless of the (sanitised) invocation environment, so
+  # both the runroot and the cgroup manager are deterministic for the service,
+  # the sync timer, and any manual debugging.
+  podmanStorageSetup = pkgs.writeShellScript "hermes-podman-storage-setup" ''
+    set -eu
+    install -d -m 700 ${hermesHome}/.config/containers
+    install -m 644 ${podmanStorageConf} ${hermesHome}/.config/containers/storage.conf
+    install -m 644 ${podmanContainersConf} ${hermesHome}/.config/containers/containers.conf
+  '';
+
   # Guard against rootless-podman failures that wedge the terminal/code/file backend
   # until cleaned by hand (see AGENTS.md → Common Pitfalls). Runs at ExecStartPre as
   # the hermes user, BEFORE the agent starts — so there is never a legitimate live
@@ -102,8 +151,10 @@
     for proc in conmon pasta podman-init catatonit; do
       ${pkgs.procps}/bin/pkill -9 -u "$uid" -f "$proc" 2>/dev/null || true
     done
-    # (2) Remove a stale pause.pid (only when its pid is no longer alive).
-    for rt in "/run/user/$uid" "/tmp/storage-run-$uid"; do
+    # (2) Remove a stale pause.pid (only when its pid is no longer alive). Cover
+    #     the pinned runroot plus the legacy auto-selected locations, in case an
+    #     older boot left one behind before the runroot was pinned.
+    for rt in "${podmanRunRoot}" "/run/user/$uid" "/tmp/storage-run-$uid"; do
       pidfile="$rt/libpod/tmp/pause.pid"
       [ -f "$pidfile" ] || continue
       pid=$(${pkgs.coreutils}/bin/cat "$pidfile" 2>/dev/null || true)
@@ -470,11 +521,30 @@ in {
     ];
     path = [pkgs.git pkgs.openssh pkgs.podman "/run/wrappers"];
     serviceConfig = {
-      # Self-heal a stale rootless-podman pause.pid before the agent starts, so the
-      # "cannot re-exec process to join the existing user namespace" failure cannot
-      # recur across reboots/redeploys. Runs as the hermes service user (owns the
-      # runtime dir). See podmanPauseGuard above + AGENTS.md.
-      ExecStartPre = ["${podmanPauseGuard}"];
+      # Pin the rootless-podman runroot to a deterministic, systemd-managed tmpfs
+      # dir (owned by the service user, mode 0700, created before ExecStartPre).
+      # This is the path referenced by podmanStorageConf's runroot=, so podman
+      # never re-bakes a divergent /tmp or /run/user runroot into its DB. See the
+      # podmanRunRoot block above.
+      # Give the unit its own delegated cgroup subtree so the rootless container
+      # runtime (crun, cgroupfs manager) can create per-container cgroups under
+      # system.slice/hermes-agent.service without a systemd-user/D-Bus round trip.
+      # This is the canonical way to run podman containers inside a systemd unit.
+      Delegate = true;
+      RuntimeDirectory = "hermes-podman";
+      RuntimeDirectoryMode = "0700";
+      # Keep the runroot across service restarts (systemd still wipes it on reboot,
+      # which is the correct per-boot reset for a tmpfs runroot). Without this the
+      # dir would vanish on every stop — losing the persistent container's runtime
+      # state each restart and leaving no runroot for manual podman maintenance
+      # while the agent is stopped. logind's /run/user/995 had this persistence;
+      # we keep matching semantics.
+      RuntimeDirectoryPreserve = "yes";
+      # First install ~/.config/containers/storage.conf (pins runroot/graphroot),
+      # then self-heal a stale pause.pid / orphan helpers before the agent starts,
+      # so the "cannot re-exec ... user namespace" / unwritable-runroot failures
+      # cannot recur across reboots/redeploys. Both run as the hermes service user.
+      ExecStartPre = ["${podmanStorageSetup}" "${podmanPauseGuard}"];
       # Rootless podman maps multiple sub-UIDs via the setuid newuidmap/newgidmap
       # helpers; NoNewPrivileges=true (set by the hermes module) makes the kernel
       # ignore their setuid bit, breaking userns setup. Relax it here — the risky
