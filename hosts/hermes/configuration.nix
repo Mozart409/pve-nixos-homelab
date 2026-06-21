@@ -601,11 +601,17 @@ in {
         count = 65536;
       }
     ];
-    # Enable lingering so logind keeps a persistent user session + /run/user/<uid>
-    # for the (non-login) hermes system user. This gives rootless podman a stable
-    # runtime dir and a session bus, so it uses the systemd cgroup manager instead
-    # of falling back to cgroupfs + an ephemeral /tmp runroot.
-    linger = true;
+    # NB: lingering is deliberately NOT enabled. It was originally turned on to
+    # give rootless podman a persistent /run/user/<uid> + session bus so it would
+    # use the *systemd* cgroup manager — but that approach was superseded: the
+    # container backend now pins its runroot to /run/hermes-podman (systemd
+    # RuntimeDirectory) and forces the *cgroupfs* manager (see podmanContainersConf
+    # + Delegate=true above), so it no longer needs the user session at all.
+    # Worse, with linger on, every activation reloads the hermes user's systemd
+    # --user units; whenever user@<uid> is dead this fails with
+    # "/run/user/<uid>/bus: Connection refused" and aborts the deploy (exit 4)
+    # even though the deploy otherwise succeeded. Leaving linger off removes that
+    # failure mode entirely.
   };
 
   # ── Knowledge-base vault sync ─────────────────────────────────────────────
