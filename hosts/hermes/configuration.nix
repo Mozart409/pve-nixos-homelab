@@ -539,6 +539,20 @@ in {
       "hermes-vault-sync.service"
     ];
     path = [pkgs.git pkgs.openssh pkgs.podman "/run/wrappers"];
+    # Pin podman's *runtime dir* (XDG_RUNTIME_DIR) to the same systemd-managed
+    # tmpfs as the runroot. This is the second half of decoupling the sandbox
+    # from logind: storage.conf pins the storage *runroot*, but podman's libpod
+    # rundir (pause process, sockets, container exit files) is XDG_RUNTIME_DIR-
+    # derived and otherwise defaults to logind's /run/user/<uid>. That dir only
+    # exists while user@<uid> (linger) is alive, so when it dies podman's
+    # `version` precheck fails ("crun not found" / exit 125) and execute_code
+    # reports "the sandbox Docker backend isn't running". Pinning it here puts the
+    # rundir under /run/hermes-podman (created by RuntimeDirectory= below, always
+    # present while the unit runs), so the sandbox no longer needs the user
+    # session at all — verified: with this set and user@<uid> stopped, `podman
+    # run` still launches the container. Hermes only sets XDG_RUNTIME_DIR when it
+    # is unset (gateway.py _ensure_user_systemd_env), so this pin always wins.
+    environment.XDG_RUNTIME_DIR = podmanRunRoot;
     serviceConfig = {
       # Pin the rootless-podman runroot to a deterministic, systemd-managed tmpfs
       # dir (owned by the service user, mode 0700, created before ExecStartPre).
@@ -601,25 +615,19 @@ in {
         count = 65536;
       }
     ];
-    # Lingering is REQUIRED — do not remove. It keeps logind running a persistent
-    # user@<uid> manager + /run/user/<uid> (runtime dir + session bus) for the
-    # non-login hermes system user. Despite the pinned /run/hermes-podman runroot
-    # and the forced cgroupfs manager above, rootless podman's `podman version`
-    # precheck (userns / pause-process setup) STILL fails without the user session:
-    # when user@<uid> is down, Hermes' `_ensure_docker_available()` raises
-    # "'docker version' failed" and every execute_code/terminal call dies with
-    # "the sandbox Docker backend isn't running". Tested directly 2026-06-22:
-    # disable-linger + stop user@<uid> → execute_code fails; re-enable → it works.
-    # So the cgroupfs/pinned-runroot decoupling is INCOMPLETE; the user session is
-    # load-bearing for the sandbox.
-    #
-    # Known tradeoff: with linger on, NixOS activation reloads the hermes user's
-    # systemd --user units, so if user@<uid> happens to be dead at deploy time the
-    # reload fails with "/run/user/<uid>/bus: Connection refused" and colmena
-    # reports exit 4 (the system switch itself still succeeds). Recover with
-    # `systemctl start user@<uid>` — see [[hermes-deploy-user995-exit4]]. That
-    # nuisance is far preferable to a broken sandbox, hence linger stays on.
-    linger = true;
+    # Lingering is intentionally OFF. It used to be REQUIRED because podman's
+    # libpod rundir defaulted to logind's /run/user/<uid> (only present while
+    # user@<uid> lingers), so without it `podman version` failed and the sandbox
+    # broke. That dependency is now removed by pinning XDG_RUNTIME_DIR to
+    # /run/hermes-podman on the hermes-agent unit (see its `environment` above):
+    # podman's rundir is a stable systemd-managed tmpfs, independent of any user
+    # session. Verified 2026-06-22: with linger off + user@<uid> stopped + the
+    # XDG_RUNTIME_DIR pin, `podman run` still launches the sandbox container.
+    # Dropping linger also removes the exit-4 activation nuisance (NixOS reloading
+    # the hermes user's --user units against a dead bus) — see
+    # [[hermes-deploy-user995-exit4]]. NOTE: NixOS does not run `loginctl
+    # disable-linger` when this option is removed; clear the leftover marker once
+    # by hand: `sudo loginctl disable-linger hermes`.
   };
 
   # ── Knowledge-base vault sync ─────────────────────────────────────────────
