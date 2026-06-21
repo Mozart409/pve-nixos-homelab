@@ -126,9 +126,22 @@
   # subtree (see Delegate=true on the service) with no D-Bus call, so containers
   # start headlessly regardless of the session bus. Verified: `podman run
   # --cgroup-manager=cgroupfs ...` launches the sandbox image and returns output.
+  #
+  # tmp_dir = pin the libpod runtime tmp dir (and with it the OCI runtime's
+  # exit-files directory) onto the same systemd-managed tmpfs. This is the LAST
+  # logind dependency: podman derives the OCI runtime exit-files dir from
+  # Engine.TmpDir, which for rootless defaults to /run/user/<uid>/libpod/tmp —
+  # NOT from XDG_RUNTIME_DIR (pinning XDG moved the runroot but NOT this). When
+  # user@<uid> is down, /run/user/<uid> is a stale root-owned dir hermes can't
+  # write, so crun init fails with "creating OCI runtime exit files directory:
+  # mkdir /run/user/<uid>: permission denied" — surfaced (misleadingly) as
+  # `podman version` → exit 125 'default OCI runtime "crun" not found'. Pinning
+  # tmp_dir here puts the exit dir under /run/hermes-podman, so the sandbox no
+  # longer needs the user session at all (this is what makes linger removable).
   podmanContainersConf = pkgs.writeText "hermes-containers.conf" ''
     [engine]
     cgroup_manager = "cgroupfs"
+    tmp_dir = "${podmanRunRoot}/libpod-tmp"
   '';
   # Install ~/.config/containers/{storage,containers}.conf for the hermes user.
   # podman reads these regardless of the (sanitised) invocation environment, so
