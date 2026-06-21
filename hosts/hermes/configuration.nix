@@ -601,17 +601,25 @@ in {
         count = 65536;
       }
     ];
-    # NB: lingering is deliberately NOT enabled. It was originally turned on to
-    # give rootless podman a persistent /run/user/<uid> + session bus so it would
-    # use the *systemd* cgroup manager — but that approach was superseded: the
-    # container backend now pins its runroot to /run/hermes-podman (systemd
-    # RuntimeDirectory) and forces the *cgroupfs* manager (see podmanContainersConf
-    # + Delegate=true above), so it no longer needs the user session at all.
-    # Worse, with linger on, every activation reloads the hermes user's systemd
-    # --user units; whenever user@<uid> is dead this fails with
-    # "/run/user/<uid>/bus: Connection refused" and aborts the deploy (exit 4)
-    # even though the deploy otherwise succeeded. Leaving linger off removes that
-    # failure mode entirely.
+    # Lingering is REQUIRED — do not remove. It keeps logind running a persistent
+    # user@<uid> manager + /run/user/<uid> (runtime dir + session bus) for the
+    # non-login hermes system user. Despite the pinned /run/hermes-podman runroot
+    # and the forced cgroupfs manager above, rootless podman's `podman version`
+    # precheck (userns / pause-process setup) STILL fails without the user session:
+    # when user@<uid> is down, Hermes' `_ensure_docker_available()` raises
+    # "'docker version' failed" and every execute_code/terminal call dies with
+    # "the sandbox Docker backend isn't running". Tested directly 2026-06-22:
+    # disable-linger + stop user@<uid> → execute_code fails; re-enable → it works.
+    # So the cgroupfs/pinned-runroot decoupling is INCOMPLETE; the user session is
+    # load-bearing for the sandbox.
+    #
+    # Known tradeoff: with linger on, NixOS activation reloads the hermes user's
+    # systemd --user units, so if user@<uid> happens to be dead at deploy time the
+    # reload fails with "/run/user/<uid>/bus: Connection refused" and colmena
+    # reports exit 4 (the system switch itself still succeeds). Recover with
+    # `systemctl start user@<uid>` — see [[hermes-deploy-user995-exit4]]. That
+    # nuisance is far preferable to a broken sandbox, hence linger stays on.
+    linger = true;
   };
 
   # ── Knowledge-base vault sync ─────────────────────────────────────────────
