@@ -428,7 +428,12 @@ in {
       terminal = {
         backend = "docker";
         timeout = 180;
-        container_persistent = true;
+        # Ephemeral per-call containers (was `true`). A *persistent* container is a
+        # long-lived libpod record holding storage/userns locks; a mid-drain SIGKILL
+        # corrupts it — the recurring "execute_code → Docker version failed" wedge.
+        # With `false`, each tool call gets a fresh `--rm` container with almost
+        # nothing to carry across restarts.
+        container_persistent = false;
         docker_image = "nikolaik/python-nodejs:python3.11-nodejs20";
         docker_volumes = [
           "${vaultPath}:${vaultPath}"
@@ -577,13 +582,13 @@ in {
       Delegate = true;
       RuntimeDirectory = "hermes-podman";
       RuntimeDirectoryMode = "0700";
-      # Keep the runroot across service restarts (systemd still wipes it on reboot,
-      # which is the correct per-boot reset for a tmpfs runroot). Without this the
-      # dir would vanish on every stop — losing the persistent container's runtime
-      # state each restart and leaving no runroot for manual podman maintenance
-      # while the agent is stopped. logind's /run/user/995 had this persistence;
-      # we keep matching semantics.
-      RuntimeDirectoryPreserve = "yes";
+      # RuntimeDirectoryPreserve intentionally left at its default ("no"): with
+      # ephemeral per-call containers there is no persistent container state worth
+      # keeping across restarts, so systemd wipes + recreates /run/hermes-podman on
+      # every stop/start. That makes the runroot self-cleaning — a stale pause.pid
+      # (which lived under the runroot) can no longer survive a restart by
+      # construction. Trade-off: while the service is stopped the runroot is absent,
+      # so manual `sudo -u hermes podman` debugging must recreate the dir first.
       # First install ~/.config/containers/storage.conf (pins runroot/graphroot),
       # then self-heal a stale pause.pid / orphan helpers before the agent starts,
       # so the "cannot re-exec ... user namespace" / unwritable-runroot failures
