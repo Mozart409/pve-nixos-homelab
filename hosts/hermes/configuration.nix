@@ -606,7 +606,7 @@ in {
       # conmon/pasta/podman-init — the root cause the ExecStartPre guard above mops up.
       # Give the drain room (>= 180s + margin) so shutdowns are clean and no orphans
       # are created in the first place. mkForce overrides the module's 90s.
-      TimeoutStopSec = lib.mkForce 210;
+      TimeoutStopSec = lib.mkForce 90;
     };
   };
 
