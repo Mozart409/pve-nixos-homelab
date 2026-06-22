@@ -1,6 +1,7 @@
 # Plan: replace the rootless-podman sandbox with the `local` terminal backend
 
-**Status:** draft for discussion
+**Status:** ON HOLD — trying a cheaper fix first (ephemeral podman; see §9–§11). This
+`local` migration stays the documented fallback if that experiment doesn't hold.
 **Goal:** stop the `execute_code` / terminal / file-tool backend from wedging on every
 deploy and on `hermes-agent` restarts, by removing the rootless-podman jail entirely and
 running the agent's tools directly on the host (`terminal.backend = "local"`), confined by
@@ -191,3 +192,122 @@ tool execution path changes. The podman image storage under
   middle option under `local`.
 - **Q4 — also clean up the AGENTS.md "Common Pitfalls" podman sections** once this lands?
   They become obsolete/misleading after the switch.
+
+---
+
+## 9. Alternatives considered (research, 2026-06-22)
+
+The choice is **not** binary (`local` vs. fragile podman). The `hermes-agent` module exposes
+six backends (`local, docker, ssh, singularity, modal, daytona`) which — with the systemd/uid
+toolbox — give several points on an **isolation-strength vs. operational-weight** curve. The
+thing `local` trades away (the agent's own `.env` provider keys + the MCP token become
+readable by the tool sandbox; see §3) can be bought back more cheaply than "rootful docker."
+
+| Backend / approach | Isolation | Survives deploys | Keeps `.env`+Forgejo key out of tool sandbox | Ops weight |
+|---|---|---|---|---|
+| `local` (this plan) | systemd unit sandbox only | yes | ✗ tools read `.env` as the service uid | lowest |
+| **ephemeral podman** (`container_persistent=false`) | container (ns) | much improved | ✓ | ~zero (1-line) — **chosen first** |
+| `ssh` → localhost as a separate unpriv. user | uid perms only | yes | ✓ (the two key files, by mode) | low–med |
+| `singularity` / apptainer | container (ns) | likely | ✓ | low–med |
+| `ssh` → dedicated sandbox VM / LXC / nspawn | full host / ns | yes | ✓✓ (no secrets present there) | med–high |
+| rootful docker (`dockerd`) | full ns | yes | ✓ | med (privileged daemon) |
+| modal / daytona | cloud VM | yes | ✓ | rejected — external, data leaves LAN |
+
+Notes on the non-obvious options:
+
+- **ephemeral podman** (chosen, see §10): most of podman's fragility is the *persistent*
+  container — a long-lived libpod record holding storage/userns locks that corrupt on a
+  mid-drain SIGKILL. `container_persistent = false` makes each call a fresh `--rm` container
+  with almost nothing to carry across restarts, *without* abandoning containerization, so the
+  secret isolation `local` would sacrifice is preserved. One-line change; try first.
+
+- **`ssh` → localhost as a separate unprivileged user**: the sleeper option. The `ssh`
+  backend runs tools over ssh on a target, and that target can be `tooluser@localhost` on
+  *this* VM, reusing the running sshd (no new daemon, no container state → as robust as
+  `local`). But the tools run as a *different uid* that can't read `/var/lib/hermes/.env`
+  (0640 hermes) or the Forgejo key (0400 hermes) — recovering exactly the isolation `local`
+  gives up. The module forces `local` to run tools as the *service* user; `ssh`-to-localhost
+  is the module-native way to insert a uid boundary `local` won't. Vault → shared-group dir
+  (`vault` group, `hermes`+`tooluser`, SGID); Forgejo key stays `hermes`-only so `tooluser`
+  commits locally and `hermes-vault-sync` (as hermes) still pushes — current split preserved.
+  De-risk first: confirm the module's `ssh` backend takes localhost+alt-user with a
+  persistent connection (ControlMaster, for latency), that `execute_code`'s RPC works over
+  it, and that file tools run on the target. Isolation = uid perms only (tooluser still sees
+  world-readable files, host services, the LAN).
+
+- **`singularity` / apptainer**: daemonless containerization; the normal model is ephemeral
+  `exec` of a SIF image — far less persistent bookkeeping than podman's libpod DB / pause.pid.
+  Module-native, keeps isolation. Caveat: unprivileged apptainer still uses the same
+  user-namespace machinery, so *plausibly* immune to podman's stateful-corruption class but
+  not guaranteed.
+
+- **`ssh` → dedicated sandbox host** (2nd VM, or an LXC / `systemd-nspawn` here): tools run
+  somewhere holding *no* secrets; injected code lands with nothing to steal and no path back.
+  Strongest practical isolation, module-native. Cost: a 2nd host + the vault must live there
+  (NFS/bind or relocate the clone).
+
+- **rootful docker** (`dockerd`): full namespace isolation + daemon-managed robustness +
+  secrets stay out, at the cost of a privileged daemon + image GC. The "middle option"
+  §3/Q3 implied didn't exist.
+
+- **modal / daytona**: rejected — external cloud sandboxes, data leaves the LAN.
+
+## 10. Decision: try ephemeral podman first (2026-06-22)
+
+Picked the cheapest experiment that *keeps the secret isolation* before committing to the
+`local` rewrite. Applied to `hosts/hermes/configuration.nix`:
+
+1. `settings.terminal.container_persistent = false` — ephemeral per-call containers.
+2. Dropped `serviceConfig.RuntimeDirectoryPreserve = "yes"` (was there solely to preserve the
+   *persistent* container's runtime state across restarts). With it gone, systemd wipes +
+   recreates `/run/hermes-podman` on every stop/start → the runroot is self-cleaning and a
+   stale `pause.pid` can no longer survive a restart by construction.
+
+**Deliberately KEPT** — these are per-`podman run` determinism, *not* persistent-container
+plumbing; removing any reintroduces the original, persistence-independent wedges:
+runroot/graphroot pin (`storage.conf`), cgroupfs manager + `tmp_dir` (`containers.conf`),
+`XDG_RUNTIME_DIR` pin, `Delegate`, `RuntimeDirectory`, `NoNewPrivileges=false` (setuid
+`newuidmap`), sub-UID/GID ranges, `TimeoutStopSec=210` (clean agent drain).
+
+**One judgment call:** the `podmanPauseGuard` ExecStartPre is *kept* as a safety net for the
+now-rare mid-call SIGKILL orphan, and as observability — its log lines reveal whether orphans
+still occur under ephemeral. Its stale-`pause.pid` job is now redundant (fresh runroot).
+Remove it once ephemeral is proven if you want it leaner.
+
+**Hypothesis:** with no persistent container to corrupt, `execute_code`/terminal/file keep
+working across repeated deploys + `systemctl restart hermes-agent` with zero manual fixes.
+
+**How to evaluate:** redeploy twice, `systemctl restart hermes-agent` a few times, and after
+each confirm from Open WebUI that `execute_code` runs python + `terminal` runs `ls`/`git`.
+Watch `journalctl -u hermes-agent` for the pause-guard reaping anything (it shouldn't, if the
+hypothesis holds). Per-call container startup adds latency vs. the persistent container, and
+in-session shell state no longer persists between calls — confirm neither breaks a workflow.
+
+**If it doesn't hold:** fall back along §9 — next cheapest that keeps isolation is the
+`ssh`→localhost-as-`tooluser` backend; then apptainer; then the full `local` rewrite (§11)
+if the `.env` exposure is deemed acceptable.
+
+## 11. If we fall back to the `local` rewrite: gaps to fix first
+
+From reviewing this plan against the live `configuration.nix`:
+
+- **Stale comments become wrong.** The `approvals.mode = "off"` justification (the "sandbox
+  is the podman jail" paragraph) and the `settings.terminal` comment block both describe a
+  jail that no longer exists under `local` — rewrite them, not just the code.
+- **`InaccessiblePaths` is the *sole* guard for the Forgejo key under `local`.** The agent
+  runs as `hermes` with `~/.ssh/config` pointing `IdentityFile` at the key, so only
+  `InaccessiblePaths` stops it from reading + pushing. `/run/agenix` is an **agenix symlink**
+  to `/run/agenix.d/<gen>` — blocking the symlink may not mask the target; be ready to block
+  `/run/agenix.d`. The §6 `cat` test catches a miss. (It only meaningfully protects the
+  Forgejo key; the other four secrets are in `.env` regardless.)
+- **Add systemd resource caps** (`TasksMax`, `MemoryMax`/`MemoryHigh`, `LimitNPROC`): tools
+  move into the unit cgroup and neither backend had caps. `ProtectSystem=strict` bounds
+  *writes*, not CPU/mem/pids.
+- **Re-verify the cited module source line numbers** against the pinned `hermes-agent` rev
+  before trusting them — the whole plan rests on them.
+- **Drop `pkgs.openssh` from the agent unit `path`** too (defense in depth — the agent has no
+  legitimate ssh need and you're actively denying it the key).
+- **Verified OK — don't re-investigate:** `OBSIDIAN_VAULT_PATH` is already a host path
+  bind-mounted at the *same* path, so the switch needs no path translation; the `git commit`
+  flow uses `~/.gitconfig` as `hermes` and works under `local`; the `.env` exposure is exactly
+  the four secrets in `environmentFiles`; the Forgejo key is *not* in `.env`.
