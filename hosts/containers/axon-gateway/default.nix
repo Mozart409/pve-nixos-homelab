@@ -24,6 +24,7 @@
     base_url = "https://axon.homelab.local"
     # Bearer token clients must present to use the gateway.
     auth_token = "''${AXON_GATEWAY_TOKEN}"
+    rate_limit_per_minute = 1000
 
     # --- Backends (the MCP servers being aggregated) -------------------------
     # Service-to-service URLs use *.homelab.local (NOT Tailscale MagicDNS, which
