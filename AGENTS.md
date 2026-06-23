@@ -357,6 +357,19 @@ The plan/design lives in `hosts/hermes/pve-nixos-homelab.md`.
   `NIX_REMOTE=daemon`. So the agent can `nix flake check` / `nix develop -c just …`
   to validate flake changes; builds run on the host daemon (no host root, no
   access to secrets). See the security note in `hosts/hermes/pve-nixos-homelab.md`.
+- The agent loads the `homelab-config-repo` skill
+  (`hosts/hermes/skills/development/homelab-config-repo/SKILL.md`) describing this
+  workflow.
+
+### Login-shell PATH gotcha (`nix: command not found`)
+Hermes runs terminal commands through a **login shell**, and the nikolaik image's
+`/etc/profile` hard-resets `PATH` to a fixed default — wiping `docker_env.PATH`
+(which only survives *non-login* shells). That made the agent report
+`nix: command not found` even though `/nix` was mounted and `NIX_REMOTE` was set.
+Fixed by bind-mounting `/etc/profile.d/hermes-nix.sh` (`nixProfileScript`) that
+re-adds `${pkgs.nix}/bin` to `PATH`; `/etc/profile` sources `/etc/profile.d/*.sh`
+*after* the reset, so it survives `bash -lc`. Only `PATH` is reset by
+`/etc/profile` — the `NIX_*` env vars survive untouched.
 
 ### Agent workflow (enforced by SOUL.md)
 - Never commits to `main`; one feature branch per task, started from a fresh
