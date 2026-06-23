@@ -476,6 +476,7 @@
           # keep-sorted start
 
           agenix.packages.${system}.default
+          alejandra
           bacon
           # rust
           cargo
