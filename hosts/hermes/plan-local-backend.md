@@ -346,14 +346,34 @@ not the persistent-container one.** Findings, all reproduced on-host (`amadeus@1
   deploy and post-`systemctl restart`, podman runs clean with the service XDG; subtree is
   recreated fresh on each (wiped) start. Agent `active`.
 
-- **Meta-conclusion (the reason this plan exists):** merely *testing* ephemeral surfaced a
-  THIRD distinct rootless-podman failure mode (after stale `pause.pid` and runroot-DB
-  mismatch), all from the same root — rootless podman's per-user runtime/pause-process state +
-  the elaborate pinning needed to make it deterministic. Ephemeral containers are orthogonal
-  to that class and don't fix it. **Recommendation:** run the now-working ephemeral config for
-  a while to confirm the persistent-container wedge is gone, but treat this as further evidence
-  for migrating off rootless podman entirely — `local` (this plan) or the `ssh`→localhost
-  option (§9), neither of which has a per-user pause process or a runroot to pin.
+- **Correction — `container_persistent` was the WRONG knob (found 2026-06-23 via the live
+  agent code).** `tools/environments/docker.py` has TWO independent settings:
+  - `container_persistent` → `persistent_filesystem` (docker.py:1251/1271): only chooses
+    bind-mount vs tmpfs for `/workspace`+`/root`. Does NOT touch the container lifecycle.
+  - `docker_persist_across_processes` (docker.py:1279, **default TRUE**): the real one — keeps
+    ONE `sleep infinity` container and **reuses it across Hermes processes/restarts** by label,
+    running `podman start` on the stale one. After a mid-drain SIGKILL that record is corrupt
+    and `podman start` returns **exit 125** ("Failed to start existing container … — falling
+    back to a fresh container"). THIS is the persistent container the plan meant to remove.
+
+  So `container_persistent = false` alone left the cross-restart sleeper in place (observed:
+  one container reused for 2h+, plus a SIGTERM-killed `Exited (143)` record from 35h earlier).
+  Fixed by adding **`terminal.docker_persist_across_processes = false`** → each agent process
+  creates its own container and stop+rm's it on exit (docker.py:1236); no cross-restart reuse,
+  so the corruption vector is gone. A built-in orphan reaper (`_maybe_reap_docker_orphans`,
+  default on) plus our `podmanPauseGuard` mop up any container left by an unclean SIGKILL.
+  Deployed + verified: live config shows both flags false, restart leaves no stale-reuse
+  error, agent `active`.
+
+- **Meta-conclusion (the reason this plan exists):** getting ephemeral to actually work took a
+  pause-process subtree fix AND discovering the real persist knob — i.e. two more rounds of
+  podman-specific archaeology, after stale `pause.pid` and runroot-DB mismatch. All from the
+  same root: rootless podman's per-user runtime/pause-process state + cross-process container
+  reuse + the elaborate pinning to make it deterministic. **Recommendation:** soak the now-
+  correct ephemeral config (`container_persistent=false` + `docker_persist_across_processes=
+  false`) to confirm the wedge is gone, but treat the whole saga as further evidence for
+  migrating off rootless podman — `local` (this plan) or `ssh`→localhost (§9), neither of which
+  has a per-user pause process, a runroot to pin, or a cross-process container to reuse.
 
 - **Unrelated tension noticed:** `serviceConfig.TimeoutStopSec` is committed at `90` (commit
   `b46ca7e` "timeout back to 90s") while the inline comment still argues for `>=180+margin`.
