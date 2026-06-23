@@ -327,3 +327,46 @@ https://containers.homelab.local/oauth/oidc/callback
 
 No Open WebUI restart needed — retry login immediately. The Nix config is correct; this is
 purely the new 0.9.6 behavior surfacing the second origin.
+
+## 7. Hermes Agent Access to This Repo (feature-branch dev)
+
+The Hermes agent (driven from Open WebUI) can develop changes to *this* repo
+inside its podman sandbox. It commits on feature branches; a host-side service
+pushes them to Forgejo. `main` is branch-protected, so the bot can never land
+changes directly — you review the branch, open the PR, and deploy with `colmena`.
+The plan/design lives in `hosts/hermes/pve-nixos-homelab.md`.
+
+### One-time Forgejo setup (done in the web UI, not in this repo)
+- Add `hermes-bot` as a **Write** collaborator on `amadeus/pve-nixos-homelab`.
+- Protect `main`: block direct pushes (no push whitelist, or whitelist only you)
+  so changes must go through pull requests.
+- Auto-PR is intentionally **off** — no API token is configured. The host service
+  only pushes the branch; you open the PR yourself.
+
+### How it works (declarative, in `hosts/hermes/configuration.nix`)
+- Access reuses the existing `hermes-forgejo-ssh` key (same `hermes-bot` account
+  as the Obsidian vault, same `forgejo.homelab.local:2222` host the `~/.ssh/config`
+  already routes). **No new secret.** The key stays host-side — never mounted into
+  the sandbox.
+- The repo is cloned at `~/workspace/pve-nixos-homelab` (`$HOMELAB_REPO_PATH`) and
+  bind-mounted read-write into the sandbox. `hermes-repo-sync.{service,timer,path}`
+  clones-or-fetches and pushes the current feature branch (never `main`, only when
+  it is ahead of `origin/main`).
+- The sandbox has `nix` via the **host nix-daemon**: `/nix` is bind-mounted
+  read-only (store + the `0666` daemon socket) and the container runs with
+  `NIX_REMOTE=daemon`. So the agent can `nix flake check` / `nix develop -c just …`
+  to validate flake changes; builds run on the host daemon (no host root, no
+  access to secrets). See the security note in `hosts/hermes/pve-nixos-homelab.md`.
+
+### Agent workflow (enforced by SOUL.md)
+- Never commits to `main`; one feature branch per task, started from a fresh
+  `origin/main` (`git switch -c feat/<slug> origin/main`).
+- Validates with `nix develop -c just fmt && nix develop -c just nixos-check`
+  before committing; the host pushes the branch automatically within seconds.
+
+### Deploy-time checks (cannot be validated offline)
+- In-sandbox: `nix --version` then `nix flake check` in `$HOMELAB_REPO_PATH`
+  (confirms the daemon-over-socket path works under the user namespace).
+- Confirm `execute_code` still finds python3/node after the sandbox `PATH` change.
+- An agent commit on a `feat/*` branch should appear on Forgejo within seconds; a
+  commit attempt on `main` is rejected by branch protection.
