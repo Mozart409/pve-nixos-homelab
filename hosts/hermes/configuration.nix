@@ -47,6 +47,18 @@
   repoPath = "${hermesHome}/workspace/${repoName}"; # inside the file-tool sandbox root
   repoRemote = "ssh://forgejo@forgejo.homelab.local:2222/${repoOwner}/${repoName}.git";
 
+  # Put `nix` on PATH inside the sandbox even for LOGIN shells. Hermes runs
+  # terminal commands through a login shell, and the nikolaik image's
+  # /etc/profile *hard-resets* PATH to a fixed default — discarding the
+  # docker_env.PATH below (which only survives in non-login shells). /etc/profile
+  # then sources /etc/profile.d/*.sh AFTER that reset (via run-parts), so dropping
+  # this file there re-adds the host nix bin (and every nix CLI tool). Verified
+  # in-image: the addition survives `bash -lc`. Filename must match run-parts'
+  # `^[a-zA-Z0-9_][a-zA-Z0-9._-]*\.sh$` — `hermes-nix.sh` (the mount target) does.
+  nixProfileScript = pkgs.writeText "hermes-nix-profile.sh" ''
+    export PATH="$PATH:${pkgs.nix}/bin"
+  '';
+
   # SSH client config: route forgejo over :2222 using the hermes-bot deploy key.
   vaultSshConfig = pkgs.writeText "hermes-vault-ssh-config" ''
     Host forgejo.homelab.local
@@ -525,6 +537,10 @@ in {
           # …` to validate flake changes. ro: the daemon (not the client) writes
           # the store; connecting to the socket does not need the mount writable.
           "/nix:/nix:ro"
+          # Make `nix` resolvable in the agent's LOGIN shells (see nixProfileScript):
+          # docker_env.PATH below is wiped by the image's /etc/profile, so we also
+          # add nix to PATH from /etc/profile.d, which IS sourced after that reset.
+          "${nixProfileScript}:/etc/profile.d/hermes-nix.sh:ro"
         ];
         # The container does not inherit the agent's env. Set the vault path
         # inside it so the agent's `git -C "$OBSIDIAN_VAULT_PATH" commit` (per
