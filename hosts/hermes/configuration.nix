@@ -33,6 +33,20 @@
   vaultRemote = "ssh://forgejo@forgejo.homelab.local:2222/${vaultOwner}/${vaultRepoName}.git";
   gitSshCmd = "${pkgs.openssh}/bin/ssh -F ${hermesHome}/.ssh/config";
 
+  # ── Homelab config repo (this repo) ───────────────────────────────────────
+  # The agent develops changes to the NixOS homelab config on FEATURE BRANCHES
+  # inside its podman sandbox; a host-side service (hermes-repo-sync) pushes those
+  # branches to Forgejo. `main` is branch-protected on Forgejo, so the bot can
+  # never land changes directly — the user reviews the branch, opens a PR, and
+  # deploys (colmena) by hand. Access reuses the SAME hermes-bot Forgejo account
+  # + hermes-forgejo-ssh key as the vault (same forgejo.homelab.local:2222 host
+  # the ~/.ssh/config block already routes), so NO new secret is needed. The key
+  # stays host-side only — it is never mounted into the sandbox.
+  repoOwner = "amadeus";
+  repoName = "pve-nixos-homelab";
+  repoPath = "${hermesHome}/workspace/${repoName}"; # inside the file-tool sandbox root
+  repoRemote = "ssh://forgejo@forgejo.homelab.local:2222/${repoOwner}/${repoName}.git";
+
   # SSH client config: route forgejo over :2222 using the hermes-bot deploy key.
   vaultSshConfig = pkgs.writeText "hermes-vault-ssh-config" ''
     Host forgejo.homelab.local
@@ -53,6 +67,7 @@
       rebase = true
     [safe]
       directory = ${vaultPath}
+      directory = ${repoPath}
   '';
 
   # Install ~/.ssh/config and ~/.gitconfig for the hermes user so BOTH the
@@ -90,6 +105,46 @@
       exit 0
     fi
     $git push --quiet || echo "hermes-vault-sync: push failed" >&2
+  '';
+
+  # Clone-or-push for the homelab config repo. Push-ONLY (the inverse emphasis of
+  # the vault): it never commits, never merges, and NEVER pushes main — the agent
+  # authors commits in-jail on feature branches (see SOUL.md) and the user opens
+  # the PR + deploys. This host-side service moves the agent's branch out using
+  # the Forgejo SSH key we keep out of the container. Idempotent and self-healing:
+  #   - clone-if-empty (into a pre-created empty dir so the agent's bind-mount
+  #     target always exists; a failed clone just leaves the empty dir + retries),
+  #   - `git fetch` keeps origin/main fresh for the agent to branch from,
+  #   - push only when HEAD is a non-main branch with commits ahead of origin/main.
+  # Triggered by (a) a path unit on .git/logs/HEAD when the agent commits and
+  # (b) a slow timer (fetch + retry). Exits 0 on any soft failure so triggers retry.
+  repoSync = pkgs.writeShellScript "hermes-repo-sync" ''
+    set -u
+    export GIT_SSH_COMMAND='${gitSshCmd}'
+    git=${pkgs.git}/bin/git
+    mkdir -p ${repoPath}
+    if [ ! -d ${repoPath}/.git ]; then
+      if ! $git clone ${repoRemote} ${repoPath}; then
+        echo "hermes-repo-sync: clone failed (forgejo/network not ready?)" >&2
+        exit 0
+      fi
+    fi
+    cd ${repoPath} || exit 0
+    if ! $git fetch origin --prune --quiet; then
+      echo "hermes-repo-sync: fetch failed" >&2
+      exit 0
+    fi
+    branch=$($git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
+    case "$branch" in
+      main | master | HEAD)
+        # Never push the protected/default branch; just keep origin fresh.
+        exit 0
+        ;;
+    esac
+    ahead=$($git rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
+    [ "$ahead" -gt 0 ] 2>/dev/null || exit 0
+    $git push -u origin "$branch" --quiet \
+      || echo "hermes-repo-sync: push of '$branch' failed" >&2
   '';
 
   # ── Deterministic rootless-podman runroot ────────────────────────────────
@@ -460,6 +515,16 @@ in {
         docker_volumes = [
           "${vaultPath}:${vaultPath}"
           "${hermesHome}/.gitconfig:/root/.gitconfig:ro"
+          # The homelab config repo, read-write: the agent edits + commits here.
+          # The host-side hermes-repo-sync pushes the resulting feature branch.
+          "${repoPath}:${repoPath}"
+          # Host nix store + the nix-daemon socket (/nix/var/nix/daemon-socket,
+          # mode 0666 → connectable from the user-namespaced container). With
+          # NIX_REMOTE=daemon (below) the in-jail `nix` runs all builds via the
+          # host daemon, so the agent can `nix flake check` / `nix develop -c just
+          # …` to validate flake changes. ro: the daemon (not the client) writes
+          # the store; connecting to the socket does not need the mount writable.
+          "/nix:/nix:ro"
         ];
         # The container does not inherit the agent's env. Set the vault path
         # inside it so the agent's `git -C "$OBSIDIAN_VAULT_PATH" commit` (per
@@ -467,6 +532,17 @@ in {
         # the vault at this exact path in-container.
         docker_env = {
           OBSIDIAN_VAULT_PATH = vaultPath;
+          # Where the homelab config repo is mounted in-jail (== host path).
+          HOMELAB_REPO_PATH = repoPath;
+          # Route in-jail nix at the host nix-daemon over the mounted socket, so
+          # no writable store is needed inside the ephemeral container.
+          NIX_REMOTE = "daemon";
+          NIX_CONFIG = "experimental-features = nix-command flakes";
+          # CA bundle for flake-input fetches over HTTPS (resolved via /nix mount).
+          NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+          # Put the host `nix` on PATH while keeping the image's own dirs (where
+          # python3/node for execute_code live) ahead of it.
+          PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${pkgs.nix}/bin";
         };
       };
 
@@ -526,6 +602,29 @@ in {
         - Keep commits small; never run `git reset --hard` or `git push`/`pull`
           in the vault.
 
+        ## Homelab Config Repo
+        - This homelab's NixOS/IaC config repo is checked out at the path in
+          `$HOMELAB_REPO_PATH`. Read it to understand the infrastructure and to
+          make changes the user asks for. It is a Nix flake; `AGENTS.md` at its
+          root documents the conventions and `just` commands.
+        - NEVER commit to `main` (it is branch-protected and your commit would be
+          rejected anyway). Work one FEATURE BRANCH per task, started from a fresh
+          `origin/main`:
+          `git -C "$HOMELAB_REPO_PATH" fetch origin && git -C "$HOMELAB_REPO_PATH" switch -c feat/<short-slug> origin/main`
+        - Edit files with your file tools, then VALIDATE before committing:
+          `cd "$HOMELAB_REPO_PATH" && nix develop -c just fmt && nix develop -c just nixos-check`
+          (`nix` is available in your sandbox; `nix develop` provides `just`,
+          `alejandra`, `tofu`, etc. from the repo's dev shell).
+        - Commit with a meaningful message:
+          `git -C "$HOMELAB_REPO_PATH" add -A && git -C "$HOMELAB_REPO_PATH" commit -m "<concise description>"`.
+        - SAVING/SHARING: a host service pushes your feature branch to Forgejo
+          automatically within seconds. You do NOT push, open PRs, merge, or
+          deploy — you have neither the key nor the ability. The user reviews the
+          branch, opens the pull request, and deploys (`colmena`) when at the host.
+        - Never run `git reset --hard`, force-push, or switch back to commit on
+          `main`. If a task is unrelated to the previous one, start a brand-new
+          branch from `origin/main`.
+
         ## Guidelines
         - Be concise and helpful
         - Confirm before taking actions that affect physical devices
@@ -569,12 +668,13 @@ in {
   #     version` fails: command required for rootless mode with multiple IDs:
   #     exec: "newuidmap": executable file not found in $PATH.
   systemd.services.hermes-agent = {
-    wants = ["agenix.target" "hermes-vault-sync.service"];
+    wants = ["agenix.target" "hermes-vault-sync.service" "hermes-repo-sync.service"];
     after = [
       "agenix.target"
       "tailscaled.service"
       "hermes-vault-git-setup.service"
       "hermes-vault-sync.service"
+      "hermes-repo-sync.service"
     ];
     path = [pkgs.git pkgs.openssh pkgs.podman "/run/wrappers"];
     # Pin podman's *runtime dir* (XDG_RUNTIME_DIR) to the same systemd-managed
@@ -723,6 +823,48 @@ in {
     pathConfig = {
       PathModified = "${vaultPath}/.git/logs/HEAD";
       Unit = "hermes-vault-sync.service";
+    };
+  };
+
+  # ── Homelab config repo sync ──────────────────────────────────────────────
+  # Reuses the git/ssh config installed by hermes-vault-git-setup (the
+  # forgejo.homelab.local Host block + hermes-bot key apply to this repo too).
+  # Clone-or-push the homelab config repo. Runs once at boot, then on a timer
+  # (fetch + retry) and on a path trigger (instant push when the agent commits).
+  systemd.services.hermes-repo-sync = {
+    description = "Push the hermes-authored homelab config feature branches to Forgejo";
+    wantedBy = ["multi-user.target"];
+    after = ["hermes-vault-git-setup.service" "network-online.target"];
+    wants = ["network-online.target"];
+    requires = ["hermes-vault-git-setup.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      User = "hermes";
+      Group = "hermes";
+      ExecStart = repoSync;
+    };
+  };
+
+  # Slow timer: keeps origin/main fresh for the agent to branch from and retries
+  # any pending feature-branch push.
+  systemd.timers.hermes-repo-sync = {
+    description = "Periodic homelab config repo fetch/push";
+    wantedBy = ["timers.target"];
+    timerConfig = {
+      OnBootSec = "2min";
+      OnUnitActiveSec = "5min";
+      AccuracySec = "1min";
+    };
+  };
+
+  # Outbound: fire the push the moment the agent commits inside the jail.
+  # .git/logs/HEAD is appended on every commit/branch op.
+  systemd.paths.hermes-repo-sync = {
+    description = "Push the homelab config feature branch when the agent commits";
+    wantedBy = ["multi-user.target"];
+    pathConfig = {
+      PathModified = "${repoPath}/.git/logs/HEAD";
+      Unit = "hermes-repo-sync.service";
     };
   };
 
