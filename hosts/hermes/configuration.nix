@@ -439,12 +439,23 @@ in {
       terminal = {
         backend = "docker";
         timeout = 180;
-        # Ephemeral per-call containers (was `true`). A *persistent* container is a
-        # long-lived libpod record holding storage/userns locks; a mid-drain SIGKILL
-        # corrupts it — the recurring "execute_code → Docker version failed" wedge.
-        # With `false`, each tool call gets a fresh `--rm` container with almost
-        # nothing to carry across restarts.
+        # Two INDEPENDENT knobs (verified in tools/environments/docker.py):
+        #   • container_persistent → persistent_filesystem: only controls whether
+        #     /workspace + /root are bind-mounted (persisted) or tmpfs (ephemeral).
+        #     It does NOT govern the container lifecycle. We use tmpfs (false); the
+        #     vault is bind-mounted explicitly via docker_volumes regardless.
+        #   • docker_persist_across_processes (default TRUE) → the real one: when
+        #     true the agent keeps ONE `sleep infinity` container and REUSES it
+        #     across Hermes processes/restarts by label, doing `podman start` on the
+        #     stale one — which fails `exit 125` after a mid-drain SIGKILL corrupts
+        #     it (the recurring "execute_code → Docker version failed" wedge). This
+        #     is the persistent container the plan set out to remove. Setting it
+        #     false makes each agent process create its own container and stop+rm it
+        #     on exit (docker.py:1236) — no cross-restart reuse, so the corruption
+        #     vector is gone. Within a process the container is still reused for all
+        #     execs (that was never the problem).
         container_persistent = false;
+        docker_persist_across_processes = false;
         docker_image = "nikolaik/python-nodejs:python3.11-nodejs20";
         docker_volumes = [
           "${vaultPath}:${vaultPath}"
