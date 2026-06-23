@@ -171,6 +171,17 @@
   podmanPauseGuard = pkgs.writeShellScript "hermes-podman-pause-guard" ''
     set -u
     uid=$(${pkgs.coreutils}/bin/id -u)
+    # (0) Ensure the pinned runroot's libpod tmp subtree exists. systemd recreates a
+    #     BARE ${podmanRunRoot} on each start (RuntimeDirectoryPreserve defaults to
+    #     "no"), but podman — with XDG_RUNTIME_DIR pinned here — needs
+    #     $XDG/libpod/tmp/ to pre-exist to set up its per-user PAUSE PROCESS. It does
+    #     NOT reliably create that subtree itself, failing with "unable to create a
+    #     new pause process: ... open ${podmanRunRoot}/libpod/tmp/pause.pid: no such
+    #     file or directory". The pause process is per-user (not per-container), so
+    #     container_persistent=false does not touch this path. Verified on-host:
+    #     pre-creating the subtree fixes the wedge; without it every podman run exits
+    #     125 a minute into a stable instance.
+    ${pkgs.coreutils}/bin/mkdir -p "${podmanRunRoot}/libpod/tmp"
     # (1) Reap orphan helpers left by a prior instance (the agent is not running yet,
     #     so any of these owned by this user are stale and safe to kill).
     for proc in conmon pasta podman-init catatonit; do
@@ -606,7 +617,7 @@ in {
       # conmon/pasta/podman-init — the root cause the ExecStartPre guard above mops up.
       # Give the drain room (>= 180s + margin) so shutdowns are clean and no orphans
       # are created in the first place. mkForce overrides the module's 90s.
-      TimeoutStopSec = lib.mkForce 90;
+      TimeoutStopSec = lib.mkForce 210;
     };
   };
 

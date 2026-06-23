@@ -311,3 +311,52 @@ From reviewing this plan against the live `configuration.nix`:
   bind-mounted at the *same* path, so the switch needs no path translation; the `git commit`
   flow uses `~/.gitconfig` as `hermes` and works under `local`; the `.env` exposure is exactly
   the four secrets in `environmentFiles`; the Forgejo key is *not* in `.env`.
+
+## 12. Ephemeral-podman experiment: result (2026-06-23)
+
+Deployed `container_persistent = false` + the `RuntimeDirectoryPreserve` removal (§10) and
+restarted/redeployed several times. **It wedged — but on a NEW failure variant I introduced,
+not the persistent-container one.** Findings, all reproduced on-host (`amadeus@192.168.2.155`):
+
+- **Symptom:** every `podman run` exits **125** with
+  `unable to create a new pause process: ... open /run/hermes-podman/libpod/tmp/pause.pid:
+  no such file or directory`. `execute_code`/`terminal` → "the Docker sandbox isn't working."
+  It hit **63 s into a clean instance** (`NRestarts=0`), so it was NOT a restart-storm
+  artifact — it's deterministic.
+
+- **Root cause (a regression from §10):** the service pins
+  `environment.XDG_RUNTIME_DIR = /run/hermes-podman`, so podman places its **per-user pause
+  process** state at `$XDG/libpod/tmp/pause.pid`. That subtree used to survive across restarts
+  via `RuntimeDirectoryPreserve = "yes"`; **removing it** made systemd wipe the runroot to a
+  *bare* dir on every start, and podman does **not** reliably create `libpod/tmp` itself →
+  pause-process setup fails. The pause process is **per-user, not per-container**, so
+  `container_persistent` never touched this path — which is exactly why ephemeral didn't help.
+
+- **Isolation (clean repros):** `podman run` WITH `XDG=/run/hermes-podman` → fails;
+  WITHOUT XDG → works; WITH XDG **and** a pre-created `libpod/tmp` → works. So the missing
+  subtree is the whole story.
+  - Rejected "just drop the XDG pin": it only worked because `loginctl` shows `Linger = yes`
+    and `/run/user/995` still exists on the box (contradicting the config's stated linger-off
+    intent), so podman silently fell back to the logind dir. That's the exact logind coupling
+    the XDG pin was added to remove — fragile, don't rely on it.
+
+- **Fix applied + verified (kept ephemeral):** added `mkdir -p /run/hermes-podman/libpod/tmp`
+  to the `podmanPauseGuard` ExecStartPre. Keeps BOTH the self-cleaning runroot (Preserve=no:
+  no stale `pause.pid` can survive a restart) AND the XDG pin (no logind dependency). Post-
+  deploy and post-`systemctl restart`, podman runs clean with the service XDG; subtree is
+  recreated fresh on each (wiped) start. Agent `active`.
+
+- **Meta-conclusion (the reason this plan exists):** merely *testing* ephemeral surfaced a
+  THIRD distinct rootless-podman failure mode (after stale `pause.pid` and runroot-DB
+  mismatch), all from the same root — rootless podman's per-user runtime/pause-process state +
+  the elaborate pinning needed to make it deterministic. Ephemeral containers are orthogonal
+  to that class and don't fix it. **Recommendation:** run the now-working ephemeral config for
+  a while to confirm the persistent-container wedge is gone, but treat this as further evidence
+  for migrating off rootless podman entirely — `local` (this plan) or the `ssh`→localhost
+  option (§9), neither of which has a per-user pause process or a runroot to pin.
+
+- **Unrelated tension noticed:** `serviceConfig.TimeoutStopSec` is committed at `90` (commit
+  `b46ca7e` "timeout back to 90s") while the inline comment still argues for `>=180+margin`.
+  At 90 s systemd SIGKILLs the agent mid-drain (drain is up to 180 s), which is the documented
+  orphan-creating behavior. Left as-is (deliberate commit) but flagged — the comment is now
+  misleading and should be reconciled with whatever the intended value is.
