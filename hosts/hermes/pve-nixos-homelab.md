@@ -146,3 +146,21 @@ SSH key, which are not mounted). This is the minimal way to give the agent real
 
 - `just fmt` (alejandra) on changed Nix.
 - `just colmena-build-host hermes` (or `nix flake check`) to catch eval/build errors.
+
+## Post-deploy findings (2026-06-23)
+
+Deployed and verified on hermes. All wiring correct (repo cloned on `main`, sync
+units active, `/nix` mounted, `nix store ping` → `Store URL: daemon`). One bug
+surfaced when the agent actually used it:
+
+- **`nix: command not found` in the agent.** Hermes runs terminal commands via a
+  **login shell**; the nikolaik image's `/etc/profile` hard-resets `PATH`, wiping
+  `docker_env.PATH` (which only survives *non-login* shells). The `/nix` mount and
+  `NIX_*` env were fine — only `PATH` was lost.
+  **Fix:** bind-mount `/etc/profile.d/hermes-nix.sh` (`nixProfileScript`) re-adding
+  `${pkgs.nix}/bin` to `PATH`; `/etc/profile` sources `/etc/profile.d/*.sh` after
+  the reset (verified in-image it survives `bash -lc`).
+- Added the `homelab-config-repo` Hermes skill
+  (`hosts/hermes/skills/development/homelab-config-repo/SKILL.md`) documenting the
+  feature-branch → validate (`nix develop -c just fmt`/`nixos-check`) → commit
+  (no push) workflow. The repo's devShell provides `just`+`alejandra` (flake.nix).
