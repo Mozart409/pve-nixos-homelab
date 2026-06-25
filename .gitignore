@@ -63,3 +63,14 @@ result
 .bashrc
 .claude/
 
+# Shell/editor dotfiles injected into the working dir by the agent harness
+.gitconfig
+.gitmodules
+.idea
+.mcp.json
+.profile
+.ripgreprc
+.vscode
+.zprofile
+.zshrc
+
