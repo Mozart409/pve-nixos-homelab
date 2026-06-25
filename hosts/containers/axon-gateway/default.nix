@@ -37,6 +37,12 @@
     transport = "http"
     enabled = true
 
+    [[backends]]
+    name = "pbs"
+    url = "https://pbs-mcp.homelab.local/mcp"
+    transport = "http"
+    enabled = true
+
     # Example of a second backend — copy this block per MCP server you add.
     # [[backends]]
     # name = "secure-api"
