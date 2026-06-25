@@ -627,12 +627,20 @@ in {
           rejected anyway). Work one FEATURE BRANCH per task, started from a fresh
           `origin/main`:
           `git -C "$HOMELAB_REPO_PATH" fetch origin && git -C "$HOMELAB_REPO_PATH" switch -c feat/<short-slug> origin/main`
-        - Edit files with your file tools, then VALIDATE before committing:
-          `cd "$HOMELAB_REPO_PATH" && nix develop -c just fmt && nix develop -c just nixos-check`
-          (`nix` is available in your sandbox; `nix develop` provides `just`,
-          `alejandra`, `tofu`, etc. from the repo's dev shell).
-        - Commit with a meaningful message:
-          `git -C "$HOMELAB_REPO_PATH" add -A && git -C "$HOMELAB_REPO_PATH" commit -m "<concise description>"`.
+        - Edit files with your file tools, then VALIDATE before committing.
+          First format: `cd "$HOMELAB_REPO_PATH" && nix develop -c just fmt`.
+          Then evaluate ONLY the host(s) you changed — do NOT run the full
+          `just nixos-check` / `nix flake check`: it evaluates all ~16 hosts and
+          gets OOM-killed (exit 137) on the host nix-daemon from your sandbox. A
+          scoped eval fully type-checks your change instead:
+          `nix eval ".#nixosConfigurations.<host>.config.system.build.toplevel.drvPath"`
+          (run once per edited host). A printed `/nix/store/….drv` = clean; an
+          error = fix and re-run. (`nix` is on PATH in your sandbox; `nix develop`
+          provides `just`, `alejandra`, `tofu` from the repo's dev shell.)
+        - Commit THROUGH the dev shell so the repo's pre-commit hooks (`alejandra`,
+          `keep-sorted`) are on PATH and run; a bare `git commit` fails them in the
+          sandbox. Do NOT use `--no-verify`:
+          `git -C "$HOMELAB_REPO_PATH" add -A && cd "$HOMELAB_REPO_PATH" && nix develop -c git commit -m "<concise description>"`.
         - SAVING/SHARING: a host service pushes your feature branch to Forgejo
           automatically within seconds. You do NOT push, open PRs, merge, or
           deploy — you have neither the key nor the ability. The user reviews the

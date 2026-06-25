@@ -374,12 +374,22 @@ re-adds `${pkgs.nix}/bin` to `PATH`; `/etc/profile` sources `/etc/profile.d/*.sh
 ### Agent workflow (enforced by SOUL.md)
 - Never commits to `main`; one feature branch per task, started from a fresh
   `origin/main` (`git switch -c feat/<slug> origin/main`).
-- Validates with `nix develop -c just fmt && nix develop -c just nixos-check`
-  before committing; the host pushes the branch automatically within seconds.
+- Validates with `nix develop -c just fmt`, then a **scoped per-host eval** —
+  `nix eval ".#nixosConfigurations.<host>.config.system.build.toplevel.drvPath"`
+  for each edited host — NOT the full `just nixos-check` / `nix flake check`,
+  which evaluates all ~16 hosts and gets OOM-killed (exit 137) on the host
+  nix-daemon from the sandbox. The full check stays the user's pre-merge gate.
+- Commits **through the dev shell** (`nix develop -c git commit`) so the lefthook
+  `alejandra`/`keep-sorted` pre-commit hooks resolve; a bare `git commit` fails
+  them in the sandbox (those tools aren't on the container PATH). The host pushes
+  the branch automatically within seconds.
 
 ### Deploy-time checks (cannot be validated offline)
-- In-sandbox: `nix --version` then `nix flake check` in `$HOMELAB_REPO_PATH`
-  (confirms the daemon-over-socket path works under the user namespace).
+- In-sandbox: `nix --version` then a scoped `nix eval` (see above) in
+  `$HOMELAB_REPO_PATH` — confirms the daemon-over-socket path works under the user
+  namespace. (Verified 2026-06-25 on `feat/validate-workflow`: `nix` 2.34.7,
+  `htop` change evaluated clean; the full `nix flake check` OOM-kills the `hermes`
+  config in the sandbox, which is why validation is scoped per host.)
 - Confirm `execute_code` still finds python3/node after the sandbox `PATH` change.
 - An agent commit on a `feat/*` branch should appear on Forgejo within seconds; a
   commit attempt on `main` is rejected by branch protection.
