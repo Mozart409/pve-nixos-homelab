@@ -944,6 +944,7 @@ in {
     curl
     # Vault sync / manual conflict resolution
     git
+    htop
     openssh
   ];
 }
