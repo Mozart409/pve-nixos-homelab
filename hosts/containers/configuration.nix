@@ -16,6 +16,7 @@
     ./open-webui
     ./searxng
     ./axon-gateway
+    ./pbsmcp
     # Harbor moved to dedicated VM (hosts/harbor)
   ];
 
@@ -130,6 +131,19 @@
         }
 
         reverse_proxy localhost:8091
+      '';
+    };
+
+    # pbsmcp-server (Proxmox Backup Server MCP). The container binds
+    # 127.0.0.1:8093, so Caddy is the only thing that proxies to it. Clients
+    # (and axon-gateway) connect at https://pbs-mcp.homelab.local/mcp.
+    virtualHosts."pbs-mcp.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:8093
       '';
     };
   };
