@@ -27,7 +27,11 @@
   # instruction-only (they direct the agent's existing file/terminal tools), so
   # they do NOT need to be bind-mounted into the podman sandbox — the loader
   # reads them host-side when building the prompt.
-  extraSkillsDir = ./skills;
+  #
+  # NB: `./skills` is relative to THIS file, so it resolves to
+  # hosts/hermes/skills/ — NOT the repo-root top-level skills/ directory. It
+  # imports to the matching /nix/store path (e.g. /nix/store/…-skills) at eval.
+  extraSkillsDir = ./skills; # == hosts/hermes/skills/ (relative to this file)
   # NOTE: the SSH user is "forgejo" (the built-in Forgejo SSH server's configured
   # user), NOT "git". Connecting as git@ is silently rejected by the server.
   vaultRemote = "ssh://forgejo@forgejo.homelab.local:2222/${vaultOwner}/${vaultRepoName}.git";
