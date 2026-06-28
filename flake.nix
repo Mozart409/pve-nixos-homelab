@@ -129,7 +129,6 @@
         modules = [
           disko.nixosModules.disko
           agenix.nixosModules.default
-          ./modules/nix-gc.nix
           ./hosts/${hostname}/configuration.nix
         ];
       };

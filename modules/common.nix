@@ -4,6 +4,10 @@
   pkgs,
   ...
 }: {
+  imports = [
+    ./nix-gc.nix
+  ];
+
   # Timezone configuration
   time.timeZone = "Europe/Berlin";
 
