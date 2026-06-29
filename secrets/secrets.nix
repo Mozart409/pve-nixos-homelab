@@ -44,6 +44,7 @@ in {
   "open-webui-env.age".publicKeys = [amadeus amadeusAge hostContainers];
   "axon-gateway-env.age".publicKeys = [amadeus amadeusAge hostContainers hostHermes];
   "pbsmcp-env.age".publicKeys = [amadeus amadeusAge hostContainers];
+  "dashboard-env.age".publicKeys = [amadeus amadeusAge hostContainers];
   "forgejo-db-password.age".publicKeys = [amadeus amadeusAge hostForgejo hostDatabase];
   "buildbot-db-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostDatabase];
   "buildbot-worker-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostBuildBotWorker1];

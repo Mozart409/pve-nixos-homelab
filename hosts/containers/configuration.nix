@@ -17,6 +17,7 @@
     ./searxng
     ./axon-gateway
     ./pbsmcp
+    ./homelab-dashboard
     # Harbor moved to dedicated VM (hosts/harbor)
   ];
 
@@ -144,6 +145,18 @@
         }
 
         reverse_proxy localhost:8093
+      '';
+    };
+
+    # homelab-dashboard. Binds 127.0.0.1:8084 (see ./homelab-dashboard), so
+    # Caddy is the only thing that proxies to it. Served at its own hostname.
+    virtualHosts."dashboard.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:8084
       '';
     };
   };

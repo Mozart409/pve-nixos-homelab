@@ -25,6 +25,10 @@
       url = "github:NousResearch/hermes-agent/pull/49431/head";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    homelab-dashboard = {
+      url = "github:Mozart409/homelab-dashboard";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
   };
 
@@ -38,6 +42,7 @@
     colmena,
     hamcp,
     hermes-agent,
+    homelab-dashboard,
     nixos-hardware,
   }: let
     system = "x86_64-linux";
@@ -126,6 +131,7 @@
     mkHost = hostname:
       nixpkgs.lib.nixosSystem {
         inherit system;
+        specialArgs = {inherit homelab-dashboard;};
         modules = [
           disko.nixosModules.disko
           agenix.nixosModules.default
@@ -202,6 +208,7 @@
             inherit agenix;
             inherit hamcp;
             inherit hermes-agent;
+            inherit homelab-dashboard;
             inherit nixos-hardware;
           };
         };
@@ -481,6 +488,7 @@
           cargo
           cargo-workspaces
           claude-code
+          cocogitto
           colmena.packages.${system}.colmena
           dive
           # fmt
