@@ -17,12 +17,16 @@
     settings = {
       listen_address = "127.0.0.1";
       port = 8084; # 8080 is taken by AlbyHub on this host
-      search.url = "https://searxng.homelab.local";
+      search = {
+        tyoe = "searxng";
+        url = "https://searxng.dropbear-butterfly.ts.net";
+      };
       weather = {
         latitude = 48.1374;
         longitude = 11.5755;
         location = "Munich";
       };
+      hofvarpnir.url = "https://hofvarpnir.dropbear-butterfly.ts.net";
       health_checks = [
         {
           name = "Router";
