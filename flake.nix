@@ -148,6 +148,16 @@
         unifi = mkHost "unifi";
         containers = mkHost "containers";
         minimal = mkHost "minimal";
+        mcp = nixpkgs.lib.nixosSystem {
+          inherit system;
+          specialArgs = {inherit homelab-dashboard;};
+          modules = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            hamcp.nixosModules.default
+            ./hosts/mcp_vm/configuration.nix
+          ];
+        };
         # k3s-server-1 = mkHost "k3s-server-1";
         # k3s-agent-1 = mkHost "k3s-agent-1";
         ca = mkHost "ca";
