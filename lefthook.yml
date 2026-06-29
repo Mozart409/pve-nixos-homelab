@@ -1,6 +1,5 @@
 # Refer for explanation to following link:
 # https://lefthook.dev/configuration/
-
 pre-commit:
   parallel: true
   jobs:
@@ -8,7 +7,10 @@ pre-commit:
       glob: "*.nix"
       run: alejandra {staged_files}
       stage_fixed: true
-
     - name: keep-sorted
       run: keep-sorted {staged_files}
       stage_fixed: true
+commit-msg:
+  jobs:
+    - name: cog verify
+      run: cog verify --file {1}
