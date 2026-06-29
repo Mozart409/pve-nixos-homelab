@@ -61,6 +61,11 @@ colmena-status: clear
   @echo "Checking host status..."
   colmena exec -- uptime
 
+# Report which hosts are behind the current checkout (optionally pass host names)
+drift *hosts: clear
+  @echo "Checking deployment drift..."
+  ./tools/colmena-drift.sh {{hosts}}
+
 # OpenTofu/IaC commands (run in iac/ directory)
 [working-directory: 'iac']
 iac-fmt: clear
