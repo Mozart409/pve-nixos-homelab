@@ -688,6 +688,37 @@
         }
       '';
     };
+
+    # Dedicated per-service hostnames (step-ca certs), each served at root
+    virtualHosts."loki.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:3100
+      '';
+    };
+
+    virtualHosts."tempo.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:3200
+      '';
+    };
+
+    virtualHosts."prometheus.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:9090
+      '';
+    };
   };
 
   # Allow Caddy to get Tailscale certs
