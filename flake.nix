@@ -130,9 +130,9 @@
     # Function to create a NixOS system configuration
     mkHost = hostname:
       nixpkgs.lib.nixosSystem {
-        inherit system;
         specialArgs = {inherit homelab-dashboard;};
         modules = [
+          {nixpkgs.hostPlatform = system;}
           disko.nixosModules.disko
           agenix.nixosModules.default
           ./hosts/${hostname}/configuration.nix
@@ -149,9 +149,9 @@
         containers = mkHost "containers";
         minimal = mkHost "minimal";
         mcp = nixpkgs.lib.nixosSystem {
-          inherit system;
           specialArgs = {inherit homelab-dashboard;};
           modules = [
+            {nixpkgs.hostPlatform = system;}
             disko.nixosModules.disko
             agenix.nixosModules.default
             hamcp.nixosModules.default
@@ -170,8 +170,8 @@
         # jellyfin = mkHost "jellyfin";
         # Raspberry Pi 4 (aarch64) - build with: nix build '.#nixosConfigurations.rpi4.config.system.build.sdImage'
         rpi4 = nixpkgs.lib.nixosSystem {
-          system = "aarch64-linux";
           modules = [
+            {nixpkgs.hostPlatform = "aarch64-linux";}
             nixos-hardware.nixosModules.raspberry-pi-4
             ./modules/nix-gc.nix
             ./hosts/rpi/configuration.nix
@@ -179,8 +179,8 @@
         };
         # Raspberry Pi 5 (aarch64) - build with: nix build '.#nixosConfigurations.rpi5.config.system.build.sdImage'
         rpi5 = nixpkgs.lib.nixosSystem {
-          system = "aarch64-linux";
           modules = [
+            {nixpkgs.hostPlatform = "aarch64-linux";}
             nixos-hardware.nixosModules.raspberry-pi-5
             ./modules/nix-gc.nix
             ./hosts/rpi/configuration.nix
@@ -196,8 +196,8 @@
         #   ];
         # };
         hermes = nixpkgs.lib.nixosSystem {
-          inherit system;
           modules = [
+            {nixpkgs.hostPlatform = system;}
             disko.nixosModules.disko
             agenix.nixosModules.default
             hermes-agent.nixosModules.default
