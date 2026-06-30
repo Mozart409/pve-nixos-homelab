@@ -23,7 +23,7 @@
   virtualisation.oci-containers.containers = {
     pbsmcp-server = {
       # Digest-pinned pull from the homelab Harbor (mcp-servers project).
-      image = "harbor.homelab.local/mcp-servers/pbsmcp-server@sha256:9a246dc631f3a0036253a29efb850c3a1b6afd31838aab813880fe39c423dd98";
+      image = "harbor.homelab.local/mcp-servers/pbsmcp-server@sha256:1745f86342249594de66f5d6c6e6c68483c9e1056beb10f34df6fe5ef1ce41c4";
       autoStart = true;
 
       # Container :8080 -> host 127.0.0.1:8093. Bound to loopback so it is only
