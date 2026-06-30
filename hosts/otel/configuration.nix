@@ -449,7 +449,7 @@
         job_name = "jellyfin-node";
         static_configs = [
           {
-            targets = ["192.168.2.180:9100"];
+            targets = ["192.168.2.100:9100"];
             labels = {
               instance = "homelab-jellyfin";
             };
