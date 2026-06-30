@@ -116,7 +116,11 @@
   # Firewall configuration
   networking.firewall = {
     enable = true;
-    trustedInterfaces = ["tailscale0"];
+    # podman1 = the harbor-net bridge. Without trusting it, the host firewall
+    # drops container -> 10.89.0.1:53 traffic to aardvark-dns, so harbor-core
+    # can't resolve harbor-redis/db and hangs at "initializing cache", which in
+    # turn wedges harbor-bootstrap and stalls every colmena activation.
+    trustedInterfaces = ["tailscale0" "podman1"];
     allowedTCPPorts = [
       22 # SSH
       80 # HTTP
