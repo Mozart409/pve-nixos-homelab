@@ -285,11 +285,11 @@
         "uv2nix": "uv2nix_2"
       },
       "locked": {
-        "lastModified": 1782913220,
-        "narHash": "sha256-4eQBUAvJgJgkxvHqR5ENzZPZWgdgvYcV/ZYoOtRlajc=",
+        "lastModified": 1782996672,
+        "narHash": "sha256-n82Cue/MxhnBucqu6Hpj76naldFBjAkFiRLtqZuqtf8=",
         "owner": "NousResearch",
         "repo": "hermes-agent",
-        "rev": "9be292f1e678437644396b47b3410b433ba3433f",
+        "rev": "30e947e0a05ef535e4b25a183d8bbe34fd68d1d5",
         "type": "github"
       },
       "original": {
@@ -329,11 +329,11 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1782767176,
-        "narHash": "sha256-7BsNjHj0dXPoN/suy53yuH/++SZxhLSX/6D1O0dcEj0=",
+        "lastModified": 1783005661,
+        "narHash": "sha256-74Q0gk/587Qw9wXkE04BCf5nTdNKqdQOP0aams/6YMw=",
         "owner": "Mozart409",
         "repo": "homelab-dashboard",
-        "rev": "aa0fa43a6571b579a0c50d1d1ee800fb777e19d6",
+        "rev": "12e8630360829004bfc0ab520cb4e166264acc98",
         "type": "github"
       },
       "original": {
@@ -677,11 +677,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1782184651,
-        "narHash": "sha256-4XHdXp3MRa++XiGkltJChCtdbCmSlNTwQRfWQOhqbRw=",
+        "lastModified": 1782962170,
+        "narHash": "sha256-HsaK9yDDypMB2TPxAYz0mPKtmYhgNwFQa72b3Ko6kRE=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "f59bc28dd0b89e9c0240d1b80195559fc79c2471",
+        "rev": "e3fa5cf86b93914b8f312b2a1ca14fbb139c655c",
         "type": "github"
       },
       "original": {
