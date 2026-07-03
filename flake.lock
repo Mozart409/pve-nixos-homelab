@@ -285,11 +285,11 @@
         "uv2nix": "uv2nix_2"
       },
       "locked": {
-        "lastModified": 1782996672,
-        "narHash": "sha256-n82Cue/MxhnBucqu6Hpj76naldFBjAkFiRLtqZuqtf8=",
+        "lastModified": 1783067098,
+        "narHash": "sha256-oCAM3V3tETNAJkPKnXo0QoyczjknKqOqFTHIXpr/oBM=",
         "owner": "NousResearch",
         "repo": "hermes-agent",
-        "rev": "30e947e0a05ef535e4b25a183d8bbe34fd68d1d5",
+        "rev": "1c4cc00f73f8843f642970c4f35b6aeec22dff5e",
         "type": "github"
       },
       "original": {
@@ -329,11 +329,11 @@
         "rust-overlay": "rust-overlay_2"
       },
       "locked": {
-        "lastModified": 1783005661,
-        "narHash": "sha256-74Q0gk/587Qw9wXkE04BCf5nTdNKqdQOP0aams/6YMw=",
+        "lastModified": 1783068524,
+        "narHash": "sha256-1ZlNoSO4nf4SSj3aABVNFxhCWa5tuzJR5gg5EOzRcTk=",
         "owner": "Mozart409",
         "repo": "homelab-dashboard",
-        "rev": "12e8630360829004bfc0ab520cb4e166264acc98",
+        "rev": "fd6c0a24b928bb4b87f392038845efae8ccd45cf",
         "type": "github"
       },
       "original": {
