@@ -27,6 +27,58 @@
         location = "Munich";
       };
       hofvarpnir.url = "https://hofvarpnir.dropbear-butterfly.ts.net";
+      quick_links = [
+        {
+          name = "UniFi";
+          url = "https://192.168.2.142:8443";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/ubiquiti-unifi.svg";
+        }
+        {
+          name = "Proxmox";
+          url = "https://pve-gigabyte.dropbear-butterfly.ts.net/";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/proxmox.svg";
+        }
+        {
+          name = "Open WebUI";
+          url = "https://homelab-containers.dropbear-butterfly.ts.net/";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/open-webui.svg";
+        }
+        {
+          name = "Grafana";
+          url = "https://homelab-otel.dropbear-butterfly.ts.net/grafana";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/grafana.svg";
+        }
+        {
+          name = "Prometheus";
+          url = "http://192.168.2.135:9090";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/prometheus.svg";
+        }
+        {
+          name = "Forgejo";
+          url = "https://homelab-forgejo.dropbear-butterfly.ts.net/";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/forgejo.svg";
+        }
+        {
+          name = "Harbor";
+          url = "https://homelab-harbor.dropbear-butterfly.ts.net/";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/harbor.svg";
+        }
+        {
+          name = "Jellyfin";
+          url = "https://jellyfin.dropbear-butterfly.ts.net/web/#/home";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/jellyfin.svg";
+        }
+        {
+          name = "Home Assistant";
+          url = "https://homeassistant.dropbear-butterfly.ts.net/lovelace/0";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/home-assistant.svg";
+        }
+        {
+          name = "Hofvarpnir";
+          url = "https://hofvarpnir.dropbear-butterfly.ts.net/dashboard";
+          icon = "https://raw.githubusercontent.com/Mozart409/hofvarpnir/refs/heads/main/crates/hof-web/assets/logo.png";
+        }
+      ];
       health_checks = [
         {
           name = "Router";
