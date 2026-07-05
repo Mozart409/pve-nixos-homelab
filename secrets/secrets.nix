@@ -50,4 +50,6 @@ in {
   "buildbot-db-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostDatabase];
   "buildbot-worker-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostBuildBotWorker1];
   "buildbot-webhook-secret.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster];
+  "romm-db-password.age".publicKeys = [amadeus amadeusAge hostContainers hostDatabase];
+  "romm-env.age".publicKeys = [amadeus amadeusAge hostContainers];
 }

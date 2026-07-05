@@ -47,6 +47,13 @@
     group = "postgres";
   };
 
+  # RomM database password
+  age.secrets.romm-db-password = {
+    file = ../../secrets/romm-db-password.age;
+    owner = "postgres";
+    group = "postgres";
+  };
+
   # PostgreSQL configuration
   services.postgresql = {
     enable = true;
@@ -80,7 +87,7 @@
     '';
 
     # Initial databases (names must match usernames when using ensureDBOwnership)
-    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo" "buildbot"];
+    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo" "buildbot" "romm"];
 
     # Initial users
     ensureUsers = [
@@ -98,6 +105,10 @@
       }
       {
         name = "buildbot";
+        ensureDBOwnership = true;
+      }
+      {
+        name = "romm";
         ensureDBOwnership = true;
       }
     ];
@@ -154,10 +165,27 @@
     '';
   };
 
+  # Set password for romm user after PostgreSQL creates the user
+  systemd.services.postgresql-romm-password = {
+    description = "Set RomM PostgreSQL user password";
+    after = ["postgresql-ensure-users.service" "agenix.service"];
+    requires = ["postgresql-ensure-users.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "postgres";
+    };
+    script = ''
+      PASSWORD=$(cat ${config.age.secrets.romm-db-password.path})
+      ${config.services.postgresql.package}/bin/psql -c "ALTER USER romm WITH PASSWORD '$PASSWORD';"
+    '';
+  };
+
   # Backup configuration
   services.postgresqlBackup = {
     enable = true;
-    databases = ["appdb" "terraform" "forgejo" "buildbot"];
+    databases = ["appdb" "terraform" "forgejo" "buildbot" "romm"];
     location = "/var/backup/postgresql";
     startAt = "03:00";
     compression = "zstd";
