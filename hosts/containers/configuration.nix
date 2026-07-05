@@ -176,14 +176,13 @@
     };
 
     # RomM (ROM manager). Binds 127.0.0.1:8095 (see ./romm), so Caddy is the only
-    # thing that proxies to it. RomM is a root-served SPA, so it gets its own
-    # hostname rather than a subpath. Served over Tailscale TLS so the Pocket ID
-    # OIDC callback (https://romm.dropbear-butterfly.ts.net/api/oauth/openid)
-    # resolves; requires `romm` to be a MagicDNS name for this node.
-    virtualHosts."romm.dropbear-butterfly.ts.net" = {
+    # thing that proxies to it. RomM is a root-served SPA (no URL subpath
+    # support), so it gets its own hostname. The Pocket ID OIDC callback is
+    # https://romm.homelab.local/api/oauth/openid.
+    virtualHosts."romm.homelab.local" = {
       extraConfig = ''
         tls {
-          get_certificate tailscale
+          ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
         reverse_proxy localhost:8095
