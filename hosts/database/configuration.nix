@@ -117,8 +117,11 @@
   # Set password for terraform user after PostgreSQL creates the user
   systemd.services.postgresql-terraform-password = {
     description = "Set Terraform PostgreSQL user password";
-    after = ["postgresql-ensure-users.service" "agenix.service"];
-    requires = ["postgresql-ensure-users.service"];
+    # Depends on postgresql.service, not postgresql-ensure-users.service (which
+    # does not exist in this nixpkgs); ensureUsers runs in postgresql.service's
+    # postStart, so the role exists once that unit is up.
+    after = ["postgresql.service" "agenix.service"];
+    requires = ["postgresql.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
@@ -134,8 +137,11 @@
   # Set password for forgejo user after PostgreSQL creates the user
   systemd.services.postgresql-forgejo-password = {
     description = "Set Forgejo PostgreSQL user password";
-    after = ["postgresql-ensure-users.service" "agenix.service"];
-    requires = ["postgresql-ensure-users.service"];
+    # Depends on postgresql.service, not postgresql-ensure-users.service (which
+    # does not exist in this nixpkgs); ensureUsers runs in postgresql.service's
+    # postStart, so the role exists once that unit is up.
+    after = ["postgresql.service" "agenix.service"];
+    requires = ["postgresql.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
