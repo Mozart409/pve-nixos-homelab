@@ -60,6 +60,15 @@
   age.secrets.pgadmin-pwd.file = ../../secrets/pgadmin-pwd.age;
   age.secrets.pgadmin-oauth2-secret.file = ../../secrets/pgadmin-oauth2-secret.age;
 
+  # postgres superuser password so TCP clients (pgAdmin, etc.) can authenticate
+  # over scram-sha-256 as a full DBA. The passwordless `peer` rule only covers the
+  # postgres OS user on the local unix socket, which pgAdmin cannot use.
+  age.secrets.postgres-superuser-password = {
+    file = ../../secrets/postgres-superuser-password.age;
+    owner = "postgres";
+    group = "postgres";
+  };
+
   # PostgreSQL configuration
   services.postgresql = {
     enable = true;
@@ -194,6 +203,25 @@
     script = ''
       PASSWORD=$(cat ${config.age.secrets.romm-db-password.path})
       ${config.services.postgresql.package}/bin/psql -c "ALTER USER romm WITH PASSWORD '$PASSWORD';"
+    '';
+  };
+
+  # Set the postgres superuser password from agenix. Depends on
+  # postgresql.service (role creation runs in its postStart), not the nonexistent
+  # postgresql-ensure-users.service — same gotcha as the other setters above.
+  systemd.services.postgresql-superuser-password = {
+    description = "Set postgres superuser password";
+    after = ["postgresql.service" "agenix.service"];
+    requires = ["postgresql.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "postgres";
+    };
+    script = ''
+      PASSWORD=$(cat ${config.age.secrets.postgres-superuser-password.path})
+      ${config.services.postgresql.package}/bin/psql -c "ALTER USER postgres WITH PASSWORD '$PASSWORD';"
     '';
   };
 
