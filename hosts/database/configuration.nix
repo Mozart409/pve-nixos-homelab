@@ -165,11 +165,14 @@
     '';
   };
 
-  # Set password for romm user after PostgreSQL creates the user
+  # Set password for romm user after PostgreSQL creates the user.
+  # Depends on postgresql.service (not postgresql-ensure-users.service, which
+  # does not exist in this nixpkgs — ensureUsers runs in postgresql.service's
+  # postStart, so the role exists once that unit is up).
   systemd.services.postgresql-romm-password = {
     description = "Set RomM PostgreSQL user password";
-    after = ["postgresql-ensure-users.service" "agenix.service"];
-    requires = ["postgresql-ensure-users.service"];
+    after = ["postgresql.service" "agenix.service"];
+    requires = ["postgresql.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
