@@ -19,6 +19,7 @@
     ./pbsmcp
     ./pgmcp
     ./homelab-dashboard
+    ./romm
     # Harbor moved to dedicated VM (hosts/harbor)
   ];
 
@@ -171,6 +172,21 @@
         }
 
         reverse_proxy localhost:8084
+      '';
+    };
+
+    # RomM (ROM manager). Binds 127.0.0.1:8095 (see ./romm), so Caddy is the only
+    # thing that proxies to it. RomM is a root-served SPA, so it gets its own
+    # hostname rather than a subpath. Served over Tailscale TLS so the Pocket ID
+    # OIDC callback (https://romm.dropbear-butterfly.ts.net/api/oauth/openid)
+    # resolves; requires `romm` to be a MagicDNS name for this node.
+    virtualHosts."romm.dropbear-butterfly.ts.net" = {
+      extraConfig = ''
+        tls {
+          get_certificate tailscale
+        }
+
+        reverse_proxy localhost:8095
       '';
     };
   };
