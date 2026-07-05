@@ -113,6 +113,7 @@
           ''"otel.homelab.local. A 192.168.2.135"''
           ''"pbs-mcp.homelab.local. A 192.168.2.149"''
           ''"pg-mcp.homelab.local. A 192.168.2.149"''
+          ''"pgadmin.homelab.local. A 192.168.2.134"''
           ''"prometheus.homelab.local. A 192.168.2.135"''
           ''"pve-gigabyte.local. A 192.168.2.42"''
           ''"romm.homelab.local. A 192.168.2.149"''
@@ -125,6 +126,7 @@
         local-data-ptr = [
           # keep-sorted start
           ''"192.168.2.134 database.homelab.local"''
+          ''"192.168.2.134 pgadmin.homelab.local"''
           ''"192.168.2.135 loki.homelab.local"''
           ''"192.168.2.135 otel.homelab.local"''
           ''"192.168.2.135 prometheus.homelab.local"''

@@ -30,6 +30,7 @@ in {
   "grafana-secret-key.age".publicKeys = [amadeus amadeusAge hostOtel];
   "grafana-oidc-secret.age".publicKeys = [amadeus amadeusAge hostOtel];
   "pgadmin-pwd.age".publicKeys = [amadeus amadeusAge hostDatabase];
+  "pgadmin-oauth2-secret.age".publicKeys = [amadeus amadeusAge hostDatabase];
   "terraform-state-db-password.age".publicKeys = [amadeus amadeusAge hostDatabase];
   "hermes-opencode-zen-key.age".publicKeys = [amadeus amadeusAge hostHermes];
   "hermes-api-server-key.age".publicKeys = [amadeus amadeusAge hostHermes];

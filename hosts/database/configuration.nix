@@ -54,6 +54,12 @@
     group = "postgres";
   };
 
+  # pgAdmin initial (internal fallback) admin password and Pocket-ID OAuth2 client
+  # secret. Both are consumed by the pgAdmin service below via systemd credentials
+  # (root-owned 0400 by default is fine: systemd reads them during unit setup).
+  age.secrets.pgadmin-pwd.file = ../../secrets/pgadmin-pwd.age;
+  age.secrets.pgadmin-oauth2-secret.file = ../../secrets/pgadmin-oauth2-secret.age;
+
   # PostgreSQL configuration
   services.postgresql = {
     enable = true;
@@ -267,6 +273,70 @@
     };
   };
 
+  # pgAdmin 4 - native NixOS service (no container). Binds 127.0.0.1:5050; Caddy
+  # (below) terminates step-ca TLS at pgadmin.homelab.local and reverse-proxies to
+  # it. Auth is Pocket-ID OIDC (same provider as forgejo/romm/harbor) with an
+  # internal fallback admin account (initialEmail + pgadmin-pwd).
+  services.pgadmin = {
+    enable = true;
+    port = 5050;
+    openFirewall = false;
+    initialEmail = "claude@mozart409.com";
+    initialPasswordFile = config.age.secrets.pgadmin-pwd.path;
+    minimumPasswordLength = 8;
+    settings = {
+      # Loopback only; Caddy is the sole ingress.
+      DEFAULT_SERVER = "127.0.0.1";
+      # Trust Caddy's X-Forwarded-* headers so pgAdmin builds OAuth redirect URIs
+      # as https://pgadmin.homelab.local/... not http://127.0.0.1:5050/...
+      PROXY_X_FOR_COUNT = 1;
+      PROXY_X_PROTO_COUNT = 1;
+      PROXY_X_HOST_COUNT = 1;
+      PROXY_X_PORT_COUNT = 1;
+      PROXY_X_PREFIX_COUNT = 1;
+      # OAuth2 (Pocket-ID) plus the internal admin account as a fallback.
+      AUTHENTICATION_SOURCES = ["oauth2" "internal"];
+      OAUTH2_AUTO_CREATE_USER = true;
+    };
+  };
+
+  # Inject the Pocket-ID OAuth2 client secret WITHOUT leaking it into the
+  # world-readable Nix store. This mirrors the pgadmin module's own
+  # email-password mechanism: systemd LoadCredential exposes the agenix secret
+  # under $CREDENTIALS_DIRECTORY, and the Python appended below (config_system.py
+  # is a types.lines option, so definitions concatenate) reads it at import time.
+  # OAUTH2_CONFIG lives here rather than in services.pgadmin.settings precisely so
+  # the secret never passes through a store path.
+  systemd.services.pgadmin.serviceConfig.LoadCredential = [
+    "oauth2_client_secret:${config.age.secrets.pgadmin-oauth2-secret.path}"
+  ];
+
+  environment.etc."pgadmin/config_system.py".text = ''
+    import os
+    with open(os.path.join(os.environ['CREDENTIALS_DIRECTORY'], 'oauth2_client_secret')) as _f:
+        _pgadmin_oauth2_secret = _f.read().strip()
+
+    OAUTH2_CONFIG = [
+        {
+            'OAUTH2_NAME': 'pocket-id',
+            'OAUTH2_DISPLAY_NAME': 'Pocket ID',
+            # Public OAuth client identifier (not a secret) for the pgAdmin
+            # client registered in Pocket-ID.
+            'OAUTH2_CLIENT_ID': '4c1fd86d-dd3d-4920-82a8-ce53db286579',
+            'OAUTH2_CLIENT_SECRET': _pgadmin_oauth2_secret,
+            'OAUTH2_AUTHORIZATION_URL': 'https://pocketid.dropbear-butterfly.ts.net/authorize',
+            'OAUTH2_TOKEN_URL': 'https://pocketid.dropbear-butterfly.ts.net/api/oidc/token',
+            'OAUTH2_API_BASE_URL': 'https://pocketid.dropbear-butterfly.ts.net/',
+            'OAUTH2_USERINFO_ENDPOINT': 'https://pocketid.dropbear-butterfly.ts.net/api/oidc/userinfo',
+            'OAUTH2_SERVER_METADATA_URL': 'https://pocketid.dropbear-butterfly.ts.net/.well-known/openid-configuration',
+            'OAUTH2_SCOPE': 'openid email profile',
+            'OAUTH2_USERNAME_CLAIM': 'email',
+            'OAUTH2_ICON': 'fa-key',
+            'OAUTH2_BUTTON_COLOR': '#3253a8',
+        },
+    ]
+  '';
+
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
     enable = true;
@@ -294,6 +364,17 @@
         handle {
           respond "OK" 200
         }
+      '';
+    };
+
+    # pgAdmin 4 (native service on 127.0.0.1:5050) served with a step-ca cert.
+    virtualHosts."pgadmin.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:5050
       '';
     };
   };
