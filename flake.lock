@@ -178,6 +178,28 @@
         "type": "github"
       }
     },
+    "flake-parts_2": {
+      "inputs": {
+        "nixpkgs-lib": [
+          "mozart409-nixvim",
+          "nixvim",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1782949081,
+        "narHash": "sha256-vp6Y/Grm98ESt6ceOkWiHWyZRDV3J1RID4w+6NWK9yA=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "17c9d6cdfc60c64f4ee8d306f9bc0b4ccb51481e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
     "flake-utils": {
       "inputs": {
         "systems": "systems_2"
@@ -319,6 +341,26 @@
         "type": "github"
       }
     },
+    "home-manager_2": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1783358420,
+        "narHash": "sha256-UEyBpf+XmQe8laXfDzIlo11Er7E0rKrLS8jeMnMj0Ds=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "0d33882bd46c1f9ef62276700f5e5f2bd6ff6604",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "type": "github"
+      }
+    },
     "homelab-dashboard": {
       "inputs": {
         "crane": "crane_2",
@@ -339,6 +381,27 @@
       "original": {
         "owner": "Mozart409",
         "repo": "homelab-dashboard",
+        "type": "github"
+      }
+    },
+    "mozart409-nixvim": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "nixvim": "nixvim"
+      },
+      "locked": {
+        "lastModified": 1783069343,
+        "narHash": "sha256-3Cina68obEOcrvrQx/UGwFkQKueIUnw6e05eDgzl42g=",
+        "owner": "Mozart409",
+        "repo": "mozart409-nixvim",
+        "rev": "868530a58e651bea4fb1d65b9920b82da7d63d0f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Mozart409",
+        "repo": "mozart409-nixvim",
         "type": "github"
       }
     },
@@ -528,6 +591,29 @@
         "type": "github"
       }
     },
+    "nixvim": {
+      "inputs": {
+        "flake-parts": "flake-parts_2",
+        "nixpkgs": [
+          "mozart409-nixvim",
+          "nixpkgs"
+        ],
+        "systems": "systems_6"
+      },
+      "locked": {
+        "lastModified": 1783349931,
+        "narHash": "sha256-aYE76ATiGBg7/cQ2dHASRq97WvNum4OOIPgZ8xIK0QI=",
+        "owner": "nix-community",
+        "repo": "nixvim",
+        "rev": "4fd45857deecb90d2732c87e0315daa48505515e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "nixvim",
+        "type": "github"
+      }
+    },
     "npm-lockfile-fix": {
       "inputs": {
         "nixpkgs": [
@@ -645,7 +731,9 @@
         "flake-utils": "flake-utils_2",
         "hamcp": "hamcp",
         "hermes-agent": "hermes-agent",
+        "home-manager": "home-manager_2",
         "homelab-dashboard": "homelab-dashboard",
+        "mozart409-nixvim": "mozart409-nixvim",
         "nixos-anywhere": "nixos-anywhere",
         "nixos-hardware": "nixos-hardware",
         "nixpkgs": "nixpkgs_4"
@@ -777,6 +865,22 @@
       },
       "original": {
         "owner": "nix-systems",
+        "repo": "default",
+        "type": "github"
+      }
+    },
+    "systems_6": {
+      "locked": {
+        "lastModified": 1774449309,
+        "narHash": "sha256-brhZ8DmuGtzkCYHJg4HEd602amKm89Y9ytsFZ5uWD1w=",
+        "owner": "nix-systems",
+        "repo": "default",
+        "rev": "c29398b59d2048c4ab79345812849c9bd15e9150",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-systems",
+        "ref": "future-26.11",
         "repo": "default",
         "type": "github"
       }
