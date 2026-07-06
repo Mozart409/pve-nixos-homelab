@@ -29,6 +29,14 @@
       url = "github:Mozart409/homelab-dashboard";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    mozart409-nixvim = {
+      url = "github:Mozart409/mozart409-nixvim";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
   };
 
@@ -43,6 +51,8 @@
     hamcp,
     hermes-agent,
     homelab-dashboard,
+    home-manager,
+    mozart409-nixvim,
     nixos-hardware,
   }: let
     system = "x86_64-linux";
@@ -221,6 +231,21 @@
             inherit homelab-dashboard;
             inherit nixos-hardware;
           };
+        };
+
+        # Applied to every node in the hive
+        defaults = {
+          imports = [
+            home-manager.nixosModules.home-manager
+            {
+              home-manager.useGlobalPkgs = true;
+              home-manager.useUserPackages = true;
+              home-manager.users.amadeus = {
+                imports = [mozart409-nixvim.homeModules.default];
+                home.stateVersion = "25.05";
+              };
+            }
+          ];
         };
 
         # Host definitions
