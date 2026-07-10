@@ -738,6 +738,7 @@
       3100 # Loki HTTP
       3200 # Tempo HTTP
       8888 # Collector metrics
+      9090 # Prometheus HTTP (queried by prommcp on the mcp host)
     ];
   };
 
