@@ -27,6 +27,8 @@ in {
   "harbor-oidc-client-id.age".publicKeys = [amadeus amadeusAge hostHarbor];
   "harbor-oidc-client-secret.age".publicKeys = [amadeus amadeusAge hostHarbor];
   "homeassistant-token.age".publicKeys = [amadeus amadeusAge hostMcp];
+  "pbs-mcp-token.age".publicKeys = [amadeus amadeusAge hostMcp];
+  "pg-mcp-database-url.age".publicKeys = [amadeus amadeusAge hostMcp];
   "grafana-secret-key.age".publicKeys = [amadeus amadeusAge hostOtel];
   "grafana-oidc-secret.age".publicKeys = [amadeus amadeusAge hostOtel];
   "pgadmin-pwd.age".publicKeys = [amadeus amadeusAge hostDatabase];
@@ -45,8 +47,6 @@ in {
   "attic-server-token.age".publicKeys = [amadeus amadeusAge hostCache];
   "open-webui-env.age".publicKeys = [amadeus amadeusAge hostContainers];
   "axon-gateway-env.age".publicKeys = [amadeus amadeusAge hostContainers hostHermes];
-  "pbsmcp-env.age".publicKeys = [amadeus amadeusAge hostContainers];
-  "pgmcp-env.age".publicKeys = [amadeus amadeusAge hostContainers];
   "dashboard-env.age".publicKeys = [amadeus amadeusAge hostContainers];
   "forgejo-db-password.age".publicKeys = [amadeus amadeusAge hostForgejo hostDatabase];
   "buildbot-db-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostDatabase];
