@@ -17,8 +17,10 @@
       url = "github:zhaofengli/colmena";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    hamcp = {
-      url = "github:mozart409/hamcp-rs";
+    # MCP-server monorepo (pbs/pg/prom/loki/ha). Lives on the homelab Forgejo;
+    # referenced via the local checkout until pushing from agents is unblocked.
+    homelab-mcp = {
+      url = "git+file:///home/amadeus/code/rust/homelab-mcp-servers";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     hermes-agent = {
@@ -48,7 +50,7 @@
     agenix,
     disko,
     colmena,
-    hamcp,
+    homelab-mcp,
     hermes-agent,
     homelab-dashboard,
     home-manager,
@@ -159,12 +161,12 @@
         containers = mkHost "containers";
         minimal = mkHost "minimal";
         mcp = nixpkgs.lib.nixosSystem {
-          specialArgs = {inherit homelab-dashboard;};
+          specialArgs = {inherit homelab-dashboard homelab-mcp;};
           modules = [
             {nixpkgs.hostPlatform = system;}
             disko.nixosModules.disko
             agenix.nixosModules.default
-            hamcp.nixosModules.default
+            homelab-mcp.nixosModules.default
             ./hosts/mcp_vm/configuration.nix
           ];
         };
@@ -226,7 +228,7 @@
           specialArgs = {
             inherit disko;
             inherit agenix;
-            inherit hamcp;
+            inherit homelab-mcp;
             inherit hermes-agent;
             inherit homelab-dashboard;
             inherit nixos-hardware;
@@ -328,7 +330,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            hamcp.nixosModules.default
+            homelab-mcp.nixosModules.default
             ./hosts/mcp_vm/configuration.nix
           ];
         };
@@ -513,44 +515,46 @@
       };
     in {
       devShells.default = pkgs.mkShell {
-        buildInputs = with pkgs; [
-          # keep-sorted start
+        buildInputs = with pkgs;
+          [
+            # keep-sorted start
 
-          agenix.packages.${system}.default
-          alejandra
-          bacon
-          # rust
-          cargo
-          cargo-workspaces
-          claude-code
-          cocogitto
-          colmena.packages.${system}.colmena
-          dive
-          # fmt
-          dprint
-          just
-          keep-sorted
-          # check for security issues
-          kics
-          lazydocker
-          lefthook
-          nixos-anywhere.packages.${system}.default
-          #ai
-          opencode
-          opentofu
-          podman
-          podman-compose
-          podman-tui
-          rainfrog
-          rust-analyzer
-          rustc
-          # k8s
-          timoni
-          # IaC
-          tofu-ls
+            agenix.packages.${system}.default
+            alejandra
+            bacon
+            # rust
+            cargo
+            cargo-workspaces
+            claude-code
+            cocogitto
+            colmena.packages.${system}.colmena
+            dive
+            # fmt
+            dprint
+            just
+            keep-sorted
+            # check for security issues
+            kics
+            lazydocker
+            lefthook
+            nixos-anywhere.packages.${system}.default
+            #ai
+            opencode
+            opentofu
+            podman-compose
+            podman-tui
+            rainfrog
+            rust-analyzer
+            rustc
+            # k8s
+            timoni
+            # IaC
+            tofu-ls
 
-          # keep-sorted end
-        ];
+            # keep-sorted end
+          ]
+          # Linux-only in nixpkgs (no darwin client package anymore)
+          ++ pkgs.lib.optionals pkgs.stdenv.isLinux [pkgs.podman];
         shellHook = ''
           lefthook install
         '';
