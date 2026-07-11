@@ -86,11 +86,7 @@
         }
         {
           name = "step-ca";
-          url = "https://ca.homelab.local:8443";
-        }
-        {
-          name = "DNS";
-          url = "http://192.168.2.145";
+          url = "https://ca.homelab.local:8443/health";
         }
         {
           name = "Forgejo";
@@ -114,7 +110,7 @@
         }
         {
           name = "Grafana";
-          url = "http://192.168.2.135:3000";
+          url = "https://homelab-otel.dropbear-butterfly.ts.net/grafana/api/health";
         }
         {
           name = "Nix Cache";
@@ -127,7 +123,11 @@
         }
         {
           name = "Hermes";
-          url = "https://hermes.homelab.local";
+          url = "https://hermes.homelab.local/health";
+        }
+        {
+          name = "RomM";
+          url = "https://romm.homelab.local";
         }
       ];
     };
