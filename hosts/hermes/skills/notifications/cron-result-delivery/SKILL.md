@@ -28,19 +28,27 @@ phone.
 
 ## Channel 1 — Vault Inbox note (always do this)
 
-Append a timestamped entry to `Inbox.md` at the root of `OBSIDIAN_VAULT_PATH`
-(fall back to `/var/lib/hermes/workspace/vault` if unset).
+**Path layout (important):** `OBSIDIAN_VAULT_PATH`
+(`/var/lib/hermes/workspace/vault`) is the **git repo root** — it holds
+`flake.nix`, not notes. The actual Obsidian notes (including `Inbox.md`) live one
+level down in the **`vault/` subdirectory**. So:
+- Note file: `$OBSIDIAN_VAULT_PATH/vault/Inbox.md`
+- Git repo (where you commit): `$OBSIDIAN_VAULT_PATH`
 
-1. `read_file` `<vault_path>/Inbox.md`. If it does not exist, create it with a
-   `# Inbox` heading.
+Steps:
+
+1. `read_file` `$OBSIDIAN_VAULT_PATH/vault/Inbox.md`. If it does not exist,
+   create it with a `# Inbox` heading.
 2. Append a section, newest at the **top** under the heading:
    ```
    ## YYYY-MM-DD HH:MM — <one-line job summary>
 
    <the full result: what the job did, findings, any numbers, next actions>
    ```
-3. Commit in the vault (a host service pushes it automatically within seconds —
-   **never** `git push`/`pull` yourself):
+   Use the `write_file`/`patch` file tools (they handle the path cleanly); do not
+   rely on `echo >>` via terminal.
+3. Commit at the repo root (a host service pushes it automatically within
+   seconds — **never** `git push`/`pull` yourself):
    ```
    cd "$OBSIDIAN_VAULT_PATH" && git add -A && git commit -m "docs(vault): cron result — <short summary>"
    ```
