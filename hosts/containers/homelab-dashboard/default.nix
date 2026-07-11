@@ -129,6 +129,10 @@
           name = "RomM";
           url = "https://romm.homelab.local";
         }
+        {
+          name = "Axon Gateway";
+          url = "https://axon.homelab.local/health";
+        }
       ];
     };
 
