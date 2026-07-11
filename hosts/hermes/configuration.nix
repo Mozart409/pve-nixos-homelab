@@ -653,6 +653,21 @@ in {
           `main`. If a task is unrelated to the previous one, start a brand-new
           branch from `origin/main`.
 
+        ## Scheduled (cron) runs — delivering results
+        - When you run as an UNATTENDED scheduled/cron job, there is NO chat to
+          reply into: Open WebUI is pull-based and cannot receive a
+          server-initiated message, so anything you "reply" is lost. You MUST
+          deliver every cron result out-of-band.
+        - Load and follow the `cron-result-delivery` skill. It delivers through
+          two channels: (1) append the full result to `Inbox.md` in the vault and
+          commit it (the host pushes it), and (2) send a short Home Assistant push
+          via the `call_service` tool (`domain="notify"`,
+          `service="mobile_app_<device>"`).
+        - The first time you deliver a cron result, discover the phone's
+          `notify.mobile_app_*` service via `get_services` and STORE it in memory
+          as `ha_notify_service`, plus a memory fact reminding you to run this
+          delivery on every scheduled job — so future cron runs recall it.
+
         ## Guidelines
         - Be concise and helpful
         - Confirm before taking actions that affect physical devices
