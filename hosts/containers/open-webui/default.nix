@@ -7,6 +7,27 @@
   # open-webui ships under a non-free license
   nixpkgs.config.allowUnfree = true;
 
+  # Work around a broken test suite in `frictionless`, a transitive dependency
+  # of open-webui (open-webui → sentence-transformers → phonemizer → segments →
+  # csvw → frictionless). After the 2026-07 flake upgrade its pytest suite fails
+  # (charset-detection tests assert e.g. `cp1252 == iso8859-1`, plus one
+  # network-dependent remote-loader test), which aborts the whole `containers`
+  # build. These are upstream test-environment issues, not real defects, so we
+  # skip frictionless's check phase. Revisit once nixpkgs fixes the tests.
+  nixpkgs.overlays = [
+    (final: prev: {
+      pythonPackagesExtensions =
+        prev.pythonPackagesExtensions
+        ++ [
+          (pyfinal: pyprev: {
+            frictionless = pyprev.frictionless.overridePythonAttrs (_: {
+              doCheck = false;
+            });
+          })
+        ];
+    })
+  ];
+
   # Open WebUI - LLM chat interface (external APIs only)
   # Served behind Caddy at the host root (see ../configuration.nix); the SPA's
   # build-time base path is "/", so it cannot live under a subpath.
