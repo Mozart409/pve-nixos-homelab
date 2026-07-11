@@ -47,36 +47,32 @@ Append a timestamped entry to `Inbox.md` at the root of `OBSIDIAN_VAULT_PATH`
 
 ## Channel 2 — Home Assistant push (do this when the tool is available)
 
-Send a short push via the Home Assistant **`call_service`** tool (provided by the
-`axon-gateway` / `hamcp` MCP backend).
+Send a short push via the **`hamcp_call_service`** tool. This is the Home
+Assistant `call_service` tool exposed through the `axon-gateway` MCP, which
+namespaces each backend's tools with a `hamcp_` prefix. (Verified working
+2026-07-11: this exact call delivered a push to the user's iPhone.)
 
-**First run — discover and remember the notify target.** Notify services are
-named per-device (`notify.mobile_app_<device>`) and you cannot guess the device.
-
-1. Recall the stored target: check memory for a fact named
-   `ha_notify_service`. If present, use its value and skip discovery.
-2. If absent, call `call_service` with `domain="notify"`, `service="get_service"`
-   is NOT valid — instead call the **`get_services`** tool and look under the
-   `notify` domain for a `mobile_app_*` service. Pick the user's phone.
-3. **Store it in memory** so future cron runs skip discovery: save a fact
-   `ha_notify_service` = the full service name (e.g. `notify.mobile_app_pixel_8`).
-
-**Send the notification** via `call_service`:
+**Send the notification** — call `hamcp_call_service` with:
 - `domain` = `notify`
-- `service` = the discovered service name **without** the `notify.` prefix
-  (e.g. `mobile_app_pixel_8`)
+- `service` = `mobile_app_iphone_von_amadeus`  (the user's iPhone; the `notify.`
+  prefix is dropped — `domain` supplies it)
 - `service_data` = `{ "title": "<job name>", "message": "<one-line result — see Inbox for detail>" }`
 
-Keep the push short (one line). Put the full detail in the Inbox note, not the
-push.
+Keep the push to one line. Put the full detail in the Inbox note, not the push.
+A successful call returns `isError: false` with empty `changed_states` (normal
+for `notify` — it is fire-and-forget, not a state change).
 
 **Fallbacks (in order):**
-- If no `mobile_app_*` service exists, use `domain="persistent_notification"`,
-  `service="create"`, `service_data={ "title": ..., "message": ... }` (shows in
-  the HA companion app's notifications panel).
-- If the `call_service` tool is **not available in this session at all** (MCP not
+- If `mobile_app_iphone_von_amadeus` ever fails (device renamed), call
+  `hamcp_get_services`, find the current `notify.mobile_app_*` service, use it,
+  and record the new name as a memory fact `ha_notify_service`.
+- If neither works, use `hamcp_call_service` with
+  `domain="persistent_notification"`, `service="create"`,
+  `service_data={ "title": ..., "message": ... }` (shows in the HA companion
+  app's notifications panel).
+- If `hamcp_call_service` is **not available in this session at all** (MCP not
   exposed to cron), skip Channel 2 and add a line to the Inbox entry:
-  `> ⚠️ HA push unavailable in this cron session (no call_service tool).`
+  `> ⚠️ HA push unavailable in this cron session (no hamcp_call_service tool).`
   so the user knows to wire a host-side notifier instead.
 
 ## Seed memory once (so cron runs recall this procedure)
@@ -94,7 +90,9 @@ runs:
 - **Never `git push`/`pull` in the vault** — the host sync service does that.
 - **Never** put the full result in the HA push; it is a one-line nudge. The
   Inbox note holds the detail.
-- **Do not guess** the `mobile_app_*` device name — discover it via
-  `get_services` and remember it.
-- The push service name in `call_service` drops the `notify.` prefix (`domain` is
-  `notify`, `service` is `mobile_app_<device>`).
+- The tool is `hamcp_call_service` (the `hamcp_` prefix is how axon-gateway
+  namespaces the Home Assistant backend). A bare `call_service` will not resolve.
+- The push service name drops the `notify.` prefix: `domain` is `notify`,
+  `service` is `mobile_app_iphone_von_amadeus`.
+- Only fall back to `hamcp_get_services` discovery if the known service name
+  fails; do not re-discover on every run.

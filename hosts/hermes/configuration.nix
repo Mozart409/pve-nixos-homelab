@@ -661,12 +661,10 @@ in {
         - Load and follow the `cron-result-delivery` skill. It delivers through
           two channels: (1) append the full result to `Inbox.md` in the vault and
           commit it (the host pushes it), and (2) send a short Home Assistant push
-          via the `call_service` tool (`domain="notify"`,
-          `service="mobile_app_<device>"`).
-        - The first time you deliver a cron result, discover the phone's
-          `notify.mobile_app_*` service via `get_services` and STORE it in memory
-          as `ha_notify_service`, plus a memory fact reminding you to run this
-          delivery on every scheduled job — so future cron runs recall it.
+          via the `hamcp_call_service` tool (`domain="notify"`,
+          `service="mobile_app_iphone_von_amadeus"`).
+        - Store a memory fact reminding you to run this delivery on every
+          scheduled job, so future cron runs recall it.
 
         ## Guidelines
         - Be concise and helpful
