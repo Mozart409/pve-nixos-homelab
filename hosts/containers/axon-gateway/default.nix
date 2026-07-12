@@ -73,7 +73,9 @@
   virtualisation.oci-containers.containers = {
     axon-gateway = {
       # Pin to a released tag for reproducibility — never :latest.
-      image = "ghcr.io/mozart409/axon-gateway:v0.2.0";
+      # v0.3.2 fixes the config-watcher deadlock that wedged v0.2.0 (see the
+      # --health-on-failure note below).
+      image = "ghcr.io/mozart409/axon-gateway:v0.3.2";
       autoStart = true;
 
       # Container :8080 -> host 127.0.0.1:8091. Bound to loopback so it is only
@@ -110,6 +112,14 @@
         "--health-timeout=5s"
         "--health-retries=3"
         "--health-start-period=10s"
+        # Self-heal a wedged gateway (defense-in-depth). The v0.2.0 config
+        # hot-reload could deadlock the HTTP/SSE server (every endpoint timed
+        # out, but the process stayed alive so systemd kept reporting the unit
+        # "running" and never restarted it — observed 2026-07-12, wedged ~7h).
+        # Fixed in the image at v0.3.2, but keep this guard: "kill" makes podman
+        # terminate the container once it goes unhealthy; the unit's Restart
+        # policy then brings it back, instead of it sitting dead indefinitely.
+        "--health-on-failure=kill"
         # Give in-flight MCP sessions time to drain on stop.
         "--stop-timeout=30"
       ];
