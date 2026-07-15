@@ -567,9 +567,9 @@ resource "proxmox_virtual_environment_vm" "hermes_vm" {
     timeout = "60s"
   }
 
-  started = false
+  started = true
 
-  on_boot = false
+  on_boot = true
 }
 
 # Fleet (osquery management) VM
@@ -831,7 +831,7 @@ resource "proxmox_virtual_environment_vm" "buildbot_master_vm" {
     timeout = "60s"
   }
 
-  started = true
+  started = false
 
   on_boot = true
 }
@@ -896,7 +896,7 @@ resource "proxmox_virtual_environment_vm" "buildbot_worker_1_vm" {
     timeout = "60s"
   }
 
-  started = true
+  started = false
 
   on_boot = true
 }
