@@ -123,10 +123,10 @@
         local = "192.168.2.179";
         tailscale = "homelab-buildbot-worker-1";
       };
-      # jellyfin = {
-      #   local = "192.168.2.180";
-      #   tailscale = "homelab-jellyfin";
-      # };
+      jellyfin = {
+        local = "192.168.2.180";
+        tailscale = "homelab-jellyfin";
+      };
       # Raspberry Pi hosts (update IP after first boot)
       "rpi4-1" = {
         local = "192.168.2.170";
@@ -179,7 +179,7 @@
         forgejo = mkHost "forgejo";
         buildbot-master = mkHost "buildbot-master";
         buildbot-worker-1 = mkHost "buildbot-worker-1";
-        # jellyfin = mkHost "jellyfin";
+        jellyfin = mkHost "jellyfin";
         # Raspberry Pi 4 (aarch64) - build with: nix build '.#nixosConfigurations.rpi4.config.system.build.sdImage'
         rpi4 = nixpkgs.lib.nixosSystem {
           modules = [
@@ -476,19 +476,19 @@
           ];
         };
 
-        # jellyfin = {
-        #   deployment = {
-        #     targetHost = targetHost "jellyfin";
-        #     targetUser = "amadeus";
-        #     buildOnTarget = false;
-        #     tags = ["media" "jellyfin"];
-        #   };
-        #   imports = [
-        #     disko.nixosModules.disko
-        #     agenix.nixosModules.default
-        #     ./hosts/jellyfin/configuration.nix
-        #   ];
-        # };
+        jellyfin = {
+          deployment = {
+            targetHost = targetHost "jellyfin";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["media" "jellyfin"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/jellyfin/configuration.nix
+          ];
+        };
 
         # Raspberry Pi 4 - builds on target (uses aarch64 binary cache)
         # "rpi4-1" = {

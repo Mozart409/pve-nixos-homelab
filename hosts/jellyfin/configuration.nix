@@ -6,9 +6,12 @@
 }: {
   imports = [
     ../../modules/common.nix
-    ../../modules/disko-config.nix
+    # Dedicated disko layout: btrfs OS disk + optimized ZFS media pool.
+    ../../modules/disko-jellyfin.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
+    # Declaratively pinned SSO/OIDC plugin (Pocket ID auth).
+    ./sso-plugin.nix
   ];
 
   networking.hostName = "homelab-jellyfin";
@@ -30,20 +33,9 @@
   boot.zfs.forceImportRoot = false;
   networking.hostId = "a8c0e180"; # Required for ZFS - unique 8-char hex
 
-  # ZFS media pool mount
-  # Dataset created on Proxmox host with:
-  #   zfs create -o recordsize=1M -o compression=lz4 -o atime=off \
-  #     -o xattr=sa -o acltype=posixacl -o primarycache=metadata \
-  #     zfs_pool/media
-  # Then passed to VM as virtio disk or NFS mount
-  fileSystems."/media" = {
-    device = "mediapool/media";
-    fsType = "zfs";
-    options = [
-      "zfsutil"
-      "X-mount.mkdir"
-    ];
-  };
+  # The mediapool ZFS pool and its /media dataset are created and mounted
+  # declaratively by modules/disko-jellyfin.nix (recordsize=1M, lz4, atime=off,
+  # xattr=sa, primarycache=metadata). No manual fileSystems entry needed.
 
   # ZFS kernel tuning for media streaming workloads
   boot.kernelParams = [
