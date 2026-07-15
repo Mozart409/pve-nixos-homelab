@@ -328,6 +328,96 @@ https://containers.homelab.local/oauth/oidc/callback
 No Open WebUI restart needed — retry login immediately. The Nix config is correct; this is
 purely the new 0.9.6 behavior surfacing the second origin.
 
+### Multi-Disk VMs: Pin Disko Devices by `/dev/disk/by-id`, Never `/dev/sdX`
+
+On a Proxmox VM with more than one disk, Linux `/dev/sdX` names follow disk
+**enumeration order, which is not stable** across reboots or inside the
+nixos-anywhere installer. On `jellyfin` (scsi0 = 32 GB OS, scsi1 = 768 GB media)
+the names flipped between `sda`/`sdb` from one boot to the next — so hardcoding
+`device = "/dev/sda"` is a coin-flip that can partition the wrong disk or build a
+ZFS pool on the wrong device.
+
+- **WRONG:** `device = lib.mkDefault "/dev/sda";`
+- **CORRECT** (stable; encodes the Proxmox scsi index):
+  ```nix
+  device = lib.mkDefault "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi0"; # OS   (scsi0)
+  device = lib.mkDefault "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1"; # data (scsi1)
+  ```
+
+Get the exact IDs from the running host with `ls -l /dev/disk/by-id/`. Changing
+`device` on an already-installed host does **not** repartition — disko generates
+runtime mounts by `/dev/disk/by-partlabel/*` and by zpool name, so a later
+colmena apply is a no-op for disks. See `modules/disko-jellyfin.nix`.
+
+### Hosts With Extra Disks / a Static IP: Deploy `nixos-anywhere .#<host>`, Not `deploy-minimal` + colmena
+
+The usual flow (`iac-apply` → `deploy-minimal <ip>` → `colmena-apply-host`) only
+works when the host's disk layout matches the shared `minimal` config (single OS
+disk). Two traps for a host like `jellyfin`:
+
+1. **Disko only runs during nixos-anywhere, never during `colmena apply`.**
+   `deploy-minimal` partitions the **`minimal`** layout (OS disk only). A ZFS
+   pool declared in the host's own disko module (e.g. `mediapool` in
+   `disko-jellyfin.nix`) is therefore **never created**, and the host's `/media`
+   mount fails on the colmena deploy.
+2. **`minimal` uses `useDHCP = true`.** After `deploy-minimal`, a host that will
+   later hold a static IP sits on a **DHCP lease**, not its final address, so
+   `colmena-apply-host` (which targets the static IP from `hostAddrs`) can't
+   reach it. (On jellyfin the DHCP lease was even a *different* host's static IP.)
+
+**Fix:** for any host with extra disks or a disko layout beyond the OS disk,
+deploy the full config directly so disko builds every disk and the static IP
+lands in one shot:
+```bash
+ssh <current-dhcp-ip> lsblk        # verify disk targeting first (pin by-id, above)
+just deploy <host> <current-dhcp-ip>   # nixos-anywhere --flake .#<host>
+# host reboots onto its static IP; then add the home-manager/nixvim layer:
+just colmena-apply-host <host>
+```
+
+### Reprovisioned Host → agenix "no identity matched any of the recipients"
+
+nixos-anywhere generates a **fresh SSH host key** on every (re)install, so any
+agenix secret the host consumes must list that new key as a recipient or
+activation fails:
+```
+age: error: no identity matched any of the recipients
+Activation script snippet 'agenixInstall' failed (1)
+```
+
+**Fix:** add the new host key to `secrets/secrets.nix` and re-key:
+```bash
+just get-host-key <ip>          # or: ssh-keyscan -t ed25519 <ip>
+# add `hostX = "ssh-ed25519 ...";` and include it in the relevant publicKeys
+just reencrypt                  # agenix -r: re-encrypts every secret to current recipients
+```
+Every host runs Tailscale, so a new host almost always needs adding to the
+`users` list (recipients of `tailscale-auth-key.age`).
+
+### Jellyfin SSO (OIDC) Behind Caddy: `redirect_uri` Comes Out `http` → "Invalid callback URL"
+
+Caddy terminates TLS and reverse-proxies to Jellyfin over plain HTTP on
+`localhost:8096`, so Jellyfin sees the request scheme as `http` and the SSO-Auth
+plugin builds an `http://…/sso/OID/redirect/<provider>` callback. Pocket ID (or
+any IdP) rejects it because only the `https://` callback is registered.
+
+- **Fix (plugin):** set the SSO-Auth provider's **Scheme Override = `https`**.
+- **Fix (systemic):** Jellyfin Dashboard → Networking → **Known proxies** →
+  `127.0.0.1`, `::1`, then restart Jellyfin so it honors `X-Forwarded-Proto`.
+
+More Jellyfin OIDC notes:
+- The upstream plugin (`9p4/jellyfin-plugin-sso`) is **archived**; use the
+  maintained fork `K0lin/jellyfin-plugin-sso`, pinned in
+  `hosts/jellyfin/sso-plugin.nix`. No NixOS option exists — a oneshot copies the
+  DLLs into `/var/lib/jellyfin/plugins/` before jellyfin starts (copy, not
+  symlink, so Jellyfin can rewrite `meta.json`). The plugin's `targetAbi` must
+  match `services.jellyfin.package.version`.
+- The **OpenID Endpoint** is fetched **server-side by the VM**; verify the VM can
+  resolve/reach it (`curl …/.well-known/openid-configuration`) — MagicDNS
+  `*.ts.net` names don't always resolve between homelab VMs.
+- Plugin/OIDC settings, Known-proxies, and login-page branding live in Jellyfin's
+  **mutable state**, not in Nix — they must be redone after a reprovision.
+
 ## 7. Hermes Agent Access to This Repo (feature-branch dev)
 
 The Hermes agent (driven from Open WebUI) can develop changes to *this* repo
