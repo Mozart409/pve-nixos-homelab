@@ -1,10 +1,13 @@
 {lib, ...}: {
   disko.devices = {
     disk = {
-      # OS disk (scsi0 -> /dev/sda): btrfs, mirrors modules/disko-config.nix
+      # OS disk (Proxmox scsi0): btrfs, mirrors modules/disko-config.nix.
+      # Pinned by stable by-id path — /dev/sdX enumeration is NOT stable across
+      # boots/installer on this VM (scsi0 and scsi1 have swapped sda/sdb before),
+      # so hardcoding sda/sdb risks disko wiping the wrong disk.
       main = {
         type = "disk";
-        device = lib.mkDefault "/dev/sda";
+        device = lib.mkDefault "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi0";
         content = {
           type = "gpt";
           partitions = {
@@ -57,12 +60,12 @@
         };
       };
 
-      # Media disk (scsi1 -> /dev/sdb): whole disk handed to the ZFS media pool.
-      # This is the raw virtio disk the (commented) Jellyfin VM in iac/main.tf
-      # attaches as scsi1.
+      # Media disk (Proxmox scsi1): whole disk handed to the ZFS media pool.
+      # This is the raw 768 GB virtio disk the Jellyfin VM in iac/main.tf
+      # attaches as scsi1. Pinned by-id for the same stability reason as above.
       media = {
         type = "disk";
-        device = lib.mkDefault "/dev/sdb";
+        device = lib.mkDefault "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi1";
         content = {
           type = "gpt";
           partitions = {
