@@ -22,16 +22,20 @@ group = "internal"
 tags = ["internal", "search"]
 
 [endpoints.hofvarpnir]
-addr = "https://hofvarpnir.dropbear-butterfly.ts.net/"
+addr = "https://hofvarpnir.homelab.local/"
 description = "Hofvarpnir"
 group = "internal"
 tags = ["internal", "media"]
+# step-ca cert; uptime-forge (rustls/webpki-roots) does not trust step-ca.
+skip_tls_verification = true
 
 [endpoints.jellyfin]
-addr = "https://jellyfin.dropbear-butterfly.ts.net"
+addr = "https://jellyfin.homelab.local"
 description = "Jellyfin Media Server"
 group = "internal"
 tags = ["internal", "media"]
+# step-ca cert; uptime-forge (rustls/webpki-roots) does not trust step-ca.
+skip_tls_verification = true
 
 [endpoints.pve-gigabyte]
 addr = "https://pve-gigabyte.dropbear-butterfly.ts.net"

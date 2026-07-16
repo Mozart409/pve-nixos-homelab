@@ -26,7 +26,7 @@
         longitude = 11.5755;
         location = "Munich";
       };
-      hofvarpnir.url = "https://hofvarpnir.dropbear-butterfly.ts.net";
+      hofvarpnir.url = "https://hofvarpnir.homelab.local";
       quick_links = [
         {
           name = "UniFi";
@@ -65,7 +65,7 @@
         }
         {
           name = "Jellyfin";
-          url = "https://jellyfin.dropbear-butterfly.ts.net/web/#/home";
+          url = "https://jellyfin.homelab.local/web/#/home";
           icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/jellyfin.svg";
         }
         {
@@ -75,7 +75,7 @@
         }
         {
           name = "Hofvarpnir";
-          url = "https://hofvarpnir.dropbear-butterfly.ts.net/dashboard";
+          url = "https://hofvarpnir.homelab.local/dashboard";
           icon = "https://raw.githubusercontent.com/Mozart409/hofvarpnir/refs/heads/main/crates/hof-web/assets/logo.png";
         }
       ];
