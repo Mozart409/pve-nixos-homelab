@@ -122,6 +122,34 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
 4.  **Formatting**:
     -   Always run `just fmt` before finishing a task involving Nix files.
 
+5.  **Post-Deployment Checklist** (after `colmena apply`):
+    -   **Confirm activation on every node.** Each host must report `Activation
+        successful`. A partial apply is common — e.g. the ssh-agent refuses to
+        sign mid-push (`agent refused operation`) after the first few hosts, so
+        some activate and the rest fail at "Push failed". Fix the agent and
+        re-run; already-done hosts are no-ops.
+    -   **Check for drift:** `just colmena-diff` should come back empty.
+    -   **Restart services `colmena apply` does NOT bounce** (config written but
+        not reloaded):
+        -   `hermes` — `sudo systemctl restart hermes-agent` after SOUL.md /
+            skill / `config.yaml` changes, and after any axon outage (it parks
+            the axon-gateway MCP and won't auto-recover).
+        -   `containers` — `sudo systemctl restart podman-axon-gateway` after
+            editing axon-gateway `config.toml` backends.
+        -   `caddy` (any host) — restart if newly-added vhosts leave certs stuck
+            at HTTP 000 (step-ca ACME `badNonce` storm).
+    -   **After a big flake update / package upgrade** (`chore(deps): …`, which
+        bumps many packages at once): a green build does NOT mean runtime config
+        survived. Version bumps silently break external integrations — e.g. Open
+        WebUI 0.9.6 changed OAuth callback derivation (re-register Pocket ID
+        callbacks), Jellyfin resets Known-proxies/SSO. Skim the upgraded package
+        list and re-verify every auth / reverse-proxy / OIDC flow for services
+        that talk to something external.
+    -   **Smoke-test liveness with `curl`** from a host that trusts step-ca. The
+        dashboard `health_checks` URLs are a ready-made set. Expect `200`; `302`
+        (redirect to login) and `406` (MCP endpoints needing an `Accept` header)
+        are also healthy — `000` means down or a TLS-trust failure.
+
 ## 4. Key Technologies
 -   **NixOS**: Operating System.
 -   **Flakes**: Project structure and dependency management.
