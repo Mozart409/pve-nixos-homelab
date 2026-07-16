@@ -106,6 +106,18 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
     -   Always run `just nixos-check` after modifying Nix files.
     -   If modifying `flake.nix`, ensure `nix flake check` passes.
     -   For extensive changes, try a dry-run build (`just nixos-test <host>`).
+    -   **`just nixos-check` does NOT gate the colmena deploy.** It only checks
+        `nixosConfigurations`, which use `mkHost` — and `mkHost` omits the
+        home-manager/nixvim layer (see flake.nix). `colmenaHive` isn't a standard
+        flake output, so `nix flake check` skips it entirely (`warning: unknown
+        flake output 'colmenaHive'`). It is also mostly an *eval* gate, so
+        build-phase failures (e.g. a failing patchPhase) slip through. A green
+        `nixos-check` can therefore still fail `colmena apply` on every node.
+    -   **Before committing/deploying any change to flake inputs or the
+        home-manager/nixvim layer, build the hive:** `just colmena-build` (all
+        nodes) or `just colmena-build-host <host>` (one node is enough —
+        `home-manager-path` is shared across all nodes). This is the only gate
+        that exercises the layer `colmena apply` actually builds.
 
 4.  **Formatting**:
     -   Always run `just fmt` before finishing a task involving Nix files.
