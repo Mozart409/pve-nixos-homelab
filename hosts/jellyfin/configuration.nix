@@ -127,15 +127,20 @@
     # LAN-only: Tailscale can only cert/route this node's own name, so there is
     # no ts.net vhost — reach it over Tailscale via split-DNS to the dns host.
     # App serves /metrics + /dashboard at root, so no path stripping.
-    virtualHosts."hofvarpnir.homelab.local" = {
-      extraConfig = ''
-        tls {
-          ca https://ca.homelab.local:8443/acme/acme/directory
-        }
-
-        reverse_proxy localhost:3000
-      '';
-    };
+    #
+    # TEMPORARILY DISABLED to serialize step-ca cert issuance: after the reinstall
+    # both this and jellyfin.homelab.local needed brand-new certs at once, which
+    # triggers a step-ca ACME badNonce storm (see caddy-stepca-badnonce memory).
+    # Re-enable once jellyfin.homelab.local has obtained its cert solo.
+    # virtualHosts."hofvarpnir.homelab.local" = {
+    #   extraConfig = ''
+    #     tls {
+    #       ca https://ca.homelab.local:8443/acme/acme/directory
+    #     }
+    #
+    #     reverse_proxy localhost:3000
+    #   '';
+    # };
   };
 
   # Allow Caddy to get Tailscale certs
