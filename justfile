@@ -29,8 +29,25 @@ deploy-minimal ip:
   @echo "Deploying minimal to {{ip}}..."
   nixos-anywhere --flake .#minimal amadeus@{{ip}}
 
+# DESTRUCTIVE: reinstalls the OS from scratch via nixos-anywhere (disko wipes ALL
+# disks). For a config change to an already-installed host use colmena-apply-host.
+# Guarded: type the host name to proceed, or set CONFIRM=<host> for scripted runs.
 deploy host ip:
-  @echo "Deploying {{host}} to {{ip}}..."
+  #!/usr/bin/env bash
+  set -euo pipefail
+  echo ""
+  echo "⚠️  DESTRUCTIVE: 'just deploy' runs nixos-anywhere and REINSTALLS the OS on"
+  echo "   {{host}} ({{ip}}) — disko reformats ALL disks. Everything on the target is"
+  echo "   destroyed: /var/lib app data, ZFS pools, the host SSH key (breaks agenix)."
+  echo ""
+  echo "   Only meant to turn a bare/minimal VM into {{host}}. To apply a CONFIG change"
+  echo "   to an already-running host, cancel and use:  just colmena-apply-host {{host}}"
+  echo ""
+  if [ "${CONFIRM:-}" != "{{host}}" ]; then
+    read -rp "   Type the host name '{{host}}' to REINSTALL it (anything else aborts): " reply
+    [ "$reply" = "{{host}}" ] || { echo "Aborted."; exit 1; }
+  fi
+  echo "Deploying {{host}} to {{ip}}..."
   nixos-anywhere --flake .#{{host}} amadeus@{{ip}}
 
 colmena-apply: clear
