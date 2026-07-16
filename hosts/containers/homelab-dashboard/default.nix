@@ -106,20 +106,13 @@
         }
         {
           name = "Uptime Forge";
-          url = "http://192.168.2.149:3000";
+          # Served under base_path = "/uptime-forge" (forge.toml), fronted by
+          # Caddy on containers.homelab.local (step-ca cert, trusted here).
+          url = "https://containers.homelab.local/uptime-forge";
         }
         {
           name = "Grafana";
           url = "https://homelab-otel.dropbear-butterfly.ts.net/grafana/api/health";
-        }
-        {
-          name = "Nix Cache";
-          url = "https://cache.homelab.local";
-        }
-        {
-          name = "UniFi";
-          url = "https://192.168.2.142:8443";
-          timeout_ms = 5000;
         }
         {
           name = "Hermes";
