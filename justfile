@@ -25,6 +25,9 @@ nixos-test host:
   @echo "Dry building {{host}} configuration..."
   nix build .#nixosConfigurations.{{host}}.config.system.build.toplevel --dry-run
 
+# DESTRUCTIVE: reinstalls the OS from scratch via nixos-anywhere (disko wipes ALL
+# disks) — only for turning a bare VM into minimal NixOS. Never run against an
+# already-provisioned host; for config changes use colmena-apply-host instead.
 deploy-minimal ip:
   @echo "Deploying minimal to {{ip}}..."
   nixos-anywhere --flake .#minimal amadeus@{{ip}}
