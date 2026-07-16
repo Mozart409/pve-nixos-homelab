@@ -35,15 +35,15 @@ the cross-host problem outright.
   were removed from jellyfin config.
 - **Phase 4:** ✅ 4.1 Prometheus scrape (target UP), Loki shipping (via plain
   `http://otel.homelab.local:3100`, NOT the step-ca vhost — rustls/webpki-roots),
-  4.2 dashboard + uptime-forge repointed to `*.homelab.local`. ⬜ **4.3 LXC
-  decommission pending a soak period.**
+  4.2 dashboard + uptime-forge repointed to `*.homelab.local`. ✅ **4.3 done — the
+  entire CT 100 LXC was destroyed on PVE; ~700 GB ZFS reclaimed.**
 - **Notable detours:** step-ca badNonce storm needed *serialized* cert issuance
   ([[caddy-stepca-badnonce-new-vhosts]]); reinstalled jellyfin needed Tailscale
   re-approval or `*.ts.net` peers (pocketid) wouldn't resolve → OIDC discovery failed
   ([[reinstalled-host-tailscale-reapproval]]); media rsync left files as uid 1000 →
   re-chowned to 999.
 
-**Remaining: 3.5 (NFS teardown) + 4.3 (LXC decommission after soak).**
+**Migration COMPLETE — nothing outstanding.** (all phases 0–4 done)
 
 ---
 
@@ -364,16 +364,18 @@ is available for human access but not required in forge/dashboard:
   scope for cutover).
 - Deploy: `just colmena-apply-host containers`
 
-### 4.3 LXC cleanup (hofvarpnir parts only)
+### 4.3 LXC cleanup — ✅ DONE (whole LXC destroyed)
 
-Only after new stack has been healthy for a comfortable soak period:
+Superseded the granular plan: the **entire CT 100 LXC was destroyed** on the PVE
+host (not just the hofvarpnir parts). `pct destroy` removed the container's ZFS
+dataset and the pool reclaimed **~700 GB immediately** — verified `zpool list` →
+2.99 TB free / 17% used, no leftover `subvol-100-disk` datasets or snapshots.
 
-- [ ] `docker compose down` (or `rm`) `hofvarpnir` + `hofvarpnir_db`; prune
-  `hofvarpnir_pg_data` volume
-- [ ] Remove LXC bind dir for downloads (after confirming rsync integrity)
-- [ ] Revert `pct set 100 --features nesting=1,mount=nfs` → `nesting=1` only
-  (NFS was for hofvarpnir media; remaining services don't need it)
-- [ ] LXC itself stays for tsbridge / node-exporter / syncthing
+- [x] `hofvarpnir` + `hofvarpnir_db` containers + `hofvarpnir_pg_data` volume — gone with the LXC
+- [x] downloads bind dir — gone with the LXC (media already safe on jellyfin ZFS)
+- [x] `mount=nfs` feature — moot (LXC destroyed)
+- [x] ~700 GB ZFS disk reclaimed on `zfs_pool` (auto-freed on destroy, no TRIM needed)
+- note: tsbridge / node-exporter / syncthing that also lived on CT 100 are gone too
 
 ---
 
@@ -435,4 +437,4 @@ Keep the LXC DB volume until soak is done.
 - [x] Logs (Loki via http://otel…:3100) + traces (OTLP) for `OTEL_SERVICE_NAME=hofvarpnir`
 - [x] NFS export + port 2049 gone from jellyfin (deploy `jellyfin`)
 - [x] Dashboard + uptime-forge repointed to `hofvarpnir.homelab.local` (deploy `containers`)
-- [ ] LXC hofvarpnir containers removed (after soak)  ← **4.3**
+- [x] LXC removed — entire CT 100 destroyed, ~700 GB ZFS reclaimed
