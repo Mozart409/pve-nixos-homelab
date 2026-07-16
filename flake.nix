@@ -139,6 +139,24 @@
       then hostAddrs.${name}.tailscale
       else hostAddrs.${name}.local;
 
+    # Home-manager + Mozart409 nixvim for the amadeus user. Applied to every colmena
+    # node via `colmenaHive.defaults`, and baked into individual nixosConfigurations
+    # (used by nixos-anywhere / `just deploy`) so a reinstall keeps nixvim instead of
+    # silently dropping it — mkHost does NOT include home-manager.
+    homeManagerNixvim = {
+      imports = [
+        home-manager.nixosModules.home-manager
+        {
+          home-manager.useGlobalPkgs = true;
+          home-manager.useUserPackages = true;
+          home-manager.users.amadeus = {
+            imports = [mozart409-nixvim.homeModules.default];
+            home.stateVersion = "25.05";
+          };
+        }
+      ];
+    };
+
     # Function to create a NixOS system configuration
     mkHost = hostname:
       nixpkgs.lib.nixosSystem {
@@ -179,7 +197,23 @@
         forgejo = mkHost "forgejo";
         buildbot-master = mkHost "buildbot-master";
         buildbot-worker-1 = mkHost "buildbot-worker-1";
-        jellyfin = mkHost "jellyfin";
+        # Explicit (not mkHost) so nixvim is baked in even on a nixos-anywhere
+        # reinstall; mkHost omits home-manager. Mirrors colmenaHive defaults.
+        jellyfin = nixpkgs.lib.nixosSystem {
+          specialArgs = {inherit homelab-dashboard;};
+          modules = [
+            {
+              nixpkgs.hostPlatform = system;
+              # nixvim (via homeManagerNixvim) pulls an unfree dep; the colmenaHive
+              # sets this globally, but the nixos-anywhere path needs it here too.
+              nixpkgs.config.allowUnfree = true;
+            }
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            homeManagerNixvim
+            ./hosts/jellyfin/configuration.nix
+          ];
+        };
         # Raspberry Pi 4 (aarch64) - build with: nix build '.#nixosConfigurations.rpi4.config.system.build.sdImage'
         rpi4 = nixpkgs.lib.nixosSystem {
           modules = [
@@ -237,17 +271,7 @@
 
         # Applied to every node in the hive
         defaults = {
-          imports = [
-            home-manager.nixosModules.home-manager
-            {
-              home-manager.useGlobalPkgs = true;
-              home-manager.useUserPackages = true;
-              home-manager.users.amadeus = {
-                imports = [mozart409-nixvim.homeModules.default];
-                home.stateVersion = "25.05";
-              };
-            }
-          ];
+          imports = [homeManagerNixvim];
         };
 
         # Host definitions
