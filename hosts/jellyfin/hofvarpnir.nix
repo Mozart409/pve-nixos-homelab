@@ -65,7 +65,12 @@
       # Rewritten from the LXC's homelab-otel.*.ts.net (MagicDNS does NOT resolve
       # between homelab VMs) to the step-ca *.homelab.local names on the otel host.
       METRICS_ENABLED = "true";
-      LOKI_URL = "https://otel.homelab.local/loki"; # Caddy handle /loki* -> :3100
+      # Plain HTTP straight to Loki's port (firewall opens 3100 on otel). NOT the
+      # https://otel.homelab.local/loki Caddy path: hofvarpnir's tracing-loki HTTP
+      # client is rustls with bundled webpki-roots and does NOT trust step-ca, so
+      # HTTPS to the step-ca vhost fails (see dashboard-healthcheck-webpki-roots).
+      # tracing-loki 0.2.7 appends "/loki/api/v1/push" to this base URL.
+      LOKI_URL = "http://otel.homelab.local:3100";
       OTEL_EXPORTER_OTLP_ENDPOINT = "http://otel.homelab.local:4317"; # plain gRPC
       OTEL_EXPORTER_OTLP_PROTOCOL = "grpc";
       OTEL_SERVICE_NAME = "hofvarpnir";
