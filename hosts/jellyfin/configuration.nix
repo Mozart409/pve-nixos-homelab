@@ -10,8 +10,12 @@
     ../../modules/disko-jellyfin.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
+    # Podman + oci-containers backend for the hofvarpnir container below.
+    ../../modules/podman.nix
     # Declaratively pinned SSO/OIDC plugin (Pocket ID auth).
     ./sso-plugin.nix
+    # hofvarpnir media fetch-and-store app (OCI container, migrated off the LXC).
+    ./hofvarpnir.nix
   ];
 
   networking.hostName = "homelab-jellyfin";
@@ -116,6 +120,20 @@
         }
 
         reverse_proxy localhost:8096
+      '';
+    };
+
+    # hofvarpnir (OCI container on 127.0.0.1:3000) served with a step-ca cert.
+    # LAN-only: Tailscale can only cert/route this node's own name, so there is
+    # no ts.net vhost — reach it over Tailscale via split-DNS to the dns host.
+    # App serves /metrics + /dashboard at root, so no path stripping.
+    virtualHosts."hofvarpnir.homelab.local" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:3000
       '';
     };
   };
