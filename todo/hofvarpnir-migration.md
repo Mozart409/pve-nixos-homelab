@@ -32,11 +32,13 @@ the cross-host problem outright.
   build, but container matches the other Rust apps here.
 - Expose via **Caddy vhost on jellyfin** (drops tsbridge for this service).
 - DB → central `homelab-database` (like forgejo/romm/buildbot).
-- Hostname → **`hofvarpnir.homelab.local`** (step-ca) **and** tailnet Caddy vhost
-  **`homelab-hofvarpnir.dropbear-butterfly.ts.net`** (same pattern as jellyfin’s
-  dual vhosts). Drops LXC tsbridge for this service.
-- `API_BASE_URL` → `https://hofvarpnir.homelab.local` (canonical local URL; tailnet
-  is alternate access, not the app’s self-URL).
+- Hostname → **`hofvarpnir.homelab.local`** (step-ca), **LAN-only**. No tailnet
+  vhost: `get_certificate tailscale` only issues for the node's own name
+  (`homelab-jellyfin`), and once tsbridge is gone no node owns `homelab-hofvarpnir.*`,
+  so a ts.net vhost can neither route nor get a cert. Reach it over Tailscale via
+  MagicDNS/split-DNS to the `dns` host. A dedicated tailnet name = optional follow-up
+  (tsnet/tailscale sidecar).
+- `API_BASE_URL` → `https://hofvarpnir.homelab.local`.
 - `DATABASE_URL` host → **`database.homelab.local`** + `?sslmode=disable` (podman DNS).
 - Cutover drain → **wait for in-flight LXC downloads to finish**, then stop app →
   final DB dump → rsync.
@@ -172,6 +174,12 @@ before decommissioning the LXC scrape target.
 - [ ] **2.1 Import podman** — add `../../modules/podman.nix` to
   `hosts/jellyfin/configuration.nix` imports (enables podman +
   `oci-containers.backend = "podman"` + `defaultNetwork.settings.dns_enabled`).
+  - **Add the podman bridge to the firewall** — put `"podman0"` (and `"podman1"` if
+    the container gets its own network) into `networking.firewall.trustedInterfaces`
+    on jellyfin, or the container → `aardvark-dns` path is dropped and DNS/bootstrap
+    loops ([[harbor-podman-bridge-firewall-dns]]). Confirm whether `modules/podman.nix`
+    already handles this; if not, add it here. This is what makes
+    `database.homelab.local` resolve from inside the container.
 - [ ] **2.2 Module** — new `hosts/jellyfin/hofvarpnir.nix`, import it from
   `configuration.nix`. Mirror `hosts/containers/axon-gateway/default.nix`:
 
@@ -213,19 +221,10 @@ before decommissioning the LXC scrape target.
 
   `/media/hofvarpnir` already exists via tmpfiles (`0755 jellyfin jellyfin`).
 
-- [ ] **2.3 Caddy vhosts** — in `hosts/jellyfin/configuration.nix`, dual vhosts
-  (mirror jellyfin’s own ts.net + step-ca pair):
+- [ ] **2.3 Caddy vhost** — in `hosts/jellyfin/configuration.nix`, a single step-ca
+  vhost (LAN-only; see the hostname decision above for why there's no ts.net vhost):
 
   ```nix
-  virtualHosts."homelab-hofvarpnir.dropbear-butterfly.ts.net" = {
-    extraConfig = ''
-      tls {
-        get_certificate tailscale
-      }
-      reverse_proxy localhost:3000
-    '';
-  };
-
   virtualHosts."hofvarpnir.homelab.local" = {
     extraConfig = ''
       tls {
@@ -236,15 +235,9 @@ before decommissioning the LXC scrape target.
   };
   ```
 
-  `services.tailscale.permitCertUid = "caddy"` and the tailscaled socket BindPaths
-  already exist on jellyfin. Firewall 443 already open. No path stripping — app
-  serves `/metrics` and `/dashboard` at root.
-
-  **Note:** the old LXC tsbridge name was `hofvarpnir.dropbear-butterfly.ts.net`
-  (no `homelab-` prefix). The new name is **`homelab-hofvarpnir.…`** to match
-  `homelab-jellyfin.…`. Update scrape/dashboard/uptime to the new names (Phase 4);
-  do not expect the bare `hofvarpnir.*.ts.net` MagicDNS name to keep working after
-  tsbridge is no longer fronting the app.
+  Firewall 443 already open. No path stripping — app serves `/metrics` and
+  `/dashboard` at root. The old tsbridge name `hofvarpnir.dropbear-butterfly.ts.net`
+  keeps hitting the LXC until Phase 3.1; after that it's gone with no replacement.
 
 - [ ] **2.4 Deploy** — `just colmena-apply-host jellyfin`.
 
@@ -282,7 +275,8 @@ point clients at the new URL, then remove NFS.
   jellyfin. Prefer agent-forward push (same pattern as movies/TV):
 
   ```text
-  LXC:./hofvarpnir/completed → jellyfin:/media/hofvarpnir/completed
+  LXC:./hofvarpnir/completed/ → jellyfin:/media/hofvarpnir/completed/
+  # trailing slash on both — contents land in completed/, not completed/completed/
   # do NOT rsync incomplete/
   ```
 
@@ -372,11 +366,15 @@ Only after new stack has been healthy for a comfortable soak period:
   If it fails, pin `192.168.2.134` in `hofvarpnir-env.age`.
 - **`sslmode=disable`** — central Postgres has no TLS; sqlx/libpq often default to
   prefer TLS and then fail oddly without this.
-- **Hostname rename on tailnet** — old `hofvarpnir.dropbear-butterfly.ts.net`
-  (tsbridge) → new `homelab-hofvarpnir.dropbear-butterfly.ts.net` (Caddy on
-  jellyfin). Bookmarks/scripts using the bare name need updating. Scrape/
-  dashboard/uptime move to `hofvarpnir.homelab.local` in Phase 4. During Phase
-  2–3 the old tsbridge URL still hits the LXC until 3.1.
+- **Tailnet URL goes away** — the old `hofvarpnir.dropbear-butterfly.ts.net`
+  (tsbridge) has **no replacement**; access becomes `hofvarpnir.homelab.local`
+  (step-ca, reachable over Tailscale via split-DNS to the `dns` host). Bookmarks/
+  scripts on the ts.net name need updating; scrape/dashboard/uptime move to
+  `hofvarpnir.homelab.local` in Phase 4. During Phase 2–3 the old tsbridge URL still
+  hits the LXC until 3.1. A dedicated tailnet name is a possible follow-up (tsnet sidecar).
+- **otel OTLP reachability** — the container pushes to `otel.homelab.local:4317`
+  (gRPC); confirm the otel host's firewall accepts 4317 from the jellyfin host (it
+  accepted from the LXC before, so likely already open).
 - **Incomplete skipped** — DB may still reference partial downloads with no
   files on disk after rsync; treat as re-queue / cleanup on the new side.
 - **46 GB rsync** — HDD pool contention; `tmux` + resumable rsync.
@@ -408,8 +406,6 @@ Keep the LXC DB volume until soak is done.
 ## Acceptance checklist (cutover complete)
 
 - [ ] `https://hofvarpnir.homelab.local/dashboard` loads (step-ca trusted)
-- [ ] `https://homelab-hofvarpnir.dropbear-butterfly.ts.net/dashboard` loads
-      (Tailscale cert)
 - [ ] Existing completed media visible; ownership `999:999`
 - [ ] New download lands on ZFS under `/media/hofvarpnir/completed`
 - [ ] Jellyfin library sees new files
