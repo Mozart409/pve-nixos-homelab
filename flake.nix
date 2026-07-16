@@ -444,19 +444,19 @@
           ];
         };
 
-        cache = {
-          deployment = {
-            targetHost = targetHost "cache";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["cache" "s3" "nix"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/cache/configuration.nix
-          ];
-        };
+        # cache = {
+        #   deployment = {
+        #     targetHost = targetHost "cache";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["cache" "s3" "nix"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/cache/configuration.nix
+        #   ];
+        # };
 
         forgejo = {
           deployment = {
@@ -472,33 +472,33 @@
           ];
         };
 
-        buildbot-master = {
-          deployment = {
-            targetHost = targetHost "buildbot-master";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["buildbot" "ci"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/buildbot-master/configuration.nix
-          ];
-        };
+        # buildbot-master = {
+        #   deployment = {
+        #     targetHost = targetHost "buildbot-master";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["buildbot" "ci"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/buildbot-master/configuration.nix
+        #   ];
+        # };
 
-        buildbot-worker-1 = {
-          deployment = {
-            targetHost = targetHost "buildbot-worker-1";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["buildbot" "ci" "worker"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/buildbot-worker-1/configuration.nix
-          ];
-        };
+        # buildbot-worker-1 = {
+        #   deployment = {
+        #     targetHost = targetHost "buildbot-worker-1";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["buildbot" "ci" "worker"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/buildbot-worker-1/configuration.nix
+        #   ];
+        # };
 
         jellyfin = {
           deployment = {
