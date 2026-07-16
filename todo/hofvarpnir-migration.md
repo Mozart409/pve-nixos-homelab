@@ -2,9 +2,10 @@
 
 Move hofvarpnir off the old docker-compose Rocky LXC (CT 100, `192.168.2.100`,
 unprivileged) onto the homelab-native stack:
+
 - **App** → `homelab-jellyfin` (`192.168.2.180`) as an OCI container, writing media
   straight to the local tuned ZFS `/media/hofvarpnir` (no NFS, no LXC mount wall).
-- **DB** → `homelab-database` central Postgres.
+- **DB** → `homelab-database` (`192.168.2.134`) central Postgres 18.
 - Retires hofvarpnir, its embedded DB container, and the NFS link on the LXC. The LXC
   itself stays for now (tsbridge, node-exporter, syncthing still running).
 
@@ -13,32 +14,57 @@ the user-namespace level (`mount=nfs` feature does not lift it). Rather than mou
 on the PVE host + bind into the CT, co-locating hofvarpnir with the media pool removes
 the cross-host problem outright.
 
+**Live facts (verified 2026-07-16):**
+
+| Fact | Value |
+| --- | --- |
+| DB host Postgres | `pkgs.postgresql_18` — dump/restore is same-major |
+| jellyfin uid/gid | `999:999` (matches NFS `anonuid`/`anongid` and plan `user =`) |
+| `/media/hofvarpnir` on jellyfin | empty (`tmpfiles` only); **46 GB still only on LXC** → rsync required |
+| Current Prometheus scrape | `hofvarpnir.dropbear-butterfly.ts.net` (tsbridge) |
+| Dashboard / uptime-forge | still point at `*.ts.net` |
+
 ## Decisions (locked)
+
 - Run as **OCI container** from `ghcr.io/mozart409/hofvarpnir:0.2.4` via
   `virtualisation.oci-containers` (matches `axon-gateway`, `uptime-forge`). Source
   also has a Nix flake (`/home/amadeus/code/rust/hofvarpnir`) if we ever want a native
   build, but container matches the other Rust apps here.
-- Expose via **Caddy vhost on jellyfin** (drops tsbridge).
+- Expose via **Caddy vhost on jellyfin** (drops tsbridge for this service).
 - DB → central `homelab-database` (like forgejo/romm/buildbot).
-
-## Open question
-- [ ] **Hostname** — resolved: `hofvarpnir.homelab.local` (step-ca). Dropping tsbridge
-  loses `hofvarpnir.dropbear-butterfly.ts.net`; add Tailscale Serve as a follow-up if a
-  tailnet URL is wanted.
-
-## DNS
-A new DNS A + PTR record in `hosts/dns/configuration.nix`:
-- `local-data`: `''"hofvarpnir.homelab.local. A 192.168.2.180"''`
-- `local-data-ptr`: `''"192.168.2.180 hofvarpnir.homelab.local"''`
-(The jellyfin host owns both `jellyfin.homelab.local` and now `hofvarpnir.homelab.local`.)
+- Hostname → **`hofvarpnir.homelab.local`** (step-ca) **and** tailnet Caddy vhost
+  **`homelab-hofvarpnir.dropbear-butterfly.ts.net`** (same pattern as jellyfin’s
+  dual vhosts). Drops LXC tsbridge for this service.
+- `API_BASE_URL` → `https://hofvarpnir.homelab.local` (canonical local URL; tailnet
+  is alternate access, not the app’s self-URL).
+- `DATABASE_URL` host → **`database.homelab.local`** + `?sslmode=disable` (podman DNS).
+- Cutover drain → **wait for in-flight LXC downloads to finish**, then stop app →
+  final DB dump → rsync.
+- Media rsync → **`completed/` only** (skip `incomplete/`; partials start clean).
+- File layout on disk: app still uses `completed/` + `incomplete/` under
+  `/media/hofvarpnir` (bind-mounted at container `/var/lib/hofvarpnir/downloads`);
+  only `completed/` is migrated from the LXC.
 
 ## Guiding principle
+
 Build the new side **alongside the running old LXC**; cut over only after verifying;
-decommission last. Nothing destructive until Phase 3.
+decommission last. Nothing destructive until Phase 4. Old LXC stack is the rollback
+path until Phase 4.3.
+
+### Deploy order (hosts)
+
+```
+secrets (agenix) → database → dns → jellyfin → otel → containers
+```
+
+DNS **before** jellyfin so step-ca ACME for `hofvarpnir.homelab.local` can resolve.
+`containers` (dashboard + uptime-forge) and `otel` can land after the app is up, but
+before decommissioning the LXC scrape target.
 
 ---
 
 ## Current state (from the LXC `compose.yml`)
+
 - `hofvarpnir`: image `ghcr.io/mozart409/hofvarpnir:0.2.4`, port 3000, HOST 0.0.0.0.
   - env: `MAX_CONCURRENT_DOWNLOADS=1`, `DOWNLOAD_TIMEOUT_HOURS=9`,
     `MAX_DOWNLOAD_ATTEMPTS=2`, `RATE_LIMIT_DELAY_SECS=600`,
@@ -50,89 +76,249 @@ decommission last. Nothing destructive until Phase 3.
     `OTEL_EXPORTER_OTLP_ENDPOINT=http://homelab-otel…:4317` (grpc),
     `OTEL_SERVICE_NAME=hofvarpnir`, OIDC_* (all unset → OIDC disabled).
   - volume `./hofvarpnir:/var/lib/hofvarpnir/downloads` → `completed/` (46 GB) +
-    `incomplete/` live under it.
+    `incomplete/` live under it (on the LXC; jellyfin side is empty).
 - `hofvarpnir_db`: `postgres:18.4-alpine3.24`, DB `hofvarpnir`, creds `postgres/postgres`,
   volume `hofvarpnir_pg_data`, published `127.0.0.1:5432`.
 - Also on the LXC (out of scope): tsbridge, node-exporter, syncthing.
 
+### File touch list (repo)
+
+| Path | Change |
+| --- | --- |
+| `secrets/secrets.nix` + new `.age` files | `hofvarpnir-db-password.age`, `hofvarpnir-env.age` |
+| `hosts/database/configuration.nix` | role, DB, password oneshot, **backup list** |
+| `hosts/dns/configuration.nix` | A + PTR for `hofvarpnir.homelab.local` → `.180` |
+| `hosts/jellyfin/configuration.nix` | import podman + `hofvarpnir.nix`; Caddy vhost; drop NFS + 2049 |
+| `hosts/jellyfin/hofvarpnir.nix` | **new** — OCI container + age secret |
+| `hosts/otel/configuration.nix` | scrape target → `hofvarpnir.homelab.local` + `metrics_path` |
+| `hosts/containers/homelab-dashboard/default.nix` | URL + quick link |
+| `hosts/containers/uptime-forge/forge.toml` | `[endpoints.hofvarpnir]` addr |
+
+---
+
+## Phase 0 — Secrets + DNS (can run first, zero downtime)
+
+- [ ] **0.1 agenix secrets** — from **inside `secrets/`** (not repo root; see AGENTS.md):
+
+  ```bash
+  cd secrets
+  # generate a strong password, then:
+  agenix -e hofvarpnir-db-password.age   # bare password only
+  agenix -e hofvarpnir-env.age           # see content below
+  ```
+
+  - `hofvarpnir-db-password.age` — recipients
+    `[amadeus amadeusAge hostDatabase hostJellyfin]`.
+    File content: the password alone (romm/forgejo pattern).
+  - `hofvarpnir-env.age` — recipients `[amadeus amadeusAge hostJellyfin]`.
+    File content (one line; Postgres has no TLS — match uptime-forge exporter):
+
+    ```
+    DATABASE_URL=postgresql://hofvarpnir:<password>@database.homelab.local:5432/hofvarpnir?sslmode=disable
+    ```
+
+    Fallback if podman DNS misbehaves: use `192.168.2.134` (romm style).
+  - Edit `secrets/secrets.nix` publicKeys, then `just reencrypt`.
+
+- [ ] **0.2 DNS** — in `hosts/dns/configuration.nix` (keep-sorted blocks):
+
+  - `local-data`: `''"hofvarpnir.homelab.local. A 192.168.2.180"''`
+  - `local-data-ptr`: `''"192.168.2.180 hofvarpnir.homelab.local"''`
+
+  Deploy: `just colmena-apply-host dns`. Verify from jellyfin:
+  `getent hosts hofvarpnir.homelab.local` and `database.homelab.local`.
+
 ---
 
 ## Phase 1 — Database → `homelab-database`
-- [ ] **1.1 Compat check** — confirm the DB host's Postgres version ≥ 18 (source dump
-  is PG 18). `ssh amadeus@homelab-database 'psql --version'` / check
-  `services.postgresql.package`. If older, dump with `--no-owner --no-privileges` and
-  watch for incompatibilities.
-- [ ] **1.2 agenix secrets** — two new secrets in `secrets/secrets.nix`:
-  - `hofvarpnir-db-password.age` — recipients `[amadeus amadeusAge hostDatabase hostJellyfin]`.
-    The password itself; used by the password-setter oneshot on `homelab-database`.
-  - `hofvarpnir-env.age` — recipients `[amadeus amadeusAge hostJellyfin]`, mode `0400`.
-    Content: `DATABASE_URL=postgresql://hofvarpnir:<password>@database.homelab.local:5432/hofvarpnir`
-    This is the environment file mounted into the OCI container on jellyfin (mirrors the
-    `axon-gateway-env` pattern).
-  - `just reencrypt` after editing `secrets.nix`.
-- [ ] **1.3 DB + role** — add `hofvarpnir` database + role on `homelab-database`,
-  reusing the romm/forgejo pattern (`hosts/database/…`). **Watch the password-setter
-  service-dep bug** ([[postgresql-password-service-dep]]): the password oneshot must
-  depend on `postgresql.service`, not the nonexistent `postgresql-ensure-users.service`.
-- [ ] **1.4 Deploy** — `just colmena-apply-host database`.
-- [ ] **1.5 Migrate data** — on the LXC:
-  `docker exec hofvarpnir_db pg_dump -U postgres -Fc hofvarpnir > /tmp/hof.dump`,
-  copy to the DB host, `pg_restore --no-owner --role=hofvarpnir -d hofvarpnir /tmp/hof.dump`.
-  (App on the LXC can keep running during this — it's a snapshot; final re-sync at cutover
-  if needed.)
+
+- [x] **1.1 Compat check** — **done**: `services.postgresql.package = pkgs.postgresql_18`
+  on the DB host. Source dump is PG 18.4 alpine — same major, safe.
+- [ ] **1.2 DB + role** — mirror romm in `hosts/database/configuration.nix`:
+
+  - `age.secrets.hofvarpnir-db-password` (file + mode, owner postgres-readable)
+  - `ensureDatabases` += `"hofvarpnir"`
+  - `ensureUsers` += `{ name = "hofvarpnir"; ensureDBOwnership = true; }`
+  - `systemd.services.postgresql-hofvarpnir-password` oneshot:
+    - `after` / `requires` = `["postgresql.service"]` (+ `agenix.service` in after)
+    - **not** `postgresql-ensure-users.service` (does not exist; same gotcha as romm)
+    - `ALTER USER hofvarpnir WITH PASSWORD '…'`
+  - `services.postgresqlBackup.databases` += `"hofvarpnir"` (easy to miss)
+
+  pg_hba already allows `192.168.0.0/16` scram-sha-256 — no change needed.
+
+- [ ] **1.3 Deploy** — `just colmena-apply-host database`.
+- [ ] **1.4 Smoke** — from anywhere with network:
+
+  ```bash
+  psql "postgresql://hofvarpnir:<pw>@192.168.2.134:5432/hofvarpnir?sslmode=disable" -c '\conninfo'
+  ```
+
+- [ ] **1.5 Migrate data (snapshot)** — on the LXC while old app still runs:
+
+  ```bash
+  docker exec hofvarpnir_db pg_dump -U postgres -Fc hofvarpnir > /tmp/hof.dump
+  # copy to DB host, then:
+  pg_restore --no-owner --role=hofvarpnir -d hofvarpnir /tmp/hof.dump
+  ```
+
+  App on the LXC can keep running — this is a snapshot; **final re-sync at cutover**
+  (Phase 3.2) after stopping the old app.
+
+---
 
 ## Phase 2 — App on `homelab-jellyfin` (OCI container)
-- [ ] **2.1 Import podman** — ensure `modules/podman.nix` is imported by
-  `hosts/jellyfin/configuration.nix` (check what it provides first).
-- [ ] **2.2 Container** — `virtualisation.oci-containers.containers.hofvarpnir`
-  (new `hosts/jellyfin/hofvarpnir.nix`, mirror `hosts/containers/axon-gateway/default.nix`):
-  - image `ghcr.io/mozart409/hofvarpnir:0.2.4`
-  - `user = "999:999"` so downloaded files are `jellyfin:jellyfin` (readable by Jellyfin)
-  - volume `/media/hofvarpnir:/var/lib/hofvarpnir/downloads`
-  - env: same as current except `DATABASE_URL` injected via `environmentFiles` (see 2.3),
-    `API_BASE_URL` → `https://hofvarpnir.homelab.local`. OIDC unset.
-  - `DATABASE_URL` uses DNS: `postgresql://hofvarpnir:<password>@database.homelab.local:5432/hofvarpnir`
-  - no host port exposed (Caddy proxies `localhost:3000`).
-- [ ] **2.3 Container env** — non-secret vars go inline in `environment`:
-  `MAX_CONCURRENT_DOWNLOADS`, `DOWNLOAD_TIMEOUT_HOURS`, `MAX_DOWNLOAD_ATTEMPTS`,
-  `RATE_LIMIT_DELAY_SECS`, `RUST_LOG`, `DEFAULT_OUTPUT_DIR`, `API_BASE_URL`,
-  `METRICS_ENABLED`, `LOKI_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`.
-  - `DATABASE_URL` → `environmentFiles = [ config.age.secrets.hofvarpnir-env.path ]`
-    (matches the `axon-gateway-env` pattern; secret file holds the one sensitive line).
-  - `age.secrets.hofvarpnir-env` on jellyfin: `mode = "0400"`, `group = "root"`.
-- [ ] **2.4 Caddy vhost** — add to `services.caddy.virtualHosts` in
-  `hosts/jellyfin/configuration.nix`: `hofvarpnir.homelab.local` (step-ca) →
-  `reverse_proxy localhost:3000`. Firewall 443 already open. No special path
-  handling needed — hofvarpnir serves `/metrics` and `/dashboard` at root.
-  The container resolves `database.homelab.local` via podman's DNS proxy
-  (`modules/podman.nix` enables `defaultNetwork.settings.dns_enabled`), which
-  forwards to the host's DNS (the homelab DNS server).
-- [ ] **2.5 Deploy** — `just colmena-apply-host jellyfin`. Verify hofvarpnir comes up,
-  connects to the migrated DB, dashboard loads at the new URL (writes to empty
-  `/media/hofvarpnir` for now).
 
-## Phase 3 — Data + cutover
-- [ ] **3.1 Stop old app** — on the LXC `docker compose stop hofvarpnir` (leave DB +
-  container in place for rollback).
-- [ ] **3.2 Final DB re-sync** (only if 1.5 was taken well before cutover) — re-dump/restore
-  so no download state is lost.
-- [ ] **3.3 Migrate media** — rsync the 46 GB `completed/` (+ `incomplete/` if wanted)
-  from the LXC → `jellyfin:/media/hofvarpnir/…` (agent-forward push like movies/TV;
-  slow HDD pool), preserving the `completed/`/`incomplete/` layout the app expects.
-  `/media/hofvarpnir` is a ZFS dataset on jellyfin's media pool — `chown -R
-  jellyfin:jellyfin` works normally (no NFS re-export concerns).
-- [ ] **3.4 Remove NFS from jellyfin** — drop `services.nfs.server` export of
-  `/media/hofvarpnir` and the firewall port 2049 from `hosts/jellyfin/configuration.nix`.
-  The LXC no longer needs the mount. Deploy `just colmena-apply-host jellyfin`.
-- [ ] **3.5 Restart + verify** — restart the container; confirm DB state intact, existing
-  downloads visible in the UI, new downloads land in `/media/hofvarpnir/completed`, and
-  the Jellyfin hofvarpnir library indexes them.
+- [ ] **2.1 Import podman** — add `../../modules/podman.nix` to
+  `hosts/jellyfin/configuration.nix` imports (enables podman +
+  `oci-containers.backend = "podman"` + `defaultNetwork.settings.dns_enabled`).
+- [ ] **2.2 Module** — new `hosts/jellyfin/hofvarpnir.nix`, import it from
+  `configuration.nix`. Mirror `hosts/containers/axon-gateway/default.nix`:
+
+  ```nix
+  virtualisation.oci-containers.containers.hofvarpnir = {
+    image = "ghcr.io/mozart409/hofvarpnir:0.2.4";
+    autoStart = true;
+    # Loopback only — Caddy is the sole public path (axon/romm pattern).
+    # Do NOT omit ports; without a publish, Caddy cannot reach the container
+    # on a different network namespace.
+    ports = ["127.0.0.1:3000:3000"];
+    user = "999:999"; # jellyfin:jellyfin on host
+    volumes = [
+      "/media/hofvarpnir:/var/lib/hofvarpnir/downloads"
+    ];
+    environment = {
+      MAX_CONCURRENT_DOWNLOADS = "1";
+      DOWNLOAD_TIMEOUT_HOURS = "9";
+      MAX_DOWNLOAD_ATTEMPTS = "2";
+      RATE_LIMIT_DELAY_SECS = "600";
+      RUST_LOG = "info,hofvarpnir=info,sqlx=warn";
+      DEFAULT_OUTPUT_DIR = "/var/lib/hofvarpnir/downloads";
+      API_BASE_URL = "https://hofvarpnir.homelab.local";
+      METRICS_ENABLED = "true";
+      # Prefer *.homelab.local (MagicDNS does not resolve between VMs).
+      LOKI_URL = "https://loki.homelab.local/loki"; # confirm path vs current compose
+      OTEL_EXPORTER_OTLP_ENDPOINT = "http://otel.homelab.local:4317";
+      OTEL_SERVICE_NAME = "hofvarpnir";
+    };
+    environmentFiles = [config.age.secrets.hofvarpnir-env.path];
+  };
+
+  age.secrets.hofvarpnir-env = {
+    file = ../../secrets/hofvarpnir-env.age;
+    mode = "0400";
+    # rootful podman: systemd reads EnvironmentFile as root before launch
+  };
+  ```
+
+  `/media/hofvarpnir` already exists via tmpfiles (`0755 jellyfin jellyfin`).
+
+- [ ] **2.3 Caddy vhosts** — in `hosts/jellyfin/configuration.nix`, dual vhosts
+  (mirror jellyfin’s own ts.net + step-ca pair):
+
+  ```nix
+  virtualHosts."homelab-hofvarpnir.dropbear-butterfly.ts.net" = {
+    extraConfig = ''
+      tls {
+        get_certificate tailscale
+      }
+      reverse_proxy localhost:3000
+    '';
+  };
+
+  virtualHosts."hofvarpnir.homelab.local" = {
+    extraConfig = ''
+      tls {
+        ca https://ca.homelab.local:8443/acme/acme/directory
+      }
+      reverse_proxy localhost:3000
+    '';
+  };
+  ```
+
+  `services.tailscale.permitCertUid = "caddy"` and the tailscaled socket BindPaths
+  already exist on jellyfin. Firewall 443 already open. No path stripping — app
+  serves `/metrics` and `/dashboard` at root.
+
+  **Note:** the old LXC tsbridge name was `hofvarpnir.dropbear-butterfly.ts.net`
+  (no `homelab-` prefix). The new name is **`homelab-hofvarpnir.…`** to match
+  `homelab-jellyfin.…`. Update scrape/dashboard/uptime to the new names (Phase 4);
+  do not expect the bare `hofvarpnir.*.ts.net` MagicDNS name to keep working after
+  tsbridge is no longer fronting the app.
+
+- [ ] **2.4 Deploy** — `just colmena-apply-host jellyfin`.
+
+- [ ] **2.5 Verify (empty media OK)**
+
+  - `systemctl status podman-hofvarpnir` (or `oci-hofvarpnir`) is active
+  - container logs: DB connect OK, migrations OK
+  - `curl -k https://hofvarpnir.homelab.local/dashboard` (or from a step-ca-trusted host)
+  - probe write: touch a file as the container user under `/media/hofvarpnir` and
+    confirm `ls -ln` shows `999:999`
+  - **do not** stop the LXC app yet; both can coexist (new side writes only if you
+    use the new UI)
+
+---
+
+## Phase 3 — Cutover (app stop → final DB → media → NFS off)
+
+Order matters: **stop writers first**, then final DB dump, then media rsync, then
+point clients at the new URL, then remove NFS.
+
+- [ ] **3.1 Drain + stop old app** — on the LXC:
+
+  ```bash
+  # Wait until the UI shows no active downloads, then:
+  docker compose stop hofvarpnir
+  # leave hofvarpnir_db running for the dump + rollback
+  ```
+
+- [ ] **3.2 Final DB re-sync** — re-dump/restore over the Phase 1.5 snapshot so no
+  download/job state is lost. Verify row counts if useful. Incomplete/partial
+  rows may still exist in the DB even though we skip rsyncing `incomplete/` —
+  expect the new app to reconcile or re-queue those; no media files for them.
+
+- [ ] **3.3 Migrate media** — rsync **`completed/` only** (~46 GB) from LXC →
+  jellyfin. Prefer agent-forward push (same pattern as movies/TV):
+
+  ```text
+  LXC:./hofvarpnir/completed → jellyfin:/media/hofvarpnir/completed
+  # do NOT rsync incomplete/
+  ```
+
+  Use `tmux`, `rsync -aHAX --info=progress2` (or `-P`). Then:
+
+  ```bash
+  chown -R jellyfin:jellyfin /media/hofvarpnir
+  ```
+
+  (Local ZFS — no NFS re-export quirks.)
+
+- [ ] **3.4 Restart new app + verify**
+
+  - restart container; UI shows existing library; paths resolve under
+    `/media/hofvarpnir/completed`
+  - start a small test download → lands as `999:999` on ZFS
+  - Jellyfin library that points at `/media/hofvarpnir` (or `…/completed`) rescans
+  - metrics: `curl -s https://hofvarpnir.homelab.local/metrics | head`
+  - logs/traces in Grafana (LOKI_URL / OTLP env)
+
+- [ ] **3.5 Remove NFS from jellyfin** — only after 3.4 is green:
+
+  - drop `services.nfs.server` (and `services.nfs.settings.nfsd` if only used for this)
+  - drop firewall TCP `2049`
+  - deploy `just colmena-apply-host jellyfin`
+  - on LXC: unmount any leftover NFS mount of `192.168.2.180:/` if present
+
+---
 
 ## Phase 4 — Peripherals + decommission
 
 ### 4.1 Prometheus scrape (`hosts/otel/configuration.nix`)
-Replace the current ts.net scrape with the step-ca Caddy vhost (mirrors the
-`axon-gateway` pattern at line 487–499):
+
+Prefer the step-ca local name (otel already trusts step-ca via
+`modules/step-ca-trust.nix`; mirrors axon). Add `metrics_path` (missing today):
+
 ```nix
 {
   job_name = "hofvarpnir";
@@ -144,46 +330,91 @@ Replace the current ts.net scrape with the step-ca Caddy vhost (mirrors the
   }];
 }
 ```
-The Loki URL / OTLP endpoint env vars already point at `homelab-otel` directly (not
-through tsbridge), so they survive the vhost change — verify logs and traces appear
-in Grafana after cutover.
 
-### 4.2 Dashboard + uptime-forge
-- [ ] `homelab-dashboard/default.nix` — `hofvarpnir.url` + quick link → `https://hofvarpnir.homelab.local`
-- [ ] `uptime-forge/forge.toml` — `[endpoints.hofvarpnir]` addr → `https://hofvarpnir.homelab.local/`
-  (endpoint name stays `hofvarpnir`). Jellyfin's forge.toml entry (`jellyfin.dropbear-butterfly.ts.net`)
-  is also stale — fix alongside if desired.
+Deploy: `just colmena-apply-host otel`. Confirm target UP in Prometheus.
+
+### 4.2 Dashboard + uptime-forge (`hosts/containers/…`)
+
+Canonical public links use **`.homelab.local`** (same as axon/romm). Tailnet URL
+is available for human access but not required in forge/dashboard:
+
+- [ ] `homelab-dashboard/default.nix` — `hofvarpnir.url` **and** the quick-link
+  `url` (currently both old `hofvarpnir.dropbear-butterfly.ts.net`) →
+  `https://hofvarpnir.homelab.local` / `…/dashboard`
+- [ ] `uptime-forge/forge.toml` — `[endpoints.hofvarpnir] addr` →
+  `https://hofvarpnir.homelab.local/`
+- [ ] Optional drive-by: jellyfin forge/dashboard entries still use
+  `jellyfin.dropbear-butterfly.ts.net` / ts.net — fix only if desired (out of
+  scope for cutover).
+- Deploy: `just colmena-apply-host containers`
 
 ### 4.3 LXC cleanup (hofvarpnir parts only)
-- [ ] Stop & remove `hofvarpnir` and `hofvarpnir_db` containers on CT 100:
-  `docker compose down hofvarpnir hofvarpnir_db` (or `docker rm`). Prune the
-  `hofvarpnir_pg_data` volume.
-- [ ] Remove the `/var/lib/hofvarpnir/downloads` bind mount directory.
-- [ ] Revert `pct set 100 --features nesting=1,mount=nfs` back to `nesting=1` (NFS
-  was only needed for the hofvarpnir media mount; tsbridge/node-exporter/syncthing
-  don't use it).
-- [ ] The LXC itself stays running for the remaining services.
+
+Only after new stack has been healthy for a comfortable soak period:
+
+- [ ] `docker compose down` (or `rm`) `hofvarpnir` + `hofvarpnir_db`; prune
+  `hofvarpnir_pg_data` volume
+- [ ] Remove LXC bind dir for downloads (after confirming rsync integrity)
+- [ ] Revert `pct set 100 --features nesting=1,mount=nfs` → `nesting=1` only
+  (NFS was for hofvarpnir media; remaining services don't need it)
+- [ ] LXC itself stays for tsbridge / node-exporter / syncthing
 
 ---
 
 ## Risks / notes
-- **DB version compat** (1.1) — PG 18 dump into an older server can fail; check first.
-- **File ownership** — container must write as uid 999 (2.2) or Jellyfin can't read the
-  media; verify a probe file lands `jellyfin:jellyfin`.
-- **Lost tailnet hostname** — dropping tsbridge removes `hofvarpnir.*.ts.net`; decide
-  whether Tailscale Serve is needed (open question above).
-- **46 GB migration is slow** — same HDD-pool contention as the movies/TV copies; run in
-  `tmux`, `-P` resumes.
-- **OIDC** currently disabled (issuer unset) — nothing to migrate there. If you later add
-  Pocket ID, the redirect base URL must match the new hostname.
-- **Podman DNS** — the container resolves `database.homelab.local` through podman's
-  DNS proxy → host DNS → homelab dns server (chain verified working for other
-  podman-hosted services). If the connection fails, fall back to the IP
-  `192.168.2.134` in the env file.
-- **Uptime-forge forge.toml** — also needs the addr update; easy to miss since it's
-  not mentioned elsewhere.
+
+- **DB major** — already PG 18 on both sides; still use `--no-owner --role=hofvarpnir`.
+- **File ownership** — container `user = "999:999"`; verify probe file is
+  `jellyfin:jellyfin`. Wrong uid → Jellyfin can't read new downloads.
+- **Loopback publish required** — `ports = ["127.0.0.1:3000:3000"]`. "No host port"
+  means no LAN bind, not "no ports key".
+- **Podman DNS** — `database.homelab.local` via podman → host DNS → `dns` host.
+  If it fails, pin `192.168.2.134` in `hofvarpnir-env.age`.
+- **`sslmode=disable`** — central Postgres has no TLS; sqlx/libpq often default to
+  prefer TLS and then fail oddly without this.
+- **Hostname rename on tailnet** — old `hofvarpnir.dropbear-butterfly.ts.net`
+  (tsbridge) → new `homelab-hofvarpnir.dropbear-butterfly.ts.net` (Caddy on
+  jellyfin). Bookmarks/scripts using the bare name need updating. Scrape/
+  dashboard/uptime move to `hofvarpnir.homelab.local` in Phase 4. During Phase
+  2–3 the old tsbridge URL still hits the LXC until 3.1.
+- **Incomplete skipped** — DB may still reference partial downloads with no
+  files on disk after rsync; treat as re-queue / cleanup on the new side.
+- **46 GB rsync** — HDD pool contention; `tmux` + resumable rsync.
+- **OIDC** disabled today — nothing to migrate. Future Pocket ID: register callback
+  under `https://hofvarpnir.homelab.local/…`.
+- **postgresqlBackup** — forgetting to add `hofvarpnir` means no nightly dump.
+- **agenix cwd** — always `cd secrets` before `agenix -e …`.
+- **Parallel run** — Phase 2 new container + Phase 1 DB snapshot can leave the new
+  UI showing stale job state until 3.2; don't use the new UI as primary until cutover.
+- **LOKI / OTEL URLs** — re-check compose values and rewrite any `*.ts.net` /
+  `homelab-otel…` MagicDNS names to `loki.homelab.local` / `otel.homelab.local`.
 
 ## Rollback
-Old LXC stack stays intact until Phase 4. To roll back before decommission: `docker
-compose start hofvarpnir` on the LXC and repoint DNS/clients — the old DB container still
-holds its data (Phase 1 only *copied* it).
+
+Until Phase 4.3:
+
+1. Stop the new container on jellyfin (`systemctl stop podman-hofvarpnir` / equivalent).
+2. `docker compose start hofvarpnir` on the LXC (old DB volume still intact —
+   Phase 1 only *copied* data).
+3. Clients still on `hofvarpnir.dropbear-butterfly.ts.net` via tsbridge keep working
+   if that path was never torn down.
+4. If DNS/scrape/dashboard were already flipped, revert those deploys or temporarily
+   re-point forge/dashboard at the ts.net URL.
+
+After Phase 4.3 (LXC containers removed), rollback requires restoring the dump from
+`postgresqlBackup` or a retained `/tmp/hof.dump` and re-rsyncing media — much harder.
+Keep the LXC DB volume until soak is done.
+
+## Acceptance checklist (cutover complete)
+
+- [ ] `https://hofvarpnir.homelab.local/dashboard` loads (step-ca trusted)
+- [ ] `https://homelab-hofvarpnir.dropbear-butterfly.ts.net/dashboard` loads
+      (Tailscale cert)
+- [ ] Existing completed media visible; ownership `999:999`
+- [ ] New download lands on ZFS under `/media/hofvarpnir/completed`
+- [ ] Jellyfin library sees new files
+- [ ] Prometheus `job=hofvarpnir` target UP on `hofvarpnir.homelab.local`
+- [ ] Logs (Loki) + traces (Tempo) for `OTEL_SERVICE_NAME=hofvarpnir`
+- [ ] NFS export + port 2049 gone from jellyfin
+- [ ] Dashboard + uptime-forge green on `hofvarpnir.homelab.local`
+- [ ] LXC hofvarpnir containers removed (after soak)
