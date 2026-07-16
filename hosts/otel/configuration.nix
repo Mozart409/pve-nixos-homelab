@@ -468,13 +468,16 @@
           }
         ];
       }
-      # Hofvarpnir
+      # Hofvarpnir — migrated onto homelab-jellyfin; scrape its step-ca Caddy
+      # vhost (otel trusts step-ca via modules/step-ca-trust.nix). Was the
+      # tsbridge ts.net name on the old LXC.
       {
         job_name = "hofvarpnir";
         scheme = "https";
+        metrics_path = "/metrics";
         static_configs = [
           {
-            targets = ["hofvarpnir.dropbear-butterfly.ts.net"];
+            targets = ["hofvarpnir.homelab.local"];
             labels = {
               instance = "hofvarpnir";
             };
