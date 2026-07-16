@@ -56,4 +56,5 @@ in {
   "romm-db-password.age".publicKeys = [amadeus amadeusAge hostContainers hostDatabase];
   "romm-env.age".publicKeys = [amadeus amadeusAge hostContainers];
   "hofvarpnir-db-password.age".publicKeys = [amadeus amadeusAge hostDatabase hostJellyfin];
+  "hofvarpnir-env.age".publicKeys = [amadeus amadeusAge hostJellyfin];
 }
