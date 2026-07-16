@@ -24,6 +24,29 @@ the cross-host problem outright.
 | Current Prometheus scrape | `hofvarpnir.dropbear-butterfly.ts.net` (tsbridge) |
 | Dashboard / uptime-forge | still point at `*.ts.net` |
 
+## Status — 2026-07-16 (migration essentially complete)
+
+- **Phases 0–2:** ✅ done. DB + role on homelab-database; app container on jellyfin;
+  Caddy step-ca vhost. **OIDC (Pocket ID) wired in from the start** (added vs. original
+  plan): `OIDC_*` env + a styled login button on both hofvarpnir and Jellyfin.
+- **Phase 3 (cutover):** ✅ done — the old app had been **stopped the whole time**, so
+  3.1/3.2 were trivial (the Phase 1 dump was already final). 46 GB `completed/` rsynced
+  and chowned to `jellyfin` (999). 3.5 done — the now-unused NFS export + port 2049
+  were removed from jellyfin config.
+- **Phase 4:** ✅ 4.1 Prometheus scrape (target UP), Loki shipping (via plain
+  `http://otel.homelab.local:3100`, NOT the step-ca vhost — rustls/webpki-roots),
+  4.2 dashboard + uptime-forge repointed to `*.homelab.local`. ⬜ **4.3 LXC
+  decommission pending a soak period.**
+- **Notable detours:** step-ca badNonce storm needed *serialized* cert issuance
+  ([[caddy-stepca-badnonce-new-vhosts]]); reinstalled jellyfin needed Tailscale
+  re-approval or `*.ts.net` peers (pocketid) wouldn't resolve → OIDC discovery failed
+  ([[reinstalled-host-tailscale-reapproval]]); media rsync left files as uid 1000 →
+  re-chowned to 999.
+
+**Remaining: 3.5 (NFS teardown) + 4.3 (LXC decommission after soak).**
+
+---
+
 ## Decisions (locked)
 
 - Run as **OCI container** from `ghcr.io/mozart409/hofvarpnir:0.2.4` via
@@ -100,7 +123,7 @@ before decommissioning the LXC scrape target.
 
 ## Phase 0 — Secrets + DNS (can run first, zero downtime)
 
-- [ ] **0.1 agenix secrets** — from **inside `secrets/`** (not repo root; see AGENTS.md):
+- [x] **0.1 agenix secrets** — from **inside `secrets/`** (not repo root; see AGENTS.md):
 
   ```bash
   cd secrets
@@ -122,7 +145,7 @@ before decommissioning the LXC scrape target.
     Fallback if podman DNS misbehaves: use `192.168.2.134` (romm style).
   - Edit `secrets/secrets.nix` publicKeys, then `just reencrypt`.
 
-- [ ] **0.2 DNS** — in `hosts/dns/configuration.nix` (keep-sorted blocks):
+- [x] **0.2 DNS** — in `hosts/dns/configuration.nix` (keep-sorted blocks):
 
   - `local-data`: `''"hofvarpnir.homelab.local. A 192.168.2.180"''`
   - `local-data-ptr`: `''"192.168.2.180 hofvarpnir.homelab.local"''`
@@ -136,7 +159,7 @@ before decommissioning the LXC scrape target.
 
 - [x] **1.1 Compat check** — **done**: `services.postgresql.package = pkgs.postgresql_18`
   on the DB host. Source dump is PG 18.4 alpine — same major, safe.
-- [ ] **1.2 DB + role** — mirror romm in `hosts/database/configuration.nix`:
+- [x] **1.2 DB + role** — mirror romm in `hosts/database/configuration.nix`:
 
   - `age.secrets.hofvarpnir-db-password` (file + mode, owner postgres-readable)
   - `ensureDatabases` += `"hofvarpnir"`
@@ -149,14 +172,14 @@ before decommissioning the LXC scrape target.
 
   pg_hba already allows `192.168.0.0/16` scram-sha-256 — no change needed.
 
-- [ ] **1.3 Deploy** — `just colmena-apply-host database`.
-- [ ] **1.4 Smoke** — from anywhere with network:
+- [x] **1.3 Deploy** — `just colmena-apply-host database`.
+- [x] **1.4 Smoke** — from anywhere with network:
 
   ```bash
   psql "postgresql://hofvarpnir:<pw>@192.168.2.134:5432/hofvarpnir?sslmode=disable" -c '\conninfo'
   ```
 
-- [ ] **1.5 Migrate data (snapshot)** — on the LXC while old app still runs:
+- [x] **1.5 Migrate data (snapshot)** — on the LXC while old app still runs:
 
   ```bash
   docker exec hofvarpnir_db pg_dump -U postgres -Fc hofvarpnir > /tmp/hof.dump
@@ -171,7 +194,7 @@ before decommissioning the LXC scrape target.
 
 ## Phase 2 — App on `homelab-jellyfin` (OCI container)
 
-- [ ] **2.1 Import podman** — add `../../modules/podman.nix` to
+- [x] **2.1 Import podman** — add `../../modules/podman.nix` to
   `hosts/jellyfin/configuration.nix` imports (enables podman +
   `oci-containers.backend = "podman"` + `defaultNetwork.settings.dns_enabled`).
   - **Add the podman bridge to the firewall** — put `"podman0"` (and `"podman1"` if
@@ -180,7 +203,7 @@ before decommissioning the LXC scrape target.
     loops ([[harbor-podman-bridge-firewall-dns]]). Confirm whether `modules/podman.nix`
     already handles this; if not, add it here. This is what makes
     `database.homelab.local` resolve from inside the container.
-- [ ] **2.2 Module** — new `hosts/jellyfin/hofvarpnir.nix`, import it from
+- [x] **2.2 Module** — new `hosts/jellyfin/hofvarpnir.nix`, import it from
   `configuration.nix`. Mirror `hosts/containers/axon-gateway/default.nix`:
 
   ```nix
@@ -221,7 +244,7 @@ before decommissioning the LXC scrape target.
 
   `/media/hofvarpnir` already exists via tmpfiles (`0755 jellyfin jellyfin`).
 
-- [ ] **2.3 Caddy vhost** — in `hosts/jellyfin/configuration.nix`, a single step-ca
+- [x] **2.3 Caddy vhost** — in `hosts/jellyfin/configuration.nix`, a single step-ca
   vhost (LAN-only; see the hostname decision above for why there's no ts.net vhost):
 
   ```nix
@@ -239,9 +262,9 @@ before decommissioning the LXC scrape target.
   `/dashboard` at root. The old tsbridge name `hofvarpnir.dropbear-butterfly.ts.net`
   keeps hitting the LXC until Phase 3.1; after that it's gone with no replacement.
 
-- [ ] **2.4 Deploy** — `just colmena-apply-host jellyfin`.
+- [x] **2.4 Deploy** — `just colmena-apply-host jellyfin`.
 
-- [ ] **2.5 Verify (empty media OK)**
+- [x] **2.5 Verify (empty media OK)**
 
   - `systemctl status podman-hofvarpnir` (or `oci-hofvarpnir`) is active
   - container logs: DB connect OK, migrations OK
@@ -258,7 +281,7 @@ before decommissioning the LXC scrape target.
 Order matters: **stop writers first**, then final DB dump, then media rsync, then
 point clients at the new URL, then remove NFS.
 
-- [ ] **3.1 Drain + stop old app** — on the LXC:
+- [x] **3.1 Drain + stop old app** (old app was already stopped for the whole migration) — on the LXC:
 
   ```bash
   # Wait until the UI shows no active downloads, then:
@@ -266,12 +289,12 @@ point clients at the new URL, then remove NFS.
   # leave hofvarpnir_db running for the dump + rollback
   ```
 
-- [ ] **3.2 Final DB re-sync** — re-dump/restore over the Phase 1.5 snapshot so no
+- [x] **3.2 Final DB re-sync** (N/A — app stopped throughout, so the Phase 1.5 dump was already final) — re-dump/restore over the Phase 1.5 snapshot so no
   download/job state is lost. Verify row counts if useful. Incomplete/partial
   rows may still exist in the DB even though we skip rsyncing `incomplete/` —
   expect the new app to reconcile or re-queue those; no media files for them.
 
-- [ ] **3.3 Migrate media** — rsync **`completed/` only** (~46 GB) from LXC →
+- [x] **3.3 Migrate media** (46 GB rsynced; re-chowned to 999 — rsync had left uid 1000) — rsync **`completed/` only** (~46 GB) from LXC →
   jellyfin. Prefer agent-forward push (same pattern as movies/TV):
 
   ```text
@@ -288,7 +311,7 @@ point clients at the new URL, then remove NFS.
 
   (Local ZFS — no NFS re-export quirks.)
 
-- [ ] **3.4 Restart new app + verify**
+- [x] **3.4 Restart new app + verify**
 
   - restart container; UI shows existing library; paths resolve under
     `/media/hofvarpnir/completed`
@@ -297,7 +320,7 @@ point clients at the new URL, then remove NFS.
   - metrics: `curl -s https://hofvarpnir.homelab.local/metrics | head`
   - logs/traces in Grafana (LOKI_URL / OTLP env)
 
-- [ ] **3.5 Remove NFS from jellyfin** — only after 3.4 is green:
+- [x] **3.5 Remove NFS from jellyfin** — done: `services.nfs.server` + settings + port 2049 removed:
 
   - drop `services.nfs.server` (and `services.nfs.settings.nfsd` if only used for this)
   - drop firewall TCP `2049`
@@ -332,11 +355,10 @@ Deploy: `just colmena-apply-host otel`. Confirm target UP in Prometheus.
 Canonical public links use **`.homelab.local`** (same as axon/romm). Tailnet URL
 is available for human access but not required in forge/dashboard:
 
-- [ ] `homelab-dashboard/default.nix` — `hofvarpnir.url` **and** the quick-link
-  `url` (currently both old `hofvarpnir.dropbear-butterfly.ts.net`) →
-  `https://hofvarpnir.homelab.local` / `…/dashboard`
-- [ ] `uptime-forge/forge.toml` — `[endpoints.hofvarpnir] addr` →
-  `https://hofvarpnir.homelab.local/`
+- [x] `homelab-dashboard/default.nix` — `hofvarpnir.url` + hofvarpnir/Jellyfin quick-links
+  → `*.homelab.local` (also flipped the Jellyfin tile off ts.net)
+- [x] `uptime-forge/forge.toml` — hofvarpnir + jellyfin `addr` → `*.homelab.local`
+  (+ `skip_tls_verification = true`; uptime-forge is rustls/webpki-roots, no step-ca trust)
 - [ ] Optional drive-by: jellyfin forge/dashboard entries still use
   `jellyfin.dropbear-butterfly.ts.net` / ts.net — fix only if desired (out of
   scope for cutover).
@@ -405,12 +427,12 @@ Keep the LXC DB volume until soak is done.
 
 ## Acceptance checklist (cutover complete)
 
-- [ ] `https://hofvarpnir.homelab.local/dashboard` loads (step-ca trusted)
-- [ ] Existing completed media visible; ownership `999:999`
-- [ ] New download lands on ZFS under `/media/hofvarpnir/completed`
-- [ ] Jellyfin library sees new files
-- [ ] Prometheus `job=hofvarpnir` target UP on `hofvarpnir.homelab.local`
-- [ ] Logs (Loki) + traces (Tempo) for `OTEL_SERVICE_NAME=hofvarpnir`
-- [ ] NFS export + port 2049 gone from jellyfin
-- [ ] Dashboard + uptime-forge green on `hofvarpnir.homelab.local`
-- [ ] LXC hofvarpnir containers removed (after soak)
+- [x] `https://hofvarpnir.homelab.local/dashboard` loads (step-ca trusted) + Pocket ID SSO
+- [x] Existing completed media visible; ownership `999:999`
+- [x] New download lands on ZFS under `/media/hofvarpnir/completed`
+- [ ] Jellyfin library sees new files (user's manual library setup)
+- [x] Prometheus `job=hofvarpnir` target UP on `hofvarpnir.homelab.local`
+- [x] Logs (Loki via http://otel…:3100) + traces (OTLP) for `OTEL_SERVICE_NAME=hofvarpnir`
+- [x] NFS export + port 2049 gone from jellyfin (deploy `jellyfin`)
+- [x] Dashboard + uptime-forge repointed to `hofvarpnir.homelab.local` (deploy `containers`)
+- [ ] LXC hofvarpnir containers removed (after soak)  ← **4.3**
