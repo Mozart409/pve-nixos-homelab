@@ -73,6 +73,11 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
   - Use `variables` for sensitive data or reusable values.
   - Keep `main.tf` clean; split into `variables.tf` or `providers.tf` if it grows too large (currently unified in `main.tf`).
 
+### Commit Messages
+- Use **single-line** conventional commits: `type(scope): summary`.
+- **No commit body.** Do not add explanatory paragraphs, bullet lists, or
+  `Co-authored-by`/tool trailers. The subject line is the whole message.
+
 ### General Development
 - **Dev Environment**:
   - Use `nix develop` (or the automatic direnv integration if available) to enter the development shell.
