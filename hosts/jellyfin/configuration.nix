@@ -67,6 +67,32 @@
     "d /media/music 0755 jellyfin jellyfin -"
   ];
 
+  # NFS export of the hofvarpnir media dir.
+  #
+  # hofvarpnir (fetch-and-store media app on an old Rocky LXC, 192.168.2.100, same
+  # Proxmox host / segment) mounts this and writes completed downloads straight onto
+  # the tuned ZFS pool — no copy, no sync, no delete-war. It owns the file lifecycle
+  # (15-min retention cleanup); Jellyfin just reads. Jellyfin metadata stays in
+  # /var/lib/jellyfin ("save artwork/NFO into media folders" OFF) so cleanup never
+  # collides with it.
+  #
+  # NFSv4-only so the firewall needs a single port (2049). all_squash + anonuid/anongid
+  # map every client write to jellyfin:jellyfin (uid/gid 999) regardless of the
+  # Rocky-side UID, matching the existing /media ownership (no re-chown needed).
+  # fsid=0 makes this the NFSv4 pseudo-root: hofvarpnir mounts `192.168.2.180:/`.
+  services.nfs.server = {
+    enable = true;
+    exports = ''
+      /media/hofvarpnir 192.168.2.100(rw,sync,no_subtree_check,fsid=0,all_squash,anonuid=999,anongid=999)
+    '';
+  };
+  # Disable NFSv2/v3 so only TCP 2049 is needed (no rpcbind/mountd/statd ports).
+  services.nfs.settings.nfsd = {
+    vers2 = false;
+    vers3 = false;
+    vers4 = true;
+  };
+
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
     enable = true;
@@ -115,6 +141,7 @@
       443 # HTTPS (Caddy)
       8096 # Jellyfin HTTP
       9100 # Node exporter
+      2049 # NFSv4 (hofvarpnir writes media onto the ZFS pool)
     ];
   };
 
