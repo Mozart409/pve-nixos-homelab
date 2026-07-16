@@ -54,6 +54,13 @@
     group = "postgres";
   };
 
+  # hofvarpnir database password
+  age.secrets.hofvarpnir-db-password = {
+    file = ../../secrets/hofvarpnir-db-password.age;
+    owner = "postgres";
+    group = "postgres";
+  };
+
   # pgAdmin initial (internal fallback) admin password and Pocket-ID OAuth2 client
   # secret. Both are consumed by the pgAdmin service below via systemd credentials
   # (root-owned 0400 by default is fine: systemd reads them during unit setup).
@@ -102,7 +109,7 @@
     '';
 
     # Initial databases (names must match usernames when using ensureDBOwnership)
-    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo" "buildbot" "romm"];
+    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo" "buildbot" "romm" "hofvarpnir"];
 
     # Initial users
     ensureUsers = [
@@ -124,6 +131,10 @@
       }
       {
         name = "romm";
+        ensureDBOwnership = true;
+      }
+      {
+        name = "hofvarpnir";
         ensureDBOwnership = true;
       }
     ];
@@ -206,6 +217,26 @@
     '';
   };
 
+  # Set password for hofvarpnir user after PostgreSQL creates the user.
+  # Depends on postgresql.service (not postgresql-ensure-users.service, which
+  # does not exist in this nixpkgs — ensureUsers runs in postgresql.service's
+  # postStart, so the role exists once that unit is up).
+  systemd.services.postgresql-hofvarpnir-password = {
+    description = "Set hofvarpnir PostgreSQL user password";
+    after = ["postgresql.service" "agenix.service"];
+    requires = ["postgresql.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "postgres";
+    };
+    script = ''
+      PASSWORD=$(cat ${config.age.secrets.hofvarpnir-db-password.path})
+      ${config.services.postgresql.package}/bin/psql -c "ALTER USER hofvarpnir WITH PASSWORD '$PASSWORD';"
+    '';
+  };
+
   # Set the postgres superuser password from agenix. Depends on
   # postgresql.service (role creation runs in its postStart), not the nonexistent
   # postgresql-ensure-users.service — same gotcha as the other setters above.
@@ -228,7 +259,7 @@
   # Backup configuration
   services.postgresqlBackup = {
     enable = true;
-    databases = ["appdb" "terraform" "forgejo" "buildbot" "romm"];
+    databases = ["appdb" "terraform" "forgejo" "buildbot" "romm" "hofvarpnir"];
     location = "/var/backup/postgresql";
     startAt = "03:00";
     compression = "zstd";

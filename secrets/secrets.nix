@@ -55,4 +55,5 @@ in {
   "buildbot-webhook-secret.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster];
   "romm-db-password.age".publicKeys = [amadeus amadeusAge hostContainers hostDatabase];
   "romm-env.age".publicKeys = [amadeus amadeusAge hostContainers];
+  "hofvarpnir-db-password.age".publicKeys = [amadeus amadeusAge hostDatabase hostJellyfin];
 }
