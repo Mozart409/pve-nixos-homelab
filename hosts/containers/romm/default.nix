@@ -47,7 +47,7 @@ in {
   # Binds 127.0.0.1:8095 -> 8080; Caddy (see ../configuration.nix) is the only
   # thing that proxies to it, terminating step-ca TLS at romm.homelab.local.
   virtualisation.oci-containers.containers.romm = {
-    image = "rommapp/romm:latest";
+    image = "rommapp/romm:5.0";
     autoStart = true;
     ports = ["127.0.0.1:8095:8080"];
     volumes = [
