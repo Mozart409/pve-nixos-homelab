@@ -75,6 +75,13 @@
   services.caddy = {
     enable = true;
 
+    # Access logs. The NixOS default is `level ERROR`, which drops request
+    # logs (they are INFO) and leaves `journalctl -u caddy` empty except for
+    # failures. INFO emits one JSON line per request to stderr -> journald.
+    logFormat = ''
+      level INFO
+    '';
+
     # Tailscale hostname
     virtualHosts."homelab-jellyfin.dropbear-butterfly.ts.net" = {
       extraConfig = ''
