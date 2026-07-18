@@ -94,6 +94,10 @@
         local = "192.168.2.175";
         tailscale = "homelab-cache";
       };
+      sandbox = {
+        local = "192.168.2.176";
+        tailscale = "homelab-sandbox";
+      };
       forgejo = {
         local = "192.168.2.178";
         tailscale = "homelab-forgejo";
@@ -150,6 +154,7 @@
         harbor = mkHost "harbor";
         cache = mkHost "cache";
         forgejo = mkHost "forgejo";
+        sandbox = mkHost "sandbox";
         buildbot-master = mkHost "buildbot-master";
         buildbot-worker-1 = mkHost "buildbot-worker-1";
         # jellyfin = mkHost "jellyfin";
@@ -402,6 +407,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/forgejo/configuration.nix
+          ];
+        };
+
+        sandbox = {
+          deployment = {
+            targetHost = targetHost "sandbox";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["sandbox" "experiment"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/sandbox/configuration.nix
           ];
         };
 
