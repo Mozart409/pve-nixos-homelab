@@ -1044,6 +1044,71 @@ resource "proxmox_virtual_environment_vm" "jellyfin_vm" {
   on_boot = true
 }
 
+# Agent Sandbox VM
+resource "proxmox_virtual_environment_vm" "sandbox_vm" {
+  name        = "sandbox"
+  description = "Agent Sandbox - Debian base for NixOS installation via nixos-anywhere - experimental VM for LLM agent use"
+  tags        = ["terraform", "debian", "nixos-target", "sandbox", "experiment"]
+
+  node_name = "pve-gigabyte"
+  vm_id     = 4345
+
+  bios = "seabios"
+
+  keyboard_layout = "de"
+
+  cpu {
+    cores = 2
+    type  = "host"
+  }
+
+  memory {
+    dedicated = 4096
+    floating  = 4096
+  }
+
+  disk {
+    datastore_id = "zfs_pool"
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    interface    = "scsi0"
+    size         = 32
+  }
+
+  network_device {
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  initialization {
+    datastore_id = "local-lvm"
+
+    ip_config {
+      ipv4 {
+        address = "dhcp"
+      }
+    }
+
+    user_account {
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
+  }
+
+  serial_device {}
+
+  # Enable QEMU Guest Agent
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
+
+  started = false
+  on_boot = true
+}
+
 # # K3s Server (Control Plane) VM
 # resource "proxmox_virtual_environment_vm" "k3s_server_1_vm" {
 #   name        = "k3s-server-1"
@@ -1207,6 +1272,7 @@ output "vm_ipv4_addresses" {
     harbor            = proxmox_virtual_environment_vm.harbor_vm.ipv4_addresses
     cache             = proxmox_virtual_environment_vm.cache_vm.ipv4_addresses
     forgejo           = proxmox_virtual_environment_vm.forgejo_vm.ipv4_addresses
+    sandbox           = proxmox_virtual_environment_vm.sandbox_vm.ipv4_addresses
     buildbot_master   = proxmox_virtual_environment_vm.buildbot_master_vm.ipv4_addresses
     buildbot_worker_1 = proxmox_virtual_environment_vm.buildbot_worker_1_vm.ipv4_addresses
     jellyfin          = proxmox_virtual_environment_vm.jellyfin_vm.ipv4_addresses
