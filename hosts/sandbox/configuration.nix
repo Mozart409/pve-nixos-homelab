@@ -9,6 +9,7 @@
     ../../modules/disko-config.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
+    ../../modules/podman.nix
   ];
 
   networking.hostName = "homelab-sandbox";
@@ -31,15 +32,14 @@
     enabledCollectors = ["systemd" "processes"];
   };
 
-  # Enable Docker/Podman for container experiments
-  virtualisation.podman = {
-    enable = true;
-    dockerCompat = true;
-  };
+  # Podman (+ Docker compat, container DNS) comes from ../../modules/podman.nix
 
   networking.firewall = {
     enable = true;
-    trustedInterfaces = ["tailscale0"];
+    # podman+ = every podman bridge (podman0 plus any per-experiment network).
+    # Without trusting them the host firewall drops container -> aardvark-dns
+    # traffic, so containers can't resolve each other. See harbor's podman1 note.
+    trustedInterfaces = ["tailscale0" "podman+"];
     allowedTCPPorts = [
       22 # SSH
       9100 # Node exporter
@@ -68,7 +68,4 @@
     yq
     # keep-sorted end
   ];
-
-  # Add amadeus to docker group
-  users.users.amadeus.extraGroups = ["docker" "podman"];
 }

@@ -971,7 +971,7 @@ resource "proxmox_virtual_environment_vm" "cache_vm" {
 # Agent Sandbox VM
 resource "proxmox_virtual_environment_vm" "sandbox_vm" {
   name        = "sandbox"
-  description = "Agent Sandbox - Debian base for NixOS installation via nixos-infect - experimental VM for LLM agent use"
+  description = "Agent Sandbox - Debian base for NixOS installation via nixos-anywhere - experimental VM for LLM agent use"
   tags        = ["terraform", "debian", "nixos-target", "sandbox", "experiment"]
 
   node_name = "pve-gigabyte"
@@ -1030,7 +1030,7 @@ resource "proxmox_virtual_environment_vm" "sandbox_vm" {
   }
 
   started = false
-  on_boot = false
+  on_boot = true
 }
 
 # # Jellyfin Media Server VM
