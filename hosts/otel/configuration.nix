@@ -444,6 +444,18 @@
           }
         ];
       }
+      # Sandbox host exporters
+      {
+        job_name = "sandbox-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.176:9100"];
+            labels = {
+              instance = "homelab-sandbox";
+            };
+          }
+        ];
+      }
       # Jellyfin host exporters
       {
         job_name = "jellyfin-node";
