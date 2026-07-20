@@ -91,7 +91,7 @@ in {
     };
 
     uptime-forge = {
-      image = "ghcr.io/mozart409/uptime-forge:v0.2.8";
+      image = "ghcr.io/mozart409/uptime-forge:v0.3.0";
       autoStart = true;
       ports = ["3000:3000"];
       volumes = [
