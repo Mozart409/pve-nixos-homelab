@@ -19,7 +19,7 @@
       port = 8084; # 8080 is taken by AlbyHub on this host
       search = {
         type = "searxng";
-        url = "https://searxng.dropbear-butterfly.ts.net";
+        url = "https://searxng.homelab.local";
       };
       weather = {
         latitude = 48.1374;
