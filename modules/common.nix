@@ -100,6 +100,7 @@
     extraGroups = ["wheel" "networkmanager"];
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMPJIxb+FNkiFtPB/9eUenHa1RCWLBI0ia7KN/nFIdGH iPhone"
     ];
   };
 
