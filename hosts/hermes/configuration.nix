@@ -188,6 +188,15 @@ in {
     mode = "0400";
   };
 
+  # AgentMail API key for the agentmail MCP server (file contains
+  # AGENTMAIL_API_KEY=am_...). Loaded via environmentFiles below so Hermes can
+  # expand it into the agentmail MCP `x-api-key` header at runtime. Read only by
+  # systemd (as root) before the agent drops privileges, so no owner needed.
+  age.secrets.hermes-agentmail-key = {
+    file = ../../secrets/hermes-agentmail-key.age;
+    mode = "0400";
+  };
+
   # Axon MCP gateway bearer token (file contains AXON_GATEWAY_TOKEN=...).
   age.secrets.axon-gateway-env = {
     file = ../../secrets/axon-gateway-env.age;
@@ -217,6 +226,7 @@ in {
       config.age.secrets.hermes-deepseek-key.path
       config.age.secrets.hermes-api-server-key.path
       config.age.secrets.axon-gateway-env.path
+      config.age.secrets.hermes-agentmail-key.path
     ];
 
     # API server config (not secrets). Named providers carry their own
@@ -553,6 +563,13 @@ in {
       axon-gateway = {
         url = "https://axon.homelab.local/mcp";
         headers.Authorization = "Bearer \${AXON_GATEWAY_TOKEN}";
+      };
+      # AgentMail hosted MCP — gives the agent its own email inbox(es) to send,
+      # receive, reply and manage threads. Authenticated with the x-api-key
+      # header, expanded by Hermes from the agenix-loaded AGENTMAIL_API_KEY.
+      agentmail = {
+        url = "https://mcp.agentmail.to/mcp";
+        headers."x-api-key" = "\${AGENTMAIL_API_KEY}";
       };
     };
 

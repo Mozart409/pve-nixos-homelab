@@ -39,6 +39,7 @@ in {
   "hermes-opencode-zen-key.age".publicKeys = [amadeus amadeusAge hostHermes];
   "hermes-api-server-key.age".publicKeys = [amadeus amadeusAge hostHermes];
   "hermes-deepseek-key.age".publicKeys = [amadeus amadeusAge hostHermes];
+  "hermes-agentmail-key.age".publicKeys = [amadeus amadeusAge hostHermes];
   "hermes-forgejo-ssh.age".publicKeys = [amadeus amadeusAge hostHermes];
   "k3s-server-token.age".publicKeys = [amadeus amadeusAge hostK3sServer1 hostK3sWorker1];
   "step-ca-password.age".publicKeys = [amadeus amadeusAge hostCa];
