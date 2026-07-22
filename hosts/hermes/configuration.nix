@@ -368,6 +368,8 @@ in {
       # this override first (before searching PATH for docker/podman), which the
       # module's restricted service PATH would otherwise hide.
       HERMES_DOCKER_BINARY = "${pkgs.podman}/bin/podman";
+      # Agent local timezone; reported time is Berlin local, not UTC.
+      TZ = "Europe/Berlin";
     };
 
     # Declarative configuration. The API server uses this single configured
