@@ -16,6 +16,14 @@ Use this skill when the user asks you to save anything in the shared Obsidian va
 
 Resolve `OBSIDIAN_VAULT_PATH` from the environment. If unset, fall back to `/var/lib/hermes/workspace/vault` (the homelab default). Use the resolved absolute path throughout.
 
+## Sync before writing
+
+Pull remote changes into the checkout FIRST, so you build on the latest state and avoid push conflicts. There is no host-side sync service — you are the only writer that reconciles the vault.
+
+- `cd <vault_path>` then `git pull --rebase --autostash`.
+- This brings in edits you made in Obsidian on other devices; `--autostash` tucks away any in-progress work across the rebase.
+- If it reports a rebase conflict, **stop** and tell the user — do not force, reset, or discard.
+
 ## Pre-write context gathering
 
 Before creating any note, gather context so you don't make incorrect claims:
@@ -69,19 +77,20 @@ For reference info, meeting notes, ideas, or anything else.
 3. **Write** with `write_file`.
 4. **Commit** with `git commit -m "docs(vault): add <topic> note"`.
 
-## Git commit rules (must follow every time)
+## Git commit & push rules (must follow every time)
 
-- The vault has a systemd service that auto-pulls/pushes. **NEVER push from the sandbox.**
-- Always `cd <vault_path>` and run `git add -A` then `git commit`.
+- Always `cd <vault_path>`, then `git add -A` and `git commit`.
 - Use conventional commit format: `docs(vault): <message>`
 - Imperative mood, lowercase, no trailing period. Example:
   - `docs(vault): add shopping list for 2026-06-21`
   - `docs(vault): add notes on tailscale networking`
 - Breaking changes use `docs(vault)!: <message>` or the `BREAKING CHANGE:` footer.
+- **Push after committing:** run `git push`. You hold the Forgejo key on `~/.ssh` and push directly — there is no host-side pusher anymore.
+- If `git push` is rejected because the remote moved, run `git pull --rebase --autostash`, then `git push` again.
 
 ## Pitfalls
 
-- **Never push.** The systemd service handles that. Pushing from the sandbox will conflict.
+- **Pull before you write, push after you commit** (see the sync + commit rules above). Nothing host-side reconciles the vault for you now, so staleness and unpushed commits are on you.
 - **Always check if a file already exists** before creating it. Use `search_files(target="files")` or `read_file` to probe.
 - **Template is read-only.** Copy it, don't move or modify it.
 - **Don't over-search DM products.** "DM" means the destination (Drogerie Markt), not a product catalog.
