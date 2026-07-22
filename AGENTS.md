@@ -241,78 +241,20 @@ These carry step-ca TLS certs, which are trusted on any host importing
 - **CORRECT**:
   `url = "https://mcp.homelab.local/mcp";`  # resolves + step-ca TLS trusted
 
-### Hermes Rootless Podman: Stale `pause.pid` Breaks the Code/Terminal Backend
+### Hermes Terminal/Code/File Backend Is `local` (Not Podman)
 
-On `hermes` (192.168.2.155) the rootless-podman backend for the `terminal` /
-`execute_code` / file tools can break with:
-
-```
-Error: cannot re-exec process to join the existing user namespace   (podman exit 125)
-```
-
-which Hermes surfaces as `execute_code` → *"Docker command is available but 'docker
-version' failed. Check your Docker installation."*
-
-**Root cause:** podman auto-selects `/run/user/995` as its runtime dir whenever that
-directory exists (lingering is enabled for the `hermes` user, uid `995`), **regardless
-of whether `XDG_RUNTIME_DIR` is set**. A stale `/run/user/995/libpod/tmp/pause.pid` left
-over from a previous run points at a dead pid, so every new podman invocation tries to
-join a user namespace that no longer exists and aborts. The `/tmp/storage-run-995`
-runroot is a red herring, and `podman system migrate` does **not** help — it can't start
-either while the stale pidfile is present.
-
-**Surgical fix (no data loss — image storage under
-`/var/lib/hermes/.local/share/containers/storage` is preserved):**
-
-```bash
-# run podman as the agent does: HOME set, XDG_RUNTIME_DIR unset, from a neutral cwd
-sudo systemctl stop hermes-agent
-sudo pkill -9 -u hermes -f conmon; sudo pkill -9 -u hermes -f pasta
-sudo pkill -9 -u hermes -f run/podman-init           # kill June-leftover orphan container
-sudo rm /run/user/995/libpod/tmp/pause.pid           # the ONE stale file
-cd /tmp && sudo -u hermes env HOME=/var/lib/hermes podman rm -f <stale-container>  # if a dead
-                                                     # persistent container record holds a lock
-sudo systemctl start hermes-agent
-# verify:
-cd /tmp && sudo -u hermes env HOME=/var/lib/hermes podman version
-```
-
-Always invoke podman for this user as `cd /tmp && sudo -u hermes env
-HOME=/var/lib/hermes podman ...` — the service sets `HOME=/var/lib/hermes`, so
-reproduce its environment when debugging. SSH in as `amadeus@192.168.2.155` (root
-login is disabled) and prefix privileged steps with `sudo`.
-
-**Second variant — orphan podman helpers wedge the backend (fixed 2026-06-16):** the
-real recurring root cause (beyond a stale `pause.pid`) is **orphan
-`conmon`/`pasta`/`/run/podman-init` processes** left by a crashed/previous agent
-instance. They keep holding the rootless user namespace + storage flocks, so every
-new podman invocation aborts with `cannot re-exec process to join the existing user
-namespace`, surfaced by `execute_code` as *"Docker version failed"*. `podman ps` may
-also show the storage runroot at `/tmp/storage-run-<uid>` reporting `RunRoot ... not
-writable` once that dir is disturbed.
-
-**Why the orphans appear:** the gateway logs `Stale systemd unit detected:
-hermes-agent.service has TimeoutStopSec=90s but drain_timeout=180s (expected >=210s).
-systemd may SIGKILL the gateway mid-drain.` The hermes module ships
-`TimeoutStopSec=90s`, but the agent drains for up to 180s on stop/restart — so on
-every restart/redeploy systemd **SIGKILLs the agent mid-drain**, interrupting podman's
-container teardown and orphaning the helpers. They accumulate across deploys until
-podman wedges. Fixed declaratively by `TimeoutStopSec = lib.mkForce 210;` on the
-service (prevents the unclean kill); the `ExecStartPre` guard below is the safety net
-for any that still slip through.
-
-Note the storage **runRoot stays on `/tmp/storage-run-<uid>`** and that is fine —
-Hermes invokes podman with a sanitised environment that drops `XDG_RUNTIME_DIR`, so a
-unit-level `environment.XDG_RUNTIME_DIR` pin does **not** move it (verified: conmon's
-argv still showed `--runroot /tmp/storage-run-995`). Don't bother fighting the
-runroot location; the failure is the orphans, not where the runroot lives.
-
-Manual recovery (as `amadeus@`, with `sudo`): stop the agent, `pkill -9 -u hermes`
-the `conmon`/`pasta`/`podman-init` orphans, remove the stale `pause.pid`, then
-restart. This is now **automated in `ExecStartPre`** — the `podmanPauseGuard` in
-`hosts/hermes/configuration.nix` reaps those orphans (and clears a stale `pause.pid`)
-before the agent starts, so a plain `systemctl restart hermes-agent` / redeploy
-self-heals it.
+As of the `local`-backend migration, `hermes` no longer runs its `terminal` /
+`execute_code` / file tools inside a rootless-podman jail. `terminal.backend =
+"local"` runs them as host subprocesses of the agent — i.e. as the `hermes` service
+user — confined by the systemd unit sandbox (`ProtectSystem=strict`, `PrivateTmp`,
+`NoNewPrivileges`, plus a `ReadOnlyPaths` lock on `config.yaml`/`SOUL.md`/`USER.md`
+and `TasksMax`/`LimitNPROC`/`MemoryHigh` caps). There is no libpod DB, runroot, pause
+process, or persistent container — so the whole class of "execute_code → Docker
+version failed" wedges (stale `pause.pid`, orphan `conmon`/`pasta` helpers, undetermined
+runroot) is gone by construction. If the tools misbehave, debug the `hermes-agent`
+unit directly (`journalctl -u hermes-agent`, `systemctl status hermes-agent`) — there
+is no podman layer to reset. The old podman image storage under
+`/var/lib/hermes/.local/share/containers` is inert leftover and can be GC'd.
 
 ### Hermes API Server (Open WebUI) Ignores Top-Level `toolsets`
 
@@ -465,46 +407,39 @@ More Jellyfin OIDC notes:
 
 ## 7. Hermes Agent Access to This Repo (feature-branch dev)
 
-The Hermes agent (driven from Open WebUI) can develop changes to *this* repo
-inside its podman sandbox. It commits on feature branches; a host-side service
-pushes them to Forgejo. `main` is branch-protected, so the bot can never land
-changes directly — you review the branch, open the PR, and deploy with `colmena`.
-The plan/design lives in `hosts/hermes/pve-nixos-homelab.md`.
+The Hermes agent (driven from Open WebUI) can develop changes to *this* repo. Under
+the `local` terminal backend it runs its file/terminal/nix tools **as the `hermes`
+user directly on the VM** (no container). It commits on feature branches and **pushes
+them to Forgejo itself** with the `hermes-forgejo-ssh` key on `~/.ssh`. `main` is
+branch-protected, so the bot can never land changes directly — you review the branch,
+open the PR, and deploy with `colmena`.
 
 ### One-time Forgejo setup (done in the web UI, not in this repo)
 - Add `hermes-bot` as a **Write** collaborator on `amadeus/pve-nixos-homelab`.
 - Protect `main`: block direct pushes (no push whitelist, or whitelist only you)
   so changes must go through pull requests.
-- Auto-PR is intentionally **off** — no API token is configured. The host service
-  only pushes the branch; you open the PR yourself.
+- Auto-PR is intentionally **off** — no API token is configured. The agent only
+  pushes the branch; you open the PR yourself.
 
 ### How it works (declarative, in `hosts/hermes/configuration.nix`)
 - Access reuses the existing `hermes-forgejo-ssh` key (same `hermes-bot` account
   as the Obsidian vault, same `forgejo.homelab.local:2222` host the `~/.ssh/config`
-  already routes). **No new secret.** The key stays host-side — never mounted into
-  the sandbox.
-- The repo is cloned at `~/workspace/pve-nixos-homelab` (`$HOMELAB_REPO_PATH`) and
-  bind-mounted read-write into the sandbox. `hermes-repo-sync.{service,timer,path}`
-  clones-or-fetches and pushes the current feature branch (never `main`, only when
-  it is ahead of `origin/main`).
-- The sandbox has `nix` via the **host nix-daemon**: `/nix` is bind-mounted
-  read-only (store + the `0666` daemon socket) and the container runs with
-  `NIX_REMOTE=daemon`. So the agent can `nix flake check` / `nix develop -c just …`
-  to validate flake changes; builds run on the host daemon (no host root, no
-  access to secrets). See the security note in `hosts/hermes/pve-nixos-homelab.md`.
+  already routes). **No new secret.** Under `local` the agent runs as `hermes`, so
+  it reads the key directly and pushes on its own.
+- The checkout lives at `~/workspace/pve-nixos-homelab` (`$HOMELAB_REPO_PATH`). The
+  `hermes-repo-sync` oneshot + timer only **bootstrap** it (clone-if-missing + a
+  periodic `git fetch` to keep `origin/main` fresh); it never commits, merges, or
+  pushes. The agent fetches + pushes feature branches itself.
+- `nix` is on the agent's service PATH (via `extraPackages`) and talks to the **host
+  nix-daemon natively** — no socket bind-mount, no `NIX_REMOTE`. So the agent can
+  `nix develop -c just …` / scoped `nix eval` to validate flake changes.
+- Config integrity: `config.yaml`, `SOUL.md`, and `USER.md` are bound **read-only**
+  to the running agent via `serviceConfig.ReadOnlyPaths` (they are (re)written by a
+  root activation script outside the unit namespace), so the agent cannot rewrite its
+  own config/system prompt — Nix stays the source of truth.
 - The agent loads the `homelab-config-repo` skill
   (`hosts/hermes/skills/development/homelab-config-repo/SKILL.md`) describing this
   workflow.
-
-### Login-shell PATH gotcha (`nix: command not found`)
-Hermes runs terminal commands through a **login shell**, and the nikolaik image's
-`/etc/profile` hard-resets `PATH` to a fixed default — wiping `docker_env.PATH`
-(which only survives *non-login* shells). That made the agent report
-`nix: command not found` even though `/nix` was mounted and `NIX_REMOTE` was set.
-Fixed by bind-mounting `/etc/profile.d/hermes-nix.sh` (`nixProfileScript`) that
-re-adds `${pkgs.nix}/bin` to `PATH`; `/etc/profile` sources `/etc/profile.d/*.sh`
-*after* the reset, so it survives `bash -lc`. Only `PATH` is reset by
-`/etc/profile` — the `NIX_*` env vars survive untouched.
 
 ### Agent workflow (enforced by SOUL.md)
 - Never commits to `main`; one feature branch per task, started from a fresh
@@ -513,18 +448,15 @@ re-adds `${pkgs.nix}/bin` to `PATH`; `/etc/profile` sources `/etc/profile.d/*.sh
   `nix eval ".#nixosConfigurations.<host>.config.system.build.toplevel.drvPath"`
   for each edited host — NOT the full `just nixos-check` / `nix flake check`,
   which evaluates all ~16 hosts and gets OOM-killed (exit 137) on the host
-  nix-daemon from the sandbox. The full check stays the user's pre-merge gate.
+  nix-daemon. The full check stays the user's pre-merge gate.
 - Commits **through the dev shell** (`nix develop -c git commit`) so the lefthook
-  `alejandra`/`keep-sorted` pre-commit hooks resolve; a bare `git commit` fails
-  them in the sandbox (those tools aren't on the container PATH). The host pushes
-  the branch automatically within seconds.
+  `alejandra`/`keep-sorted` pre-commit hooks resolve; a bare `git commit` fails them.
+  Then pushes the feature branch itself (`git push -u origin feat/<slug>`).
 
 ### Deploy-time checks (cannot be validated offline)
-- In-sandbox: `nix --version` then a scoped `nix eval` (see above) in
-  `$HOMELAB_REPO_PATH` — confirms the daemon-over-socket path works under the user
-  namespace. (Verified 2026-06-25 on `feat/validate-workflow`: `nix` 2.34.7,
-  `htop` change evaluated clean; the full `nix flake check` OOM-kills the `hermes`
-  config in the sandbox, which is why validation is scoped per host.)
-- Confirm `execute_code` still finds python3/node after the sandbox `PATH` change.
-- An agent commit on a `feat/*` branch should appear on Forgejo within seconds; a
-  commit attempt on `main` is rejected by branch protection.
+- Confirm `execute_code` finds `python3`/`node`, and `terminal` finds `nix`/`git`/
+  `ssh`, from the `local`-backend service PATH (`extraPackages`).
+- Confirm the config lock: as `hermes`, writing `config.yaml`/`SOUL.md`/`USER.md`
+  fails (read-only), while other `~/.hermes/` writes succeed.
+- An agent-pushed `feat/*` branch should appear on Forgejo; a push to `main` is
+  rejected by branch protection.

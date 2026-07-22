@@ -1,6 +1,6 @@
 ---
 name: homelab-config-repo
-description: Develop changes to the pve-nixos-homelab NixOS/IaC config on a feature branch, validate them with nix, and commit. Use whenever the user asks you to change, add, or fix anything in this homelab's own configuration (hosts, modules, flake, secrets wiring, services). The host auto-pushes your branch; the user opens the PR and deploys.
+description: Develop changes to the pve-nixos-homelab NixOS/IaC config on a feature branch, validate them with nix, commit, and push the branch to Forgejo. Use whenever the user asks you to change, add, or fix anything in this homelab's own configuration (hosts, modules, flake, secrets wiring, services). You push the feature branch yourself; the user opens the PR and deploys.
 platforms: [linux]
 required_environment_variables:
   - HOMELAB_REPO_PATH
@@ -25,14 +25,13 @@ list.
 
 ## Hard rules (read first)
 
-- **NEVER commit to `main`.** It is branch-protected on Forgejo and your push
-  would be rejected. Always work on a feature branch.
-- **NEVER push, open PRs, merge, or deploy.** You have neither the SSH key nor
-  network to Forgejo inside the sandbox. A host service pushes your feature
-  branch automatically within seconds of each commit. The user reviews the
-  branch, opens the pull request, and deploys with `colmena` when at the host.
-- **Never** run `git reset --hard`, `git push`, `git pull`, or force anything in
-  this repo.
+- **NEVER commit or push to `main`.** It is branch-protected on Forgejo and the
+  push would be rejected. Always work on a feature branch.
+- **Push your feature branch, but NEVER open PRs, merge, or deploy.** Your git is
+  configured with the Forgejo key, so you push the branch yourself
+  (`git push -u origin feat/<slug>`). The user reviews the branch, opens the pull
+  request, and deploys with `colmena` when at the host.
+- **Never** run `git reset --hard`, force-push, or `git push`/`pull` on `main`.
 
 ## Workflow (every task)
 
@@ -55,8 +54,8 @@ list.
    ```
    Then **evaluate only the host(s) you changed** — do NOT run the full
    `just nixos-check` / `nix flake check`. The full check evaluates all ~16 hosts
-   at once and reliably gets OOM-killed (exit 137) on the host nix-daemon from
-   this sandbox. A scoped eval of the touched host fully type-checks your change
+   at once and reliably gets OOM-killed (exit 137) on the host nix-daemon. A
+   scoped eval of the touched host fully type-checks your change
    (every module that host imports is evaluated) without that cost:
    ```
    nix eval ".#nixosConfigurations.<host>.config.system.build.toplevel.drvPath"
@@ -72,8 +71,7 @@ list.
 4. **Commit** with a clear conventional-commit message (imperative, lowercase, no
    trailing period). Commit **through the dev shell** so the repo's lefthook
    pre-commit hooks (`alejandra`, `keep-sorted`) are on PATH and actually run — a
-   bare `git commit` fails those hooks in this sandbox because the tools aren't on
-   the container PATH:
+   bare `git commit` fails those hooks because the tools aren't on the base PATH:
    ```
    git -C "$HOMELAB_REPO_PATH" add -A
    cd "$HOMELAB_REPO_PATH" && nix develop -c git commit -m "<type>(<scope>): <summary>"
@@ -82,26 +80,21 @@ list.
    `chore(flake): bump inputs`. Keep commits focused and small. Do NOT pass
    `--no-verify` to skip the hooks — run them via `nix develop` as shown.
 
-5. **Stop.** Tell the user the branch name and a short summary of the change.
-   Do not push — the host service does it. They will see the branch on Forgejo.
+5. **Push the feature branch** to Forgejo, then stop:
+   ```
+   git -C "$HOMELAB_REPO_PATH" push -u origin feat/<short-slug>
+   ```
+   Tell the user the branch name and a short summary of the change. A push to
+   `main` is rejected by branch protection — that is expected; never try it.
 
 ## Notes & pitfalls
 
 - New `.nix` files must be `git add`ed before `nix eval` / `nix flake check` sees
   them (the flake only evaluates tracked files). Stage new files first
   (`git -C "$HOMELAB_REPO_PATH" add <file>`) if you validate before committing.
-- If a command says `nix: command not found`: your sandbox already has nix on
-  PATH for normal **terminal** calls (the host puts `${pkgs.nix}/bin` on PATH via
-  `docker_env.PATH` and re-adds it for login shells via `/etc/profile.d/hermes-nix.sh`).
-  This error usually means you are in a context that reset PATH (e.g. a subshell
-  inside `execute_code`). Recover by running the command from the terminal tool as
-  `cd "$HOMELAB_REPO_PATH" && nix ...`. If it still fails, put nix on PATH for that
-  one command without guessing store paths:
-  ```
-  export PATH="$(dirname "$(readlink -f /run/current-system/sw/bin/nix 2>/dev/null || command -v nix)"):$PATH"
-  ```
-  and report it to the user — a persistently missing `nix` means the host config
-  needs a redeploy, which only the user can do.
+- `nix` is on your terminal PATH (provided by the host service). If a subshell
+  ever reports `nix: command not found`, run the command from the terminal tool as
+  `cd "$HOMELAB_REPO_PATH" && nix ...`; it talks to the host nix-daemon natively.
 - Adding a whole new host is a multi-file change — follow the "Adding New Hosts
   Checklist" in the repo's `AGENTS.md` (flake registration, DNS, monitoring, …).
 - Do not edit secrets (`.age` files) or attempt to decrypt them; you don't have
