@@ -257,6 +257,12 @@ in {
       # Served by Caddy on the containers host; step-ca TLS is trusted here via
       # step-ca-trust.nix. Local DNS name — MagicDNS does not resolve from hermes.
       SEARXNG_URL = "https://searxng.homelab.local";
+      # SSL cert file pointing at the system CA bundle that includes the
+      # Homelab step-ca root cert. httpx (used by the searxng web-search
+      # provider) needs this explicitly — it fails with CERTIFICATE_VERIFY_FAILED
+      # even though Python's default_verify_paths points at the same file,
+      # because httpcore/httpx re-initializes the SSL context differently.
+      SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
     };
 
     # Declarative configuration. The API server uses this single configured
