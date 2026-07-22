@@ -15,7 +15,7 @@
   vaultOwner = "amadeus";
   vaultRepoName = "obsidian-kb";
   hermesHome = "/var/lib/hermes"; # services.hermes-agent.stateDir default == $HOME
-  vaultPath = "${hermesHome}/workspace/vault"; # inside the file-tool sandbox root
+  vaultPath = "${hermesHome}/workspace/vault"; # the shared Obsidian vault clone
 
   # ── Extra (declarative) skills ────────────────────────────────────────────
   # Custom skills shipped from this repo, exposed to Hermes read-only via the
@@ -24,9 +24,8 @@
   # first, then every external_dirs entry, rglob-ing each for <name>/SKILL.md.
   # Pointing at this immutable store path keeps the skills reproducible and out
   # of the mutable, hub-managed ~/.hermes/skills tree. These skills are
-  # instruction-only (they direct the agent's existing file/terminal tools), so
-  # they do NOT need to be bind-mounted into the podman sandbox — the loader
-  # reads them host-side when building the prompt.
+  # instruction-only (they direct the agent's existing file/terminal tools); the
+  # loader reads them host-side when building the prompt.
   #
   # NB: `./skills` is relative to THIS file, so it resolves to
   # hosts/hermes/skills/ — NOT the repo-root top-level skills/ directory. It
@@ -39,29 +38,17 @@
 
   # ── Homelab config repo (this repo) ───────────────────────────────────────
   # The agent develops changes to the NixOS homelab config on FEATURE BRANCHES
-  # inside its podman sandbox; a host-side service (hermes-repo-sync) pushes those
-  # branches to Forgejo. `main` is branch-protected on Forgejo, so the bot can
-  # never land changes directly — the user reviews the branch, opens a PR, and
-  # deploys (colmena) by hand. Access reuses the SAME hermes-bot Forgejo account
-  # + hermes-forgejo-ssh key as the vault (same forgejo.homelab.local:2222 host
-  # the ~/.ssh/config block already routes), so NO new secret is needed. The key
-  # stays host-side only — it is never mounted into the sandbox.
+  # and, under the `local` backend (running as the hermes user), fetches + pushes
+  # them to Forgejo itself with the hermes-forgejo-ssh key on ~/.ssh. `main` is
+  # branch-protected on Forgejo, so the bot can never land changes directly — the
+  # user reviews the branch, opens a PR, and deploys (colmena) by hand. Access
+  # reuses the SAME hermes-bot Forgejo account + hermes-forgejo-ssh key as the
+  # vault (same forgejo.homelab.local:2222 host the ~/.ssh/config block already
+  # routes), so NO new secret is needed.
   repoOwner = "amadeus";
   repoName = "pve-nixos-homelab";
-  repoPath = "${hermesHome}/workspace/${repoName}"; # inside the file-tool sandbox root
+  repoPath = "${hermesHome}/workspace/${repoName}"; # the agent's repo checkout
   repoRemote = "ssh://forgejo@forgejo.homelab.local:2222/${repoOwner}/${repoName}.git";
-
-  # Put `nix` on PATH inside the sandbox even for LOGIN shells. Hermes runs
-  # terminal commands through a login shell, and the nikolaik image's
-  # /etc/profile *hard-resets* PATH to a fixed default — discarding the
-  # docker_env.PATH below (which only survives in non-login shells). /etc/profile
-  # then sources /etc/profile.d/*.sh AFTER that reset (via run-parts), so dropping
-  # this file there re-adds the host nix bin (and every nix CLI tool). Verified
-  # in-image: the addition survives `bash -lc`. Filename must match run-parts'
-  # `^[a-zA-Z0-9_][a-zA-Z0-9._-]*\.sh$` — `hermes-nix.sh` (the mount target) does.
-  nixProfileScript = pkgs.writeText "hermes-nix-profile.sh" ''
-    export PATH="$PATH:${pkgs.nix}/bin"
-  '';
 
   # SSH client config: route forgejo over :2222 using the hermes-bot deploy key.
   vaultSshConfig = pkgs.writeText "hermes-vault-ssh-config" ''
@@ -95,14 +82,14 @@
     install -m 600 ${vaultGitConfig} ${hermesHome}/.gitconfig
   '';
 
-  # Clone-or-sync: clones on first run, then PULLS your Obsidian edits and PUSHES
-  # the agent's commits. It no longer commits anything itself — the agent authors
-  # commits in-jail with meaningful messages (see SOUL.md); this host-side service
-  # only moves them, since push/pull need the Forgejo SSH key that we deliberately
-  # keep out of the agent's container. `--autostash` tucks away any uncommitted
-  # agent edits across the rebase. Triggered by (a) a path unit on .git/logs/HEAD
-  # when the agent commits (outbound) and (b) a slow timer (inbound). Idempotent
-  # and self-healing — exits 0 on a missing remote so the trigger simply retries.
+  # Clone-or-sync: clones on first run, then PULLS your Obsidian edits (and pushes
+  # as a safety net). It no longer commits anything itself — the agent authors
+  # commits with meaningful messages and now pushes them directly too (see
+  # SOUL.md); this service is primarily the INBOUND path for your Obsidian edits.
+  # `--autostash` tucks away any uncommitted agent edits across the rebase.
+  # Triggered by (a) a path unit on .git/logs/HEAD when the agent commits and
+  # (b) a slow timer. Idempotent and self-healing — exits 0 on a missing remote
+  # so the trigger simply retries.
   vaultSync = pkgs.writeShellScript "hermes-vault-sync" ''
     set -u
     export GIT_SSH_COMMAND='${gitSshCmd}'
@@ -123,153 +110,27 @@
     $git push --quiet || echo "hermes-vault-sync: push failed" >&2
   '';
 
-  # Clone-or-push for the homelab config repo. Push-ONLY (the inverse emphasis of
-  # the vault): it never commits, never merges, and NEVER pushes main — the agent
-  # authors commits in-jail on feature branches (see SOUL.md) and the user opens
-  # the PR + deploys. This host-side service moves the agent's branch out using
-  # the Forgejo SSH key we keep out of the container. Idempotent and self-healing:
-  #   - clone-if-empty (into a pre-created empty dir so the agent's bind-mount
-  #     target always exists; a failed clone just leaves the empty dir + retries),
-  #   - `git fetch` keeps origin/main fresh for the agent to branch from,
-  #   - push only when HEAD is a non-main branch with commits ahead of origin/main.
-  # Triggered by (a) a path unit on .git/logs/HEAD when the agent commits and
-  # (b) a slow timer (fetch + retry). Exits 0 on any soft failure so triggers retry.
-  repoSync = pkgs.writeShellScript "hermes-repo-sync" ''
+  # Bootstrap the homelab config repo checkout for the agent. Under the `local`
+  # terminal backend the agent runs AS the hermes user with the Forgejo key on
+  # ~/.ssh, so it fetches + pushes its own feature branches directly (see SOUL.md);
+  # there is no longer a host-side pusher. This helper only guarantees the checkout
+  # EXISTS at ${repoPath} and keeps origin/main fresh: clone-if-missing + a single
+  # fetch. It never commits, merges, or pushes. Idempotent and self-healing — exits
+  # 0 on any soft failure so the boot oneshot / timer simply retries.
+  repoSync = pkgs.writeShellScript "hermes-repo-bootstrap" ''
     set -u
     export GIT_SSH_COMMAND='${gitSshCmd}'
     git=${pkgs.git}/bin/git
     mkdir -p ${repoPath}
     if [ ! -d ${repoPath}/.git ]; then
       if ! $git clone ${repoRemote} ${repoPath}; then
-        echo "hermes-repo-sync: clone failed (forgejo/network not ready?)" >&2
+        echo "hermes-repo-bootstrap: clone failed (forgejo/network not ready?)" >&2
         exit 0
       fi
     fi
     cd ${repoPath} || exit 0
-    if ! $git fetch origin --prune --quiet; then
-      echo "hermes-repo-sync: fetch failed" >&2
-      exit 0
-    fi
-    branch=$($git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
-    case "$branch" in
-      main | master | HEAD)
-        # Never push the protected/default branch; just keep origin fresh.
-        exit 0
-        ;;
-    esac
-    ahead=$($git rev-list --count origin/main..HEAD 2>/dev/null || echo 0)
-    [ "$ahead" -gt 0 ] 2>/dev/null || exit 0
-    $git push -u origin "$branch" --quiet \
-      || echo "hermes-repo-sync: push of '$branch' failed" >&2
-  '';
-
-  # ── Deterministic rootless-podman runroot ────────────────────────────────
-  # The recurring "execute_code → Docker version failed" wedge is NOT (only) a
-  # stale pause.pid — its real cause is an UNDETERMINED runroot. Hermes invokes
-  # podman with XDG_RUNTIME_DIR stripped, so podman computes the runroot from the
-  # environment on each fresh init: it uses /run/user/995 when that exists, else
-  # falls back to /tmp/storage-run-995. Whichever it sees FIRST gets baked into
-  # the libpod DB (db.sql) and from then on podman *enforces* it, overriding the
-  # other and aborting with "database configuration mismatch" / an unwritable
-  # /tmp runroot. `podman system migrate` only papers over it until the next init
-  # re-bakes a divergent path. The fix is to PIN the runroot so it is identical
-  # no matter how (or how early) podman is invoked.
-  #
-  # We pin it to /run/hermes-podman, created deterministically by systemd's
-  # RuntimeDirectory= for the hermes-agent unit (owned by the service user, mode
-  # 0700, on tmpfs, materialised BEFORE ExecStartPre, cleaned per boot) — exactly
-  # what a runroot should be, with no dependence on logind's lingering session.
-  podmanRunRoot = "/run/hermes-podman";
-  podmanStorageConf = pkgs.writeText "hermes-storage.conf" ''
-    [storage]
-    driver = "overlay"
-    graphroot = "${hermesHome}/.local/share/containers/storage"
-    runroot = "${podmanRunRoot}"
-  '';
-  # Force the cgroupfs cgroup manager. podman defaults to the *systemd* manager,
-  # where crun creates the container's cgroup scope by calling StartTransientUnit
-  # on the hermes user's systemd over the session D-Bus (/run/user/995/bus). But
-  # Hermes invokes podman with XDG_RUNTIME_DIR stripped, so crun can't find that
-  # bus, falls back to the SYSTEM bus as the unprivileged hermes uid, and is
-  # denied — surfacing as `podman run` exit code 126 ("crun: sd-bus call:
-  # Permission denied") and Hermes' "couldn't start the sandbox container".
-  # cgroupfs makes crun manage cgroups directly under the unit's delegated
-  # subtree (see Delegate=true on the service) with no D-Bus call, so containers
-  # start headlessly regardless of the session bus. Verified: `podman run
-  # --cgroup-manager=cgroupfs ...` launches the sandbox image and returns output.
-  #
-  # tmp_dir = pin the libpod runtime tmp dir (and with it the OCI runtime's
-  # exit-files directory) onto the same systemd-managed tmpfs. This is the LAST
-  # logind dependency: podman derives the OCI runtime exit-files dir from
-  # Engine.TmpDir, which for rootless defaults to /run/user/<uid>/libpod/tmp —
-  # NOT from XDG_RUNTIME_DIR (pinning XDG moved the runroot but NOT this). When
-  # user@<uid> is down, /run/user/<uid> is a stale root-owned dir hermes can't
-  # write, so crun init fails with "creating OCI runtime exit files directory:
-  # mkdir /run/user/<uid>: permission denied" — surfaced (misleadingly) as
-  # `podman version` → exit 125 'default OCI runtime "crun" not found'. Pinning
-  # tmp_dir here puts the exit dir under /run/hermes-podman, so the sandbox no
-  # longer needs the user session at all (this is what makes linger removable).
-  podmanContainersConf = pkgs.writeText "hermes-containers.conf" ''
-    [engine]
-    cgroup_manager = "cgroupfs"
-    tmp_dir = "${podmanRunRoot}/libpod-tmp"
-  '';
-  # Install ~/.config/containers/{storage,containers}.conf for the hermes user.
-  # podman reads these regardless of the (sanitised) invocation environment, so
-  # both the runroot and the cgroup manager are deterministic for the service,
-  # the sync timer, and any manual debugging.
-  podmanStorageSetup = pkgs.writeShellScript "hermes-podman-storage-setup" ''
-    set -eu
-    install -d -m 700 ${hermesHome}/.config/containers
-    install -m 644 ${podmanStorageConf} ${hermesHome}/.config/containers/storage.conf
-    install -m 644 ${podmanContainersConf} ${hermesHome}/.config/containers/containers.conf
-  '';
-
-  # Guard against rootless-podman failures that wedge the terminal/code/file backend
-  # until cleaned by hand (see AGENTS.md → Common Pitfalls). Runs at ExecStartPre as
-  # the hermes user, BEFORE the agent starts — so there is never a legitimate live
-  # container at this point, which makes the cleanup below unambiguously safe.
-  #
-  # Two leftovers from a crashed/previous instance can wedge podman:
-  #   1. Orphan conmon/pasta/podman-init helpers still holding the rootless user
-  #      namespace + storage flocks → new podman aborts with "cannot re-exec process
-  #      to join the existing user namespace" (and surfaces as execute_code's "Docker
-  #      version failed"). Killing them releases the locks/namespace. This is the
-  #      actual recurring root cause — a stale pause.pid alone did not explain it.
-  #   2. A stale pause.pid pointing at a dead pid → every podman invocation aborts.
-  #      Removed only when its pid is NOT alive. podman auto-uses /run/user/<uid>
-  #      when it exists (linger is on) AND the /tmp fallback, so check both.
-  podmanPauseGuard = pkgs.writeShellScript "hermes-podman-pause-guard" ''
-    set -u
-    uid=$(${pkgs.coreutils}/bin/id -u)
-    # (0) Ensure the pinned runroot's libpod tmp subtree exists. systemd recreates a
-    #     BARE ${podmanRunRoot} on each start (RuntimeDirectoryPreserve defaults to
-    #     "no"), but podman — with XDG_RUNTIME_DIR pinned here — needs
-    #     $XDG/libpod/tmp/ to pre-exist to set up its per-user PAUSE PROCESS. It does
-    #     NOT reliably create that subtree itself, failing with "unable to create a
-    #     new pause process: ... open ${podmanRunRoot}/libpod/tmp/pause.pid: no such
-    #     file or directory". The pause process is per-user (not per-container), so
-    #     container_persistent=false does not touch this path. Verified on-host:
-    #     pre-creating the subtree fixes the wedge; without it every podman run exits
-    #     125 a minute into a stable instance.
-    ${pkgs.coreutils}/bin/mkdir -p "${podmanRunRoot}/libpod/tmp"
-    # (1) Reap orphan helpers left by a prior instance (the agent is not running yet,
-    #     so any of these owned by this user are stale and safe to kill).
-    for proc in conmon pasta podman-init catatonit; do
-      ${pkgs.procps}/bin/pkill -9 -u "$uid" -f "$proc" 2>/dev/null || true
-    done
-    # (2) Remove a stale pause.pid (only when its pid is no longer alive). Cover
-    #     the pinned runroot plus the legacy auto-selected locations, in case an
-    #     older boot left one behind before the runroot was pinned.
-    for rt in "${podmanRunRoot}" "/run/user/$uid" "/tmp/storage-run-$uid"; do
-      pidfile="$rt/libpod/tmp/pause.pid"
-      [ -f "$pidfile" ] || continue
-      pid=$(${pkgs.coreutils}/bin/cat "$pidfile" 2>/dev/null || true)
-      if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
-        echo "hermes-podman-pause-guard: removing stale $pidfile (pid='$pid' not alive)"
-        rm -f "$pidfile"
-      fi
-    done
+    $git fetch origin --prune --quiet \
+      || echo "hermes-repo-bootstrap: fetch failed" >&2
   '';
 in {
   imports = [
@@ -360,14 +221,19 @@ in {
       # Shared knowledge base for the bundled `note-taking/obsidian` skill.
       # The skill resolves notes relative to this absolute vault path.
       OBSIDIAN_VAULT_PATH = vaultPath;
+      # Where the homelab config repo is checked out. The agent's file/terminal
+      # tools (running natively as the hermes user under the `local` backend) use
+      # this to locate the repo it develops on feature branches.
+      HOMELAB_REPO_PATH = repoPath;
+      # Agent process timezone. The host clock is already Europe/Berlin (set in
+      # modules/common.nix), but the agent otherwise reports UTC; TZ pins its
+      # local time to Berlin. NB: do NOT set `time.timeZone` here — common.nix
+      # already does, and a second definition conflicts.
+      TZ = "Europe/Berlin";
       # SearXNG instance backing the `web_search` tool (see settings.web below).
       # Served by Caddy on the containers host; step-ca TLS is trusted here via
       # step-ca-trust.nix. Local DNS name — MagicDNS does not resolve from hermes.
       SEARXNG_URL = "https://searxng.homelab.local";
-      # Point Hermes' container backend at rootless podman. find_docker() honors
-      # this override first (before searching PATH for docker/podman), which the
-      # module's restricted service PATH would otherwise hide.
-      HERMES_DOCKER_BINARY = "${pkgs.podman}/bin/podman";
     };
 
     # Declarative configuration. The API server uses this single configured
@@ -485,85 +351,33 @@ in {
       # WebUI chat-completions gateway never sends that, so those calls hang for
       # the 60s timeout and fail silently ("hitting the approval guard"). With a
       # headless API server there is no one to answer the prompt, so disable it.
-      # The sandbox that replaces the approval prompt is the rootless-Podman jail
-      # below (terminal.backend = "docker"): injected shell/code can only touch
-      # what we bind-mount. The non-bypassable "hardline" floor in Hermes also
-      # still blocks catastrophic commands (rm -rf /, fork bombs, /dev/sd writes,
-      # sudo -S without SUDO_PASSWORD) regardless of this setting.
+      # With the podman jail gone (terminal.backend = "local", below), the floor
+      # for injected shell/code is now: the systemd unit sandbox (ProtectSystem=
+      # strict caps writes to stateDir/workspace, PrivateTmp, NoNewPrivileges, the
+      # ReadOnlyPaths config lock + resource caps — see systemd.services below),
+      # Hermes' non-bypassable "hardline" rules (rm -rf /, fork bombs, /dev/sd
+      # writes, sudo -S), and the fact that hermes is its own disposable Proxmox
+      # VM. Blast radius of a destructive command is bounded to the vault + agent
+      # state on that VM.
       approvals.mode = "off";
 
-      # Terminal tool backend = rootless Podman (see Tier 2 plan).
-      # This governs `terminal`, `execute_code`, AND the file tools
-      # (read_file/write_file/search_files all bind to the same backend), so
-      # every shell/code/file operation runs inside an ephemeral container as the
-      # `hermes` user (container-root maps to host-hermes via userns). The agent
-      # can therefore reach ONLY the bind-mounts below — not the agenix secrets,
-      # the Forgejo deploy key in ~/.ssh, or any other host path.
-      #   - find_docker() picks up podman via HERMES_DOCKER_BINARY (environment).
-      #   - docker_volumes: the Obsidian vault at the SAME path so
-      #     $OBSIDIAN_VAULT_PATH resolves in-container, plus the host gitconfig
-      #     (read-only) so the agent's in-jail `git commit` carries the bot
-      #     identity. NO ssh key is mounted: commits are local; the host-side
-      #     hermes-vault-sync service does the key-bearing push/pull.
-      #   - Image confirmed to ship git+python3+node (needed for execute_code
-      #     RPC and in-jail commits). Network left ON so pip/curl/commit work.
+      # Terminal tool backend = `local` (the module default). This governs
+      # `terminal`, `execute_code`, AND the file tools (read_file/write_file/
+      # search_files) — under `local` they all run as host subprocesses of the
+      # agent, i.e. as the `hermes` service user, with NO container. There is thus
+      # no libpod DB / runroot / pause process / persistent container to corrupt on
+      # a mid-drain SIGKILL — the class of wedge that plagued the podman backend is
+      # gone by construction. Confinement comes from the systemd unit sandbox
+      # (ProtectSystem=strict + ReadWritePaths + ReadOnlyPaths + PrivateTmp, see
+      # systemd.services.hermes-agent below), not a container. The host toolchain
+      # the tools need (python3/node/nix/openssh/…) is provided via extraPackages.
+      # The vault and the homelab repo are plain host paths the tools see directly
+      # ($OBSIDIAN_VAULT_PATH / $HOMELAB_REPO_PATH in environment above); the agent
+      # commits AND pushes with the Forgejo key on ~/.ssh (main stays branch-
+      # protected on Forgejo, so it can only land feature branches via a PR).
       terminal = {
-        backend = "docker";
+        backend = "local";
         timeout = 180;
-        # Two INDEPENDENT knobs (verified in tools/environments/docker.py):
-        #   • container_persistent → persistent_filesystem: only controls whether
-        #     /workspace + /root are bind-mounted (persisted) or tmpfs (ephemeral).
-        #     It does NOT govern the container lifecycle. We use tmpfs (false); the
-        #     vault is bind-mounted explicitly via docker_volumes regardless.
-        #   • docker_persist_across_processes (default TRUE) → the real one: when
-        #     true the agent keeps ONE `sleep infinity` container and REUSES it
-        #     across Hermes processes/restarts by label, doing `podman start` on the
-        #     stale one — which fails `exit 125` after a mid-drain SIGKILL corrupts
-        #     it (the recurring "execute_code → Docker version failed" wedge). This
-        #     is the persistent container the plan set out to remove. Setting it
-        #     false makes each agent process create its own container and stop+rm it
-        #     on exit (docker.py:1236) — no cross-restart reuse, so the corruption
-        #     vector is gone. Within a process the container is still reused for all
-        #     execs (that was never the problem).
-        container_persistent = false;
-        docker_persist_across_processes = false;
-        docker_image = "nikolaik/python-nodejs:python3.11-nodejs20";
-        docker_volumes = [
-          "${vaultPath}:${vaultPath}"
-          "${hermesHome}/.gitconfig:/root/.gitconfig:ro"
-          # The homelab config repo, read-write: the agent edits + commits here.
-          # The host-side hermes-repo-sync pushes the resulting feature branch.
-          "${repoPath}:${repoPath}"
-          # Host nix store + the nix-daemon socket (/nix/var/nix/daemon-socket,
-          # mode 0666 → connectable from the user-namespaced container). With
-          # NIX_REMOTE=daemon (below) the in-jail `nix` runs all builds via the
-          # host daemon, so the agent can `nix flake check` / `nix develop -c just
-          # …` to validate flake changes. ro: the daemon (not the client) writes
-          # the store; connecting to the socket does not need the mount writable.
-          "/nix:/nix:ro"
-          # Make `nix` resolvable in the agent's LOGIN shells (see nixProfileScript):
-          # docker_env.PATH below is wiped by the image's /etc/profile, so we also
-          # add nix to PATH from /etc/profile.d, which IS sourced after that reset.
-          "${nixProfileScript}:/etc/profile.d/hermes-nix.sh:ro"
-        ];
-        # The container does not inherit the agent's env. Set the vault path
-        # inside it so the agent's `git -C "$OBSIDIAN_VAULT_PATH" commit` (per
-        # SOUL.md) resolves. Same value as the host env var; the bind above puts
-        # the vault at this exact path in-container.
-        docker_env = {
-          OBSIDIAN_VAULT_PATH = vaultPath;
-          # Where the homelab config repo is mounted in-jail (== host path).
-          HOMELAB_REPO_PATH = repoPath;
-          # Route in-jail nix at the host nix-daemon over the mounted socket, so
-          # no writable store is needed inside the ephemeral container.
-          NIX_REMOTE = "daemon";
-          NIX_CONFIG = "experimental-features = nix-command flakes";
-          # CA bundle for flake-input fetches over HTTPS (resolved via /nix mount).
-          NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
-          # Put the host `nix` on PATH while keeping the image's own dirs (where
-          # python3/node for execute_code live) ahead of it.
-          PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${pkgs.nix}/bin";
-        };
       };
 
       # External memory provider: Holographic — fully local, no deps/infra.
@@ -587,6 +401,31 @@ in {
     # agent's Python 3.12 env.
     extraPythonPackages = [pkgs.python312Packages.numpy];
 
+    # Host toolchain for the `local` terminal backend. The module only puts
+    # [bash coreutils git] on the service PATH; under `local` the agent's
+    # terminal/execute_code tools run with that PATH (no container image), so we
+    # provision what the old python-nodejs image shipped plus what the flake
+    # workflow needs:
+    #   - python3/nodejs  → execute_code RPC + typical shell workflows
+    #   - curl/jq/grep/sed/awk/find → everyday shell tooling
+    #   - nix    → `nix develop -c just fmt` + scoped `nix eval` to validate flake
+    #              changes; talks to the host nix-daemon natively (no socket mount,
+    #              no NIX_REMOTE — /etc/nix/nix.conf already enables flakes)
+    #   - openssh → `git push` over ssh (the module PATH lacks the ssh binary);
+    #              the agent now pushes its own feature branches with the Forgejo key
+    extraPackages = with pkgs; [
+      python3
+      nodejs
+      curl
+      jq
+      gnugrep
+      gnused
+      gawk
+      findutils
+      nix
+      openssh
+    ];
+
     # System prompt and user context
     documents = {
       "SOUL.md" = ''
@@ -609,18 +448,18 @@ in {
           and `[[wikilinks]]` to connect notes.
         - There is no built-in todo tool; track all tasks, todos, and lists as
           checkboxes in the vault.
-        - SAVING YOUR EDITS: after changing notes, commit them via the terminal:
+        - SAVING YOUR EDITS: after changing notes, commit AND push via the
+          terminal:
           `git -C "$OBSIDIAN_VAULT_PATH" add -A && git -C "$OBSIDIAN_VAULT_PATH"
-          commit -m "<concise description of the change>"`. Write a meaningful
-          message (e.g. "add eggs + milk to grocery list"), not a generic one.
-          The commit is local; a host service pushes it to Forgejo automatically
-          within seconds — you do NOT push, pull, or use the SSH key yourself
-          (your sandbox has neither network to Forgejo nor the key).
-        - The user also edits the vault from Obsidian; a host service pulls those
+          commit -m "<concise description of the change>" && git -C
+          "$OBSIDIAN_VAULT_PATH" push`. Write a meaningful message (e.g. "add eggs
+          + milk to grocery list"), not a generic one. Your git is configured with
+          the Forgejo key, so the push goes straight to Forgejo.
+        - The user also edits the vault from Obsidian; a host timer pulls those
           changes in for you, so your view refreshes on its own. Just re-read a
           note if it looks stale.
-        - Keep commits small; never run `git reset --hard` or `git push`/`pull`
-          in the vault.
+        - Keep commits small; never run `git reset --hard` or force-push in the
+          vault.
 
         ## Homelab Config Repo
         - This homelab's NixOS/IaC config repo is checked out at the path in
@@ -635,20 +474,22 @@ in {
           First format: `cd "$HOMELAB_REPO_PATH" && nix develop -c just fmt`.
           Then evaluate ONLY the host(s) you changed — do NOT run the full
           `just nixos-check` / `nix flake check`: it evaluates all ~16 hosts and
-          gets OOM-killed (exit 137) on the host nix-daemon from your sandbox. A
-          scoped eval fully type-checks your change instead:
+          gets OOM-killed (exit 137) on the host nix-daemon. A scoped eval fully
+          type-checks your change instead:
           `nix eval ".#nixosConfigurations.<host>.config.system.build.toplevel.drvPath"`
           (run once per edited host). A printed `/nix/store/….drv` = clean; an
-          error = fix and re-run. (`nix` is on PATH in your sandbox; `nix develop`
-          provides `just`, `alejandra`, `tofu` from the repo's dev shell.)
+          error = fix and re-run. (`nix` is on your PATH; `nix develop` provides
+          `just`, `alejandra`, `tofu` from the repo's dev shell.)
         - Commit THROUGH the dev shell so the repo's pre-commit hooks (`alejandra`,
-          `keep-sorted`) are on PATH and run; a bare `git commit` fails them in the
-          sandbox. Do NOT use `--no-verify`:
+          `keep-sorted`) are on PATH and run; a bare `git commit` fails them. Do
+          NOT use `--no-verify`:
           `git -C "$HOMELAB_REPO_PATH" add -A && cd "$HOMELAB_REPO_PATH" && nix develop -c git commit -m "<concise description>"`.
-        - SAVING/SHARING: a host service pushes your feature branch to Forgejo
-          automatically within seconds. You do NOT push, open PRs, merge, or
-          deploy — you have neither the key nor the ability. The user reviews the
-          branch, opens the pull request, and deploys (`colmena`) when at the host.
+        - SAVING/SHARING: push your feature branch to Forgejo yourself with the
+          Forgejo key your git is configured with:
+          `git -C "$HOMELAB_REPO_PATH" push -u origin feat/<short-slug>`. A push to
+          `main` is rejected by branch protection — that is expected. You do NOT
+          open PRs, merge, or deploy: the user reviews the branch, opens the pull
+          request, and deploys (`colmena`) when at the host.
         - Never run `git reset --hard`, force-push, or switch back to commit on
           `main`. If a task is unrelated to the previous one, start a brand-new
           branch from `origin/main`.
@@ -659,9 +500,9 @@ in {
           server-initiated message, so anything you "reply" is lost. You MUST
           deliver every cron result out-of-band.
         - Load and follow the `cron-result-delivery` skill. It delivers through
-          two channels: (1) append the full result to `Inbox.md` in the vault and
-          commit it (the host pushes it), and (2) send a short Home Assistant push
-          via the `hamcp_call_service` tool (`domain="notify"`,
+          two channels: (1) append the full result to `Inbox.md` in the vault,
+          then commit and push it, and (2) send a short Home Assistant push via
+          the `hamcp_call_service` tool (`domain="notify"`,
           `service="mobile_app_iphone_von_amadeus"`).
         - Store a memory fact reminding you to run this delivery on every
           scheduled job, so future cron runs recall it.
@@ -697,17 +538,10 @@ in {
     addToSystemPackages = true;
   };
 
-  # Ensure hermes starts after secrets are available and the vault is set up.
-  # The module restricts the service PATH, so we extend it for the podman backend:
-  #   - pkgs.podman: the rootless runtime (also pinned via HERMES_DOCKER_BINARY).
-  #   - "/run/wrappers": the SETUID newuidmap/newgidmap wrappers live in
-  #     /run/wrappers/bin. Rootless podman with multiple sub-UID/GID mappings
-  #     shells out to these and they must be the setuid versions (NixOS puts them
-  #     here). NB: the `path` option appends "/bin" to each entry, so we list the
-  #     PARENT "/run/wrappers" (→ /run/wrappers/bin), NOT "/run/wrappers/bin"
-  #     (which would wrongly become /run/wrappers/bin/bin). Without this, `podman
-  #     version` fails: command required for rootless mode with multiple IDs:
-  #     exec: "newuidmap": executable file not found in $PATH.
+  # Order hermes-agent after secrets, tailscale, and the git/vault/repo setup so
+  # its native tools have DNS, the Forgejo key on ~/.ssh, and the repo checkout
+  # available at startup. The module already puts [package bash coreutils git] +
+  # extraPackages on the service PATH, so no path override is needed here.
   systemd.services.hermes-agent = {
     wants = ["agenix.target" "hermes-vault-sync.service" "hermes-repo-sync.service"];
     after = [
@@ -717,96 +551,41 @@ in {
       "hermes-vault-sync.service"
       "hermes-repo-sync.service"
     ];
-    path = [pkgs.git pkgs.openssh pkgs.podman "/run/wrappers"];
-    # Pin podman's *runtime dir* (XDG_RUNTIME_DIR) to the same systemd-managed
-    # tmpfs as the runroot. This is the second half of decoupling the sandbox
-    # from logind: storage.conf pins the storage *runroot*, but podman's libpod
-    # rundir (pause process, sockets, container exit files) is XDG_RUNTIME_DIR-
-    # derived and otherwise defaults to logind's /run/user/<uid>. That dir only
-    # exists while user@<uid> (linger) is alive, so when it dies podman's
-    # `version` precheck fails ("crun not found" / exit 125) and execute_code
-    # reports "the sandbox Docker backend isn't running". Pinning it here puts the
-    # rundir under /run/hermes-podman (created by RuntimeDirectory= below, always
-    # present while the unit runs), so the sandbox no longer needs the user
-    # session at all — verified: with this set and user@<uid> stopped, `podman
-    # run` still launches the container. Hermes only sets XDG_RUNTIME_DIR when it
-    # is unset (gateway.py _ensure_user_systemd_env), so this pin always wins.
-    environment.XDG_RUNTIME_DIR = podmanRunRoot;
     serviceConfig = {
-      # Pin the rootless-podman runroot to a deterministic, systemd-managed tmpfs
-      # dir (owned by the service user, mode 0700, created before ExecStartPre).
-      # This is the path referenced by podmanStorageConf's runroot=, so podman
-      # never re-bakes a divergent /tmp or /run/user runroot into its DB. See the
-      # podmanRunRoot block above.
-      # Give the unit its own delegated cgroup subtree so the rootless container
-      # runtime (crun, cgroupfs manager) can create per-container cgroups under
-      # system.slice/hermes-agent.service without a systemd-user/D-Bus round trip.
-      # This is the canonical way to run podman containers inside a systemd unit.
-      Delegate = true;
-      RuntimeDirectory = "hermes-podman";
-      RuntimeDirectoryMode = "0700";
-      # RuntimeDirectoryPreserve intentionally left at its default ("no"): with
-      # ephemeral per-call containers there is no persistent container state worth
-      # keeping across restarts, so systemd wipes + recreates /run/hermes-podman on
-      # every stop/start. That makes the runroot self-cleaning — a stale pause.pid
-      # (which lived under the runroot) can no longer survive a restart by
-      # construction. Trade-off: while the service is stopped the runroot is absent,
-      # so manual `sudo -u hermes podman` debugging must recreate the dir first.
-      # First install ~/.config/containers/storage.conf (pins runroot/graphroot),
-      # then self-heal a stale pause.pid / orphan helpers before the agent starts,
-      # so the "cannot re-exec ... user namespace" / unwritable-runroot failures
-      # cannot recur across reboots/redeploys. Both run as the hermes service user.
-      ExecStartPre = ["${podmanStorageSetup}" "${podmanPauseGuard}"];
-      # Rootless podman maps multiple sub-UIDs via the setuid newuidmap/newgidmap
-      # helpers; NoNewPrivileges=true (set by the hermes module) makes the kernel
-      # ignore their setuid bit, breaking userns setup. Relax it here — the risky
-      # shell/code now runs jailed inside the podman container, so NNP on the host
-      # agent process buys little once the container backend is in place.
-      NoNewPrivileges = lib.mkForce false;
-      # The hermes module ships TimeoutStopSec=90s, but the gateway drains for up to
-      # drain_timeout=180s on stop/restart. With only 90s systemd SIGKILLs the agent
-      # mid-drain, interrupting podman's container teardown and leaving orphan
-      # conmon/pasta/podman-init — the root cause the ExecStartPre guard above mops up.
-      # Give the drain room (>= 180s + margin) so shutdowns are clean and no orphans
-      # are created in the first place. mkForce overrides the module's 90s.
+      # ── Config integrity ("must stay nix") ──────────────────────────────────
+      # Under the `local` backend the agent's tools run AS the hermes user, and
+      # config.yaml / SOUL.md / USER.md are owned by hermes — so without this the
+      # agent could rewrite its own config and system prompt at runtime. Those
+      # files are (re)written on every deploy by a ROOT activation script that runs
+      # OUTSIDE this unit's mount namespace, so binding them read-only here stops
+      # the running agent from modifying them WITHOUT breaking the Nix merge. Nix
+      # stays the sole source of truth. They are single files inside the module's
+      # ReadWritePaths (stateDir, workingDirectory); systemd's most-specific-path
+      # rule keeps the rest writable — the memory DB, cron jobs, sessions, logs,
+      # the vault, and the repo checkout. (config.yaml lives in .hermes; the
+      # documents install to workingDirectory == stateDir/workspace.)
+      ReadOnlyPaths = [
+        "${hermesHome}/.hermes/config.yaml"
+        "${hermesHome}/workspace/SOUL.md"
+        "${hermesHome}/workspace/USER.md"
+      ];
+      # ── Resource caps (defense-in-depth) ────────────────────────────────────
+      # The tools now share this unit's cgroup. ProtectSystem=strict (module)
+      # bounds writes, not CPU/pids/mem. Bound the real DoS vector — runaway
+      # forks — and add a soft memory throttle. Deliberately NO hard MemoryMax:
+      # pure `nix eval` (the agent's flake validation) runs client-side in THIS
+      # unit, and a tight cap would OOM-kill legit scoped evals; heavy builds run
+      # in the separate nix-daemon.service cgroup, unaffected by this.
+      TasksMax = 512;
+      LimitNPROC = 512;
+      MemoryHigh = "3G";
+      # The module ships TimeoutStopSec=90s, but the gateway drains up to
+      # drain_timeout=180s on stop/restart; 90s SIGKILLs it mid-drain. Give the
+      # drain room so shutdowns are clean. mkForce overrides the module's 90s.
       TimeoutStopSec = lib.mkForce 210;
+      # NB: NoNewPrivileges reverts to the module's `true` now that the podman
+      # setuid newuidmap/newgidmap requirement is gone (we no longer force it off).
     };
-  };
-
-  # ── Rootless Podman (terminal/code/file-tool sandbox backend) ─────────────
-  # Daemonless, no docker group (= no host-root-equivalent). The hermes-agent
-  # service points its container backend here via HERMES_DOCKER_BINARY above.
-  virtualisation.podman.enable = true;
-
-  # Rootless podman needs sub-UID/GID ranges for the hermes user to map the
-  # container's users (incl. its root) onto unprivileged host UIDs. The module
-  # creates `hermes` as a system user; extend it with the mapping ranges.
-  users.users.hermes = {
-    subUidRanges = [
-      {
-        startUid = 100000;
-        count = 65536;
-      }
-    ];
-    subGidRanges = [
-      {
-        startGid = 100000;
-        count = 65536;
-      }
-    ];
-    # Lingering is intentionally OFF. It used to be REQUIRED because podman's
-    # libpod rundir defaulted to logind's /run/user/<uid> (only present while
-    # user@<uid> lingers), so without it `podman version` failed and the sandbox
-    # broke. That dependency is now removed by pinning XDG_RUNTIME_DIR to
-    # /run/hermes-podman on the hermes-agent unit (see its `environment` above):
-    # podman's rundir is a stable systemd-managed tmpfs, independent of any user
-    # session. Verified 2026-06-22: with linger off + user@<uid> stopped + the
-    # XDG_RUNTIME_DIR pin, `podman run` still launches the sandbox container.
-    # Dropping linger also removes the exit-4 activation nuisance (NixOS reloading
-    # the hermes user's --user units against a dead bus) — see
-    # [[hermes-deploy-user995-exit4]]. NOTE: NixOS does not run `loginctl
-    # disable-linger` when this option is removed; clear the leftover marker once
-    # by hand: `sudo loginctl disable-linger hermes`.
   };
 
   # ── Knowledge-base vault sync ─────────────────────────────────────────────
@@ -854,12 +633,12 @@ in {
     };
   };
 
-  # Outbound sync: fire the pull/push service the moment the agent commits inside
-  # the jail. `.git/logs/HEAD` is appended on every commit (more reliable than
-  # watching a packed ref), so PathModified gives us near-instant pushes with the
-  # agent's own commit messages.
+  # Reconcile on commit: fire the pull/push service the moment the agent commits
+  # in the vault. `.git/logs/HEAD` is appended on every commit (more reliable than
+  # watching a packed ref), so PathModified reconciles near-instantly. The agent
+  # also pushes directly now, so this is mostly a safety-net pull/push.
   systemd.paths.hermes-vault-sync = {
-    description = "Push the hermes Obsidian vault when the agent commits";
+    description = "Reconcile the hermes Obsidian vault when the agent commits";
     wantedBy = ["multi-user.target"];
     pathConfig = {
       PathModified = "${vaultPath}/.git/logs/HEAD";
@@ -867,13 +646,16 @@ in {
     };
   };
 
-  # ── Homelab config repo sync ──────────────────────────────────────────────
+  # ── Homelab config repo bootstrap ─────────────────────────────────────────
   # Reuses the git/ssh config installed by hermes-vault-git-setup (the
   # forgejo.homelab.local Host block + hermes-bot key apply to this repo too).
-  # Clone-or-push the homelab config repo. Runs once at boot, then on a timer
-  # (fetch + retry) and on a path trigger (instant push when the agent commits).
+  # Under the `local` backend the agent fetches + pushes its own feature branches
+  # directly with the Forgejo key (see SOUL.md), so there is NO host-side pusher.
+  # This oneshot only guarantees the checkout EXISTS at ${repoPath} and keeps
+  # origin/main fresh (clone-if-missing + one fetch). Runs at boot and on a slow
+  # timer; never commits/merges/pushes.
   systemd.services.hermes-repo-sync = {
-    description = "Push the hermes-authored homelab config feature branches to Forgejo";
+    description = "Bootstrap + refresh the homelab config repo checkout for the hermes agent";
     wantedBy = ["multi-user.target"];
     after = ["hermes-vault-git-setup.service" "network-online.target"];
     wants = ["network-online.target"];
@@ -886,26 +668,15 @@ in {
     };
   };
 
-  # Slow timer: keeps origin/main fresh for the agent to branch from and retries
-  # any pending feature-branch push.
+  # Slow timer: keeps origin/main fresh for the agent to branch from. (The agent
+  # also fetches itself before branching; this is just a background top-up.)
   systemd.timers.hermes-repo-sync = {
-    description = "Periodic homelab config repo fetch/push";
+    description = "Periodic homelab config repo fetch";
     wantedBy = ["timers.target"];
     timerConfig = {
       OnBootSec = "2min";
       OnUnitActiveSec = "5min";
       AccuracySec = "1min";
-    };
-  };
-
-  # Outbound: fire the push the moment the agent commits inside the jail.
-  # .git/logs/HEAD is appended on every commit/branch op.
-  systemd.paths.hermes-repo-sync = {
-    description = "Push the homelab config feature branch when the agent commits";
-    wantedBy = ["multi-user.target"];
-    pathConfig = {
-      PathModified = "${repoPath}/.git/logs/HEAD";
-      Unit = "hermes-repo-sync.service";
     };
   };
 

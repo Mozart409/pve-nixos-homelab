@@ -230,6 +230,17 @@
     };
   };
 
+  # Subnet router: advertise the LAN so tailnet clients (e.g. a laptop while
+  # away) can reach *.homelab.local by their real 192.168.2.x addresses and hit
+  # the internal Caddy vhosts with genuine step-ca certs. "server" enables
+  # net.ipv4.ip_forward. Pair with a split-DNS entry (homelab.local ->
+  # 192.168.2.145) in the Tailscale admin console.
+  # NOTE: tailscaled-autoconnect only runs `tailscale up` when not already
+  # connected, so on an already-authed node apply the route once by hand:
+  #   sudo tailscale set --advertise-routes=192.168.2.0/24
+  services.tailscale.useRoutingFeatures = "server";
+  services.tailscale.extraUpFlags = ["--advertise-routes=192.168.2.0/24"];
+
   # Allow Caddy to get Tailscale certs
   services.tailscale.permitCertUid = "caddy";
 
