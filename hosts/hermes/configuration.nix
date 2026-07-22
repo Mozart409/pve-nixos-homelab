@@ -162,14 +162,13 @@ in {
     enabledCollectors = ["systemd" "processes"];
   };
 
-  # OpenCode Zen provider key (env-file: KEY=value lines). To activate
-  # opencode-zen as the named provider, re-key this file to contain
-  # OPENCODE_ZEN_API_KEY=... (may still hold the legacy OPENAI_API_KEY/
-  # OPENAI_BASE_URL from the old custom-provider setup). Consumed both by
-  # hermes-agent (environmentFiles below) and by the standalone `opencode` CLI
-  # wrapper in environment.systemPackages, which sources it — hence owner=hermes
-  # so that wrapper (run as the hermes user) can read it. systemd still reads it
-  # as root for hermes-agent regardless of owner.
+  # OpenCode Zen provider key (env-file: KEY=value lines, i.e.
+  # OPENCODE_ZEN_API_KEY=sk-...). Must be an account key WITH billing, else the
+  # opencode CLI only sees the free models. Consumed by hermes-agent
+  # (environmentFiles below) and by the standalone `opencode` CLI wrapper in
+  # environment.systemPackages, which reads the key to materialize opencode's
+  # auth.json — hence owner=hermes so that wrapper (run as the hermes user) can
+  # read it. systemd still reads it as root for hermes-agent regardless of owner.
   age.secrets.hermes-opencode-zen-key = {
     file = ../../secrets/hermes-opencode-zen-key.age;
     owner = "hermes";
@@ -772,14 +771,24 @@ in {
     (writeShellScriptBin "launch-hermes" ''
       exec sudo -u hermes bash -lc 'cd ~/workspace/pve-nixos-homelab && exec hermes'
     '')
-    # opencode CLI, wrapped to load the opencode-zen provider key from agenix by
-    # sourcing the hermes-opencode-zen-key env-file (KEY=value lines). Run as the
-    # hermes user (which owns the secret): `sudo -u hermes -i`, then `opencode`.
-    # Falls back to opencode's own auth if the secret isn't readable.
+    # opencode CLI. opencode only exposes the full (paid) opencode-zen catalog
+    # when the key lives in its auth.json credential store — the OPENCODE_ZEN_API_KEY
+    # env var only ever surfaces the 6 free models. So this wrapper materializes
+    # ~/.local/share/opencode/auth.json from the agenix key on each launch, then
+    # execs opencode with NO env var set (matching a normal `opencode auth login`).
+    # Run as the hermes user (which owns the secret): `sudo -u hermes -i`, then
+    # `opencode`. NB: the key in hermes-opencode-zen-key must be an account key
+    # with billing, or only the free models appear.
     (writeShellScriptBin "opencode" ''
       envfile=${config.age.secrets.hermes-opencode-zen-key.path}
+      authfile="''${XDG_DATA_HOME:-$HOME/.local/share}/opencode/auth.json"
       if [ -r "$envfile" ]; then
         set -a; . "$envfile"; set +a
+        if [ -n "''${OPENCODE_ZEN_API_KEY:-}" ]; then
+          mkdir -p "$(dirname "$authfile")"
+          (umask 077; printf '{"opencode":{"type":"api","key":"%s"}}\n' "$OPENCODE_ZEN_API_KEY" > "$authfile")
+        fi
+        unset OPENCODE_ZEN_API_KEY
       fi
       exec ${pkgs.opencode}/bin/opencode "$@"
     '')
