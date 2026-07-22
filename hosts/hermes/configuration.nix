@@ -162,11 +162,18 @@ in {
     enabledCollectors = ["systemd" "processes"];
   };
 
-  # OpenCode Zen provider key. To activate opencode-zen as the named provider,
-  # re-key this file to contain OPENCODE_ZEN_API_KEY=... (currently holds the
-  # legacy OPENAI_API_KEY/OPENAI_BASE_URL from the old custom-provider setup).
+  # OpenCode Zen provider key (env-file: KEY=value lines). To activate
+  # opencode-zen as the named provider, re-key this file to contain
+  # OPENCODE_ZEN_API_KEY=... (may still hold the legacy OPENAI_API_KEY/
+  # OPENAI_BASE_URL from the old custom-provider setup). Consumed both by
+  # hermes-agent (environmentFiles below) and by the standalone `opencode` CLI
+  # wrapper in environment.systemPackages, which sources it — hence owner=hermes
+  # so that wrapper (run as the hermes user) can read it. systemd still reads it
+  # as root for hermes-agent regardless of owner.
   age.secrets.hermes-opencode-zen-key = {
     file = ../../secrets/hermes-opencode-zen-key.age;
+    owner = "hermes";
+    group = "hermes";
     mode = "0400";
   };
 
@@ -764,6 +771,17 @@ in {
     # starting it from amadeus's home (mode 0700). amadeus has passwordless sudo.
     (writeShellScriptBin "launch-hermes" ''
       exec sudo -u hermes bash -lc 'cd ~/workspace/pve-nixos-homelab && exec hermes'
+    '')
+    # opencode CLI, wrapped to load the opencode-zen provider key from agenix by
+    # sourcing the hermes-opencode-zen-key env-file (KEY=value lines). Run as the
+    # hermes user (which owns the secret): `sudo -u hermes -i`, then `opencode`.
+    # Falls back to opencode's own auth if the secret isn't readable.
+    (writeShellScriptBin "opencode" ''
+      envfile=${config.age.secrets.hermes-opencode-zen-key.path}
+      if [ -r "$envfile" ]; then
+        set -a; . "$envfile"; set +a
+      fi
+      exec ${pkgs.opencode}/bin/opencode "$@"
     '')
   ];
 }
