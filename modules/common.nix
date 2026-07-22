@@ -93,6 +93,16 @@
     };
   };
 
+  # Mosh (mobile shell) for roaming/high-latency phone access. It bootstraps over
+  # SSH, then switches to its own UDP protocol. openFirewall = false: every host
+  # trusts the tailscale0 interface, so mosh works over Tailscale (how the phone
+  # connects) with NO LAN UDP range opened. Connect via the host's Tailscale
+  # name/IP and pick "mosh" in the client (Blink Shell / Termius on iOS).
+  programs.mosh = {
+    enable = true;
+    openFirewall = false;
+  };
+
   # Common user configuration
   users.users.amadeus = {
     isNormalUser = true;
