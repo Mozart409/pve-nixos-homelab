@@ -100,7 +100,7 @@
   # name/IP and pick "mosh" in the client (Blink Shell / Termius on iOS).
   programs.mosh = {
     enable = true;
-    openFirewall = false;
+    openFirewall = true;
   };
 
   # Common user configuration
