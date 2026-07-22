@@ -370,6 +370,12 @@ in {
       HERMES_DOCKER_BINARY = "${pkgs.podman}/bin/podman";
       # Agent local timezone; reported time is Berlin local, not UTC.
       TZ = "Europe/Berlin";
+      # SSL cert file pointing at the system CA bundle that includes the
+      # Homelab step-ca root cert. httpx (used by the searxng web-search
+      # provider) needs this explicitly — it fails with CERTIFICATE_VERIFY_FAILED
+      # even though Python's default_verify_paths points at the same file,
+      # because httpcore/httpx re-initializes the SSL context differently.
+      SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
     };
 
     # Declarative configuration. The API server uses this single configured
