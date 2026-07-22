@@ -12,13 +12,19 @@ NixOS flakes, Colmena, and OpenTofu definitions for a Proxmox homelab.
 | `dns` | 192.168.2.145 | Unbound recursive DNS + local zone (`homelab.local`) |
 | `containers` | 192.168.2.149 | Podman host (Open WebUI, Uptime Forge) |
 | `mcp` | 192.168.2.152 | MCP server (hamcp-rs) |
+| `hermes` | 192.168.2.155 | Hermes AI agent VM (Open WebUI backend, code agent) |
+| `k3s-agent-1` | 192.168.2.156 | K3s Kubernetes agent node |
 | `ca` | 192.168.2.160 | step-ca internal Certificate Authority |
 | `fleet` | 192.168.2.164 | Fleet osquery management server |
+| `k3s-server-1` | 192.168.2.165 | K3s Kubernetes server node |
 | `harbor` | 192.168.2.166 | Harbor container registry |
+| `rpi4-1` | 192.168.2.170 | Raspberry Pi 4 (edge/gateway) |
 | `cache` | 192.168.2.175 | Garage S3 + Attic Nix binary cache |
+| `sandbox` | 192.168.2.176 | Isolated dev/test sandbox VM |
 | `buildbot-master` | 192.168.2.177 | Buildbot CI scheduler + web UI |
 | `forgejo` | 192.168.2.178 | Forgejo git forge (PostgreSQL backend) |
 | `buildbot-worker-1` | 192.168.2.179 | Buildbot worker (Nix builds) |
+| `jellyfin` | 192.168.2.180 | Jellyfin media server + SSO-Auth |
 
 All hosts expose Caddy-fronted services with both Tailscale TLS and step-ca certificates for `*.homelab.local`.
 
