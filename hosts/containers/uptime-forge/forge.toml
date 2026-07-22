@@ -16,7 +16,7 @@ group = "internal"
 tags = ["internal", "smarthome"]
 
 [endpoints.searxng]
-addr = "https://searxng.dropbear-butterfly.ts.net/"
+addr = "https://searxng.homelab.local/"
 description = "SearXNG Search"
 group = "internal"
 tags = ["internal", "search"]
