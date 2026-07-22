@@ -758,5 +758,12 @@ in {
     git
     htop
     openssh
+    # Launch the interactive Hermes agent TUI as the hermes service user from a
+    # hermes-readable cwd (its workspace repo). Avoids the
+    # `Permission denied: '/home/amadeus/.git'` git-discovery error you hit when
+    # starting it from amadeus's home (mode 0700). amadeus has passwordless sudo.
+    (writeShellScriptBin "launch-hermes" ''
+      exec sudo -u hermes bash -lc 'cd ~/workspace/pve-nixos-homelab && exec hermes'
+    '')
   ];
 }
