@@ -139,6 +139,7 @@ in {
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
+    ./moshi-hook.nix
   ];
 
   networking.hostName = "homelab-hermes";
