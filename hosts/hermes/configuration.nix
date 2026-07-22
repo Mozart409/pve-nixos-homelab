@@ -225,6 +225,11 @@ in {
       # tools (running natively as the hermes user under the `local` backend) use
       # this to locate the repo it develops on feature branches.
       HOMELAB_REPO_PATH = repoPath;
+      # Agent process timezone. The host clock is already Europe/Berlin (set in
+      # modules/common.nix), but the agent otherwise reports UTC; TZ pins its
+      # local time to Berlin. NB: do NOT set `time.timeZone` here — common.nix
+      # already does, and a second definition conflicts.
+      TZ = "Europe/Berlin";
       # SearXNG instance backing the `web_search` tool (see settings.web below).
       # Served by Caddy on the containers host; step-ca TLS is trusted here via
       # step-ca-trust.nix. Local DNS name — MagicDNS does not resolve from hermes.
