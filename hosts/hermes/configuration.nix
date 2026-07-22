@@ -225,11 +225,14 @@ in {
       # tools (running natively as the hermes user under the `local` backend) use
       # this to locate the repo it develops on feature branches.
       HOMELAB_REPO_PATH = repoPath;
-      # Agent process timezone. The host clock is already Europe/Berlin (set in
-      # modules/common.nix), but the agent otherwise reports UTC; TZ pins its
-      # local time to Berlin. NB: do NOT set `time.timeZone` here — common.nix
-      # already does, and a second definition conflicts.
-      TZ = "Europe/Berlin";
+      # Agent clock timezone. Hermes resolves the time it injects into the
+      # conversation via hermes_time.now(), which reads HERMES_TIMEZONE first
+      # (then the config.yaml `timezone` key, then server-local). Plain `TZ` is
+      # NOT consulted by that resolver, so this — not TZ — is what makes the
+      # agent report Berlin instead of UTC. (The host clock / tool `date` is
+      # already Berlin via modules/common.nix's time.timeZone; do NOT set
+      # time.timeZone here — a second definition conflicts.)
+      HERMES_TIMEZONE = "Europe/Berlin";
       # SearXNG instance backing the `web_search` tool (see settings.web below).
       # Served by Caddy on the containers host; step-ca TLS is trusted here via
       # step-ca-trust.nix. Local DNS name — MagicDNS does not resolve from hermes.
@@ -245,6 +248,12 @@ in {
       # OPENCODE_ZEN_API_KEY in hermes-opencode-zen-key.age).
       provider = "deepseek";
       model = "deepseek-chat";
+
+      # Timezone Hermes uses for the timestamps it injects into the conversation
+      # (hermes_time.now(), config.yaml `timezone` key). The HERMES_TIMEZONE env
+      # above takes precedence; this is the declarative belt-and-suspenders so the
+      # setting survives even if the env var is ever dropped.
+      timezone = "Europe/Berlin";
 
       # Tool permissions. `toolsets` is the global allowlist of toolsets the
       # agent (and every gateway platform, including the API server) may use.
