@@ -401,6 +401,12 @@ in {
         default_trust = 0.5;
       };
 
+      # Enable the moshi-hooks plugin (installed into the agent state dir by
+      # `moshi-hook install`, see ./moshi-hook.nix). Declaring it here makes the
+      # registration Nix-owned so it's re-applied even after a state-dir wipe;
+      # the plugin's code files still live in $HERMES_HOME/.hermes/plugins.
+      plugins.enabled = ["moshi-hooks"];
+
       # Web search via the self-hosted SearXNG on the containers host (free,
       # no API key — reads SEARXNG_URL from environment above). Search-only:
       # SearXNG does not back `web_extract`, so that tool stays unconfigured.
