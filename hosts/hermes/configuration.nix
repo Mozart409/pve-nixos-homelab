@@ -82,32 +82,26 @@
     install -m 600 ${vaultGitConfig} ${hermesHome}/.gitconfig
   '';
 
-  # Clone-or-sync: clones on first run, then PULLS your Obsidian edits (and pushes
-  # as a safety net). It no longer commits anything itself — the agent authors
-  # commits with meaningful messages and now pushes them directly too (see
-  # SOUL.md); this service is primarily the INBOUND path for your Obsidian edits.
-  # `--autostash` tucks away any uncommitted agent edits across the rebase.
-  # Triggered by (a) a path unit on .git/logs/HEAD when the agent commits and
-  # (b) a slow timer. Idempotent and self-healing — exits 0 on a missing remote
-  # so the trigger simply retries.
-  vaultSync = pkgs.writeShellScript "hermes-vault-sync" ''
+  # Vault checkout bootstrap: clone-if-missing + one fetch, mirroring the homelab
+  # repo bootstrap below. It never commits, pulls --rebase, or pushes — the agent
+  # authors commits, pulls your Obsidian edits before writing, and pushes them
+  # directly (see SOUL.md + the obsidian-vault-notes skill). This oneshot only
+  # guarantees the checkout EXISTS at ${vaultPath} and keeps origin fresh.
+  # Idempotent and self-healing — exits 0 on a missing remote so boot retries.
+  vaultBootstrap = pkgs.writeShellScript "hermes-vault-bootstrap" ''
     set -u
     export GIT_SSH_COMMAND='${gitSshCmd}'
     git=${pkgs.git}/bin/git
     if [ ! -d ${vaultPath}/.git ]; then
       mkdir -p ${hermesHome}/workspace
       if ! $git clone ${vaultRemote} ${vaultPath}; then
-        echo "hermes-vault-sync: clone failed (forgejo/network not ready?)" >&2
+        echo "hermes-vault-bootstrap: clone failed (forgejo/network not ready?)" >&2
         exit 0
       fi
     fi
     cd ${vaultPath} || exit 0
-    if ! $git pull --rebase --autostash --quiet; then
-      $git rebase --abort 2>/dev/null || true
-      echo "hermes-vault-sync: rebase conflict, manual resolution needed" >&2
-      exit 0
-    fi
-    $git push --quiet || echo "hermes-vault-sync: push failed" >&2
+    $git fetch origin --prune --quiet \
+      || echo "hermes-vault-bootstrap: fetch failed" >&2
   '';
 
   # Bootstrap the homelab config repo checkout for the agent. Under the `local`
@@ -160,6 +154,15 @@ in {
   services.prometheus.exporters.node = {
     enable = true;
     enabledCollectors = ["systemd" "processes"];
+  };
+
+  # direnv + nix-direnv: `cd` into a dir with an `.envrc` (the repo already ships
+  # one with `use flake`) auto-loads its flake devshell; nix-direnv caches it so
+  # re-entry is instant. The module hooks the interactive zsh/bash from
+  # common.nix. First use in a checkout still needs a one-time `direnv allow`.
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
   };
 
   # OpenCode Zen provider key (env-file: KEY=value lines, i.e.
@@ -582,12 +585,12 @@ in {
   # available at startup. The module already puts [package bash coreutils git] +
   # extraPackages on the service PATH, so no path override is needed here.
   systemd.services.hermes-agent = {
-    wants = ["agenix.target" "hermes-vault-sync.service" "hermes-repo-sync.service"];
+    wants = ["agenix.target" "hermes-vault-bootstrap.service" "hermes-repo-sync.service"];
     after = [
       "agenix.target"
       "tailscaled.service"
       "hermes-vault-git-setup.service"
-      "hermes-vault-sync.service"
+      "hermes-vault-bootstrap.service"
       "hermes-repo-sync.service"
     ];
     serviceConfig = {
@@ -643,9 +646,12 @@ in {
     };
   };
 
-  # Clone-or-sync the vault. Runs once at boot and then on a timer (hybrid).
-  systemd.services.hermes-vault-sync = {
-    description = "Sync the hermes Obsidian vault with Forgejo (clone/pull/push)";
+  # Vault checkout bootstrap: guarantee the vault EXISTS at boot (clone-if-missing
+  # + one fetch), mirroring hermes-repo-sync below. No timer/path/auto-push — the
+  # agent now pulls your Obsidian edits before writing and pushes its commits
+  # directly (see the obsidian-vault-notes skill + SOUL.md).
+  systemd.services.hermes-vault-bootstrap = {
+    description = "Bootstrap + refresh the hermes Obsidian vault checkout";
     wantedBy = ["multi-user.target"];
     after = ["hermes-vault-git-setup.service" "network-online.target"];
     wants = ["network-online.target"];
@@ -654,34 +660,7 @@ in {
       Type = "oneshot";
       User = "hermes";
       Group = "hermes";
-      ExecStart = vaultSync;
-    };
-  };
-
-  # Inbound sync: a SLOW timer pulls your Obsidian edits in. It used to run every
-  # 90s and commit a timestamped "hermes: sync …" noise commit each time; now the
-  # agent authors commits and this only pulls/pushes, so a relaxed cadence is
-  # fine and produces no junk history.
-  systemd.timers.hermes-vault-sync = {
-    description = "Periodic hermes Obsidian vault pull/push";
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnBootSec = "2min";
-      OnUnitActiveSec = "5min";
-      AccuracySec = "1min";
-    };
-  };
-
-  # Reconcile on commit: fire the pull/push service the moment the agent commits
-  # in the vault. `.git/logs/HEAD` is appended on every commit (more reliable than
-  # watching a packed ref), so PathModified reconciles near-instantly. The agent
-  # also pushes directly now, so this is mostly a safety-net pull/push.
-  systemd.paths.hermes-vault-sync = {
-    description = "Reconcile the hermes Obsidian vault when the agent commits";
-    wantedBy = ["multi-user.target"];
-    pathConfig = {
-      PathModified = "${vaultPath}/.git/logs/HEAD";
-      Unit = "hermes-vault-sync.service";
+      ExecStart = vaultBootstrap;
     };
   };
 
