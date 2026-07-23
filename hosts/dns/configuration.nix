@@ -125,6 +125,7 @@
           ''"tempo.homelab.local. A 192.168.2.135"''
           ''"unifi.homelab.local. A 192.168.2.142"''
           ''"wotan.homelab.local. A 192.168.2.71"''
+          ''"zeroclaw.homelab.local. A 192.168.2.181"''
           # keep-sorted end
         ];
         local-data-ptr = [
@@ -161,6 +162,7 @@
           ''"192.168.2.179 buildbot-worker-1.homelab.local"''
           ''"192.168.2.180 hofvarpnir.homelab.local"''
           ''"192.168.2.180 jellyfin.homelab.local"''
+          ''"192.168.2.181 zeroclaw.homelab.local"''
           ''"192.168.2.208 homeassistant.local"''
           ''"192.168.2.42 pve-gigabyte.local"''
           ''"192.168.2.71 wotan.homelab.local"''
