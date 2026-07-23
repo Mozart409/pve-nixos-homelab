@@ -833,7 +833,7 @@ resource "proxmox_virtual_environment_vm" "buildbot_master_vm" {
 
   started = false
 
-  on_boot = true
+  on_boot = false
 }
 
 # Buildbot Worker 1 VM (Heavy builds - Rust, Haskell)
@@ -898,7 +898,7 @@ resource "proxmox_virtual_environment_vm" "buildbot_worker_1_vm" {
 
   started = false
 
-  on_boot = true
+  on_boot = false
 }
 
 # Cache VM (Garage S3 + Attic Nix Binary Cache)
@@ -1044,11 +1044,11 @@ resource "proxmox_virtual_environment_vm" "jellyfin_vm" {
   on_boot = true
 }
 
-# Agent Sandbox VM
-resource "proxmox_virtual_environment_vm" "sandbox_vm" {
-  name        = "sandbox"
-  description = "Agent Sandbox - Debian base for NixOS installation via nixos-anywhere - experimental VM for LLM agent use"
-  tags        = ["terraform", "debian", "nixos-target", "sandbox", "experiment"]
+# Agent Development VM
+resource "proxmox_virtual_environment_vm" "development_vm" {
+  name        = "development"
+  description = "Agent Development - Debian base for NixOS installation via nixos-anywhere - experimental VM for LLM agent use"
+  tags        = ["terraform", "debian", "nixos-target", "development", "experiment"]
 
   node_name = "pve-gigabyte"
   vm_id     = 4345
@@ -1087,7 +1087,8 @@ resource "proxmox_virtual_environment_vm" "sandbox_vm" {
 
     ip_config {
       ipv4 {
-        address = "dhcp"
+        address = "192.168.2.182/24"
+        gateway = "192.168.2.1"
       }
     }
 
@@ -1105,7 +1106,7 @@ resource "proxmox_virtual_environment_vm" "sandbox_vm" {
     timeout = "60s"
   }
 
-  started = false
+  started = true
   on_boot = true
 }
 
@@ -1325,23 +1326,23 @@ resource "proxmox_virtual_environment_vm" "zeroclaw_vm" {
 output "vm_ipv4_addresses" {
   description = "Primary IPv4 addresses per VM"
   value = {
-    database          = proxmox_virtual_environment_vm.database_vm.ipv4_addresses
-    otel              = proxmox_virtual_environment_vm.otel_vm.ipv4_addresses
-    dns               = proxmox_virtual_environment_vm.dns_vm.ipv4_addresses
-    unifi             = proxmox_virtual_environment_vm.unifi_vm.ipv4_addresses
-    container         = proxmox_virtual_environment_vm.containers_vm.ipv4_addresses
-    mcp               = proxmox_virtual_environment_vm.mcp_vm.ipv4_addresses
-    hermes            = proxmox_virtual_environment_vm.hermes_vm.ipv4_addresses
-    ca                = proxmox_virtual_environment_vm.ca_vm.ipv4_addresses
-    fleet             = proxmox_virtual_environment_vm.fleet_vm.ipv4_addresses
-    harbor            = proxmox_virtual_environment_vm.harbor_vm.ipv4_addresses
-    cache             = proxmox_virtual_environment_vm.cache_vm.ipv4_addresses
-    forgejo           = proxmox_virtual_environment_vm.forgejo_vm.ipv4_addresses
-    sandbox           = proxmox_virtual_environment_vm.sandbox_vm.ipv4_addresses
-    buildbot_master   = proxmox_virtual_environment_vm.buildbot_master_vm.ipv4_addresses
-    buildbot_worker_1 = proxmox_virtual_environment_vm.buildbot_worker_1_vm.ipv4_addresses
-    jellyfin          = proxmox_virtual_environment_vm.jellyfin_vm.ipv4_addresses
-    zeroclaw          = proxmox_virtual_environment_vm.zeroclaw_vm.ipv4_addresses
+    database    = proxmox_virtual_environment_vm.database_vm.ipv4_addresses
+    otel        = proxmox_virtual_environment_vm.otel_vm.ipv4_addresses
+    dns         = proxmox_virtual_environment_vm.dns_vm.ipv4_addresses
+    unifi       = proxmox_virtual_environment_vm.unifi_vm.ipv4_addresses
+    container   = proxmox_virtual_environment_vm.containers_vm.ipv4_addresses
+    mcp         = proxmox_virtual_environment_vm.mcp_vm.ipv4_addresses
+    hermes      = proxmox_virtual_environment_vm.hermes_vm.ipv4_addresses
+    ca          = proxmox_virtual_environment_vm.ca_vm.ipv4_addresses
+    fleet       = proxmox_virtual_environment_vm.fleet_vm.ipv4_addresses
+    harbor      = proxmox_virtual_environment_vm.harbor_vm.ipv4_addresses
+    cache       = proxmox_virtual_environment_vm.cache_vm.ipv4_addresses
+    forgejo     = proxmox_virtual_environment_vm.forgejo_vm.ipv4_addresses
+    development = proxmox_virtual_environment_vm.development_vm.ipv4_addresses
+    # buildbot_master   = proxmox_virtual_environment_vm.buildbot_master_vm.ipv4_addresses
+    # buildbot_worker_1 = proxmox_virtual_environment_vm.buildbot_worker_1_vm.ipv4_addresses
+    jellyfin = proxmox_virtual_environment_vm.jellyfin_vm.ipv4_addresses
+    zeroclaw = proxmox_virtual_environment_vm.zeroclaw_vm.ipv4_addresses
     # k3s_server_1 = proxmox_virtual_environment_vm.k3s_server_1_vm.ipv4_addresses
     # k3s_agent_1  = proxmox_virtual_environment_vm.k3s_agent_1_vm.ipv4_addresses
   }
