@@ -41,6 +41,14 @@
   # declaratively by modules/disko-jellyfin.nix (recordsize=1M, lz4, atime=off,
   # xattr=sa, primarycache=metadata). No manual fileSystems entry needed.
 
+  # On an abnormal/cold boot the systemd-generated media.mount unit can race
+  # zfs-import and lose (mediapool/media only finishes importing after
+  # media.mount already gave up) — this dropped the host into emergency mode
+  # with no console access (root is locked). `nofail` + a longer device wait
+  # keeps boot/SSH working even if /media mounts a few seconds late; ZFS's own
+  # zfs-mount.service reliably finishes the job moments later regardless.
+  fileSystems."/media".options = ["nofail" "x-systemd.device-timeout=60"];
+
   # ZFS kernel tuning for media streaming workloads
   boot.kernelParams = [
     "zfs.zfs_arc_max=2147483648" # 2GB max ARC (adjust based on RAM)
