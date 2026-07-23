@@ -131,6 +131,10 @@
         local = "192.168.2.180";
         tailscale = "homelab-jellyfin";
       };
+      zeroclaw = {
+        local = "192.168.2.181";
+        tailscale = "homelab-zeroclaw";
+      };
       # Raspberry Pi hosts (update IP after first boot)
       "rpi4-1" = {
         local = "192.168.2.170";
@@ -202,6 +206,7 @@
         sandbox = mkHost "sandbox";
         buildbot-master = mkHost "buildbot-master";
         buildbot-worker-1 = mkHost "buildbot-worker-1";
+        zeroclaw = mkHost "zeroclaw";
         # Explicit (not mkHost) so nixvim is baked in even on a nixos-anywhere
         # reinstall; mkHost omits home-manager. Mirrors colmenaHive defaults.
         jellyfin = nixpkgs.lib.nixosSystem {
@@ -530,6 +535,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/jellyfin/configuration.nix
+          ];
+        };
+
+        zeroclaw = {
+          deployment = {
+            targetHost = targetHost "zeroclaw";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["zeroclaw" "ai"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/zeroclaw/configuration.nix
           ];
         };
 
