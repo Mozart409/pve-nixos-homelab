@@ -449,7 +449,7 @@
         job_name = "development-node";
         static_configs = [
           {
-            targets = ["192.168.2.182:9100"];
+            targets = ["192.168.2.184:9100"];
             labels = {
               instance = "homelab-development";
             };
@@ -461,7 +461,7 @@
         job_name = "zeroclaw-node";
         static_configs = [
           {
-            targets = ["192.168.2.181:9100"];
+            targets = ["192.168.2.183:9100"];
             labels = {
               instance = "homelab-zeroclaw";
             };

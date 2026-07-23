@@ -112,7 +112,7 @@
         tailscale = "homelab-cache";
       };
       development = {
-        local = "192.168.2.182";
+        local = "192.168.2.184";
         tailscale = "homelab-development";
       };
       forgejo = {
@@ -132,7 +132,7 @@
         tailscale = "homelab-jellyfin";
       };
       zeroclaw = {
-        local = "192.168.2.181";
+        local = "192.168.2.183";
         tailscale = "homelab-zeroclaw";
       };
       # Raspberry Pi hosts (update IP after first boot)
