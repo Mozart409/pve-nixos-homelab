@@ -11,6 +11,8 @@
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
     ../../modules/podman.nix
+    ../../modules/moshi-hook-user.nix
+    ../../modules/coding-harness.nix
     ./zeroclaw
   ];
 
@@ -26,6 +28,28 @@
     ];
   };
   networking.defaultGateway = "192.168.2.1";
+
+  # Moshi pairing token (plain raw text, NOT KEY=value — read directly by
+  # modules/moshi-hook-user.nix's pair script). Owned by amadeus so
+  # moshi-hook-setup (User=amadeus) can read it.
+  age.secrets.moshi-device-id = {
+    file = ../../secrets/moshi-device-id.age;
+    owner = "amadeus";
+    mode = "0400";
+  };
+
+  # Axon MCP gateway bearer token, sourced into interactive shells by
+  # modules/coding-harness.nix (see that module for details).
+  age.secrets.axon-gateway-env = {
+    file = ../../secrets/axon-gateway-env.age;
+    owner = "amadeus";
+    mode = "0400";
+  };
+
+  # Interactive tools for amadeus's own use on this host, separate from the
+  # containerized ZeroClaw agent in ./zeroclaw/default.nix (which runs in an
+  # OCI container with no host-filesystem presence).
+  environment.systemPackages = with pkgs; [claude-code opencode];
 
   services.prometheus.exporters.node = {
     enable = true;
