@@ -133,6 +133,7 @@ in {
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
+    ../../modules/moshi-hook.nix
     ./moshi-hook.nix
   ];
 
@@ -212,6 +213,22 @@ in {
   # public key must be added to hermes-bot's Forgejo SSH keys (see runbook).
   age.secrets.hermes-forgejo-ssh = {
     file = ../../secrets/hermes-forgejo-ssh.age;
+    owner = "hermes";
+    group = "hermes";
+    mode = "0400";
+  };
+
+  # Moshi pairing token (plain raw text, NOT KEY=value — read directly by
+  # ./moshi-hook.nix's pair script). Owned by hermes so moshi-hook-setup
+  # (User=hermes) can read it.
+  #
+  # NOTE: the SAME secret is also a recipient for development + zeroclaw
+  # (secrets/secrets.nix). It is UNVERIFIED whether one Moshi account token
+  # can pair 3 hosts simultaneously, or whether pairing a 2nd/3rd host
+  # invalidates the 1st. Deploy + verify hermes FIRST — see verification
+  # plan below.
+  age.secrets.moshi-device-id = {
+    file = ../../secrets/moshi-device-id.age;
     owner = "hermes";
     group = "hermes";
     mode = "0400";
@@ -616,13 +633,14 @@ in {
   # available at startup. The module already puts [package bash coreutils git] +
   # extraPackages on the service PATH, so no path override is needed here.
   systemd.services.hermes-agent = {
-    wants = ["agenix.target" "hermes-vault-bootstrap.service" "hermes-repo-sync.service"];
+    wants = ["agenix.target" "hermes-vault-bootstrap.service" "hermes-repo-sync.service" "moshi-hook-setup.service"];
     after = [
       "agenix.target"
       "tailscaled.service"
       "hermes-vault-git-setup.service"
       "hermes-vault-bootstrap.service"
       "hermes-repo-sync.service"
+      "moshi-hook-setup.service"
     ];
     serviceConfig = {
       # ── Config integrity ("must stay nix") ──────────────────────────────────
