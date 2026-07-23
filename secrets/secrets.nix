@@ -18,7 +18,9 @@ let
   hostBuildBotMaster = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIwy8ohPS5E6ElmFvYoNYNBfbiYjAfFQBVtBA5hePSiN root@homelab-buildbot-master";
   hostBuildBotWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIIZK5rnXUBhINU4lzEWkhxhdRWsLR7IxLeQID8HqLKF root@homelab-buildbot-worker-1";
   hostJellyfin = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDjBjNv4pvr08UdR2QL72Re3B22cUV+3DQvR2oG3/nsA root@homelab-jellyfin";
-  users = [amadeus amadeusAge hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet hostHarbor hostCache hostForgejo hostBuildBotMaster hostBuildBotWorker1 hostJellyfin];
+  hostZeroclaw = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF8hvOMPXx4HOK9/yxL/r8oj1itQIFQDpnk362IwrIfy root@homelab-minimal";
+  hostDevelopment = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMOQ8L4iUJhFK2Y3GkQGOFRdNZga45GXT6SPkRwxh5S/ root@homelab-minimal";
+  users = [amadeus amadeusAge hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet hostHarbor hostCache hostForgejo hostBuildBotMaster hostBuildBotWorker1 hostJellyfin hostZeroclaw hostDevelopment];
 in {
   "tailscale-auth-key.age".publicKeys = users;
   "uptime-forge-db-password.age".publicKeys = [amadeus amadeusAge hostContainers];
