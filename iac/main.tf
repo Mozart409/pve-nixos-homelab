@@ -44,6 +44,20 @@ resource "proxmox_virtual_environment_download_file" "debian_cloud_image" {
   checksum_algorithm = "sha512"
 }
 
+# Fedora 44 Cloud Base (Generic) Image Download
+resource "proxmox_virtual_environment_download_file" "fedora_cloud_image" {
+  content_type = "iso"
+  datastore_id = "local"
+  node_name    = "pve-gigabyte"
+
+  url = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-44-1.7.x86_64.qcow2"
+
+  file_name          = "fedora-44-generic-amd64.img"
+  overwrite          = false
+  checksum           = "28680fe5b371a5a82ebf43a31926e086a168e59949d03969c5093e7071f90b7f"
+  checksum_algorithm = "sha256"
+}
+
 
 # PostgreSQL Database VM
 resource "proxmox_virtual_environment_vm" "database_vm" {
