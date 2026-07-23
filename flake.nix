@@ -40,6 +40,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
+    herdr = {
+      url = "github:ogulcancelik/herdr/v0.7.5";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs = {
@@ -56,6 +60,7 @@
     home-manager,
     mozart409-nixvim,
     nixos-hardware,
+    herdr,
   }: let
     system = "x86_64-linux";
 
@@ -195,7 +200,15 @@
         harbor = mkHost "harbor";
         cache = mkHost "cache";
         forgejo = mkHost "forgejo";
-        development = mkHost "development";
+        development = nixpkgs.lib.nixosSystem {
+          specialArgs = {inherit herdr;};
+          modules = [
+            {nixpkgs.hostPlatform = system;}
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/development/configuration.nix
+          ];
+        };
         buildbot-master = mkHost "buildbot-master";
         buildbot-worker-1 = mkHost "buildbot-worker-1";
         zeroclaw = mkHost "zeroclaw";
@@ -268,6 +281,7 @@
             inherit hermes-agent;
             inherit homelab-dashboard;
             inherit nixos-hardware;
+            inherit herdr;
           };
         };
 
