@@ -25,7 +25,7 @@ in {
   # keep-sorted start
 
   "attic-server-token.age".publicKeys = [amadeus amadeusAge hostCache];
-  "axon-gateway-env.age".publicKeys = [amadeus amadeusAge hostContainers hostHermes];
+  "axon-gateway-env.age".publicKeys = [amadeus amadeusAge hostContainers hostHermes hostDevelopment hostZeroclaw];
   "buildbot-db-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostDatabase];
   "buildbot-webhook-secret.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster];
   "buildbot-worker-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostBuildBotWorker1];
