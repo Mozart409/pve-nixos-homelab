@@ -1087,7 +1087,7 @@ resource "proxmox_virtual_environment_vm" "development_vm" {
 
     ip_config {
       ipv4 {
-        address = "192.168.2.182/24"
+        address = "192.168.2.184/24"
         gateway = "192.168.2.1"
       }
     }
@@ -1152,7 +1152,7 @@ resource "proxmox_virtual_environment_vm" "zeroclaw_vm" {
 
     ip_config {
       ipv4 {
-        address = "192.168.2.181/24"
+        address = "192.168.2.183/24"
         gateway = "192.168.2.1"
       }
     }
