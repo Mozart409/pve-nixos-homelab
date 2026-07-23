@@ -167,7 +167,14 @@
       nixpkgs.lib.nixosSystem {
         specialArgs = {inherit homelab-dashboard;};
         modules = [
-          {nixpkgs.hostPlatform = system;}
+          {
+            nixpkgs.hostPlatform = system;
+            # colmenaHive.meta.nixpkgs sets this globally for colmena builds;
+            # plain nixosSystem entries need it too so `nix build
+            # .#nixosConfigurations.<host>...` works standalone (e.g. for
+            # tools/colmena-drift.sh).
+            nixpkgs.config.allowUnfree = true;
+          }
           disko.nixosModules.disko
           agenix.nixosModules.default
           ./hosts/${hostname}/configuration.nix
