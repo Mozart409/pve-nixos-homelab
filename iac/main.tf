@@ -64,8 +64,8 @@ resource "proxmox_virtual_environment_vm" "database_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 1536
+    floating  = 768
   }
 
   disk {
@@ -130,8 +130,8 @@ resource "proxmox_virtual_environment_vm" "otel_vm" {
   }
 
   memory {
-    dedicated = 2048
-    floating  = 2048
+    dedicated = 1536
+    floating  = 1024
   }
 
   disk {
@@ -196,8 +196,8 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   }
 
   memory {
-    dedicated = 2048
-    floating  = 2048
+    dedicated = 768
+    floating  = 384
   }
 
   disk {
@@ -262,8 +262,8 @@ resource "proxmox_virtual_environment_vm" "unifi_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 2048
+    floating  = 1024
   }
 
   disk {
@@ -327,8 +327,8 @@ resource "proxmox_virtual_environment_vm" "harbor_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 1536
+    floating  = 768
   }
 
   disk {
@@ -394,8 +394,8 @@ resource "proxmox_virtual_environment_vm" "containers_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 2560
+    floating  = 1280
   }
 
   disk {
@@ -459,8 +459,8 @@ resource "proxmox_virtual_environment_vm" "mcp_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 1536
+    floating  = 768
   }
 
   disk {
@@ -525,8 +525,8 @@ resource "proxmox_virtual_environment_vm" "hermes_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 2048
+    floating  = 1024
   }
 
   disk {
@@ -591,8 +591,8 @@ resource "proxmox_virtual_environment_vm" "fleet_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 2048
+    floating  = 1024
   }
 
   disk {
@@ -658,8 +658,8 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
   }
 
   memory {
-    dedicated = 2048
-    floating  = 2048
+    dedicated = 768
+    floating  = 384
   }
 
   disk {
@@ -725,8 +725,8 @@ resource "proxmox_virtual_environment_vm" "forgejo_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 1536
+    floating  = 768
   }
 
   disk {
@@ -791,7 +791,7 @@ resource "proxmox_virtual_environment_vm" "buildbot_master_vm" {
 
   memory {
     dedicated = 2048
-    floating  = 2048
+    floating  = 1024
   }
 
   disk {
@@ -856,7 +856,7 @@ resource "proxmox_virtual_environment_vm" "buildbot_worker_1_vm" {
 
   memory {
     dedicated = 8192
-    floating  = 8192
+    floating  = 4096
   }
 
   disk {
@@ -920,8 +920,8 @@ resource "proxmox_virtual_environment_vm" "cache_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 1024
+    floating  = 512
   }
 
   disk {
@@ -988,7 +988,7 @@ resource "proxmox_virtual_environment_vm" "jellyfin_vm" {
 
   memory {
     dedicated = 4096
-    floating  = 4096
+    floating  = 2048
   }
 
   # OS disk (scsi0 -> /dev/sda): btrfs root via disko-jellyfin.nix
@@ -1063,8 +1063,8 @@ resource "proxmox_virtual_environment_vm" "development_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 1024
+    floating  = 512
   }
 
   disk {
@@ -1128,8 +1128,8 @@ resource "proxmox_virtual_environment_vm" "zeroclaw_vm" {
   }
 
   memory {
-    dedicated = 2048
-    floating  = 2048
+    dedicated = 768
+    floating  = 384
   }
 
   disk {
