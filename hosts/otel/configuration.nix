@@ -473,9 +473,33 @@
         job_name = "jellyfin-node";
         static_configs = [
           {
-            targets = ["192.168.2.100:9100"];
+            targets = ["192.168.2.180:9100"];
             labels = {
               instance = "homelab-jellyfin";
+            };
+          }
+        ];
+      }
+      # Fleet host exporters
+      {
+        job_name = "fleet-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.164:9100"];
+            labels = {
+              instance = "homelab-fleet";
+            };
+          }
+        ];
+      }
+      # Harbor host exporters
+      {
+        job_name = "harbor-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.174:9100"];
+            labels = {
+              instance = "homelab-harbor";
             };
           }
         ];
