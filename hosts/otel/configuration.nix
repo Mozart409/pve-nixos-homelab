@@ -456,6 +456,18 @@
           }
         ];
       }
+      # ZeroClaw host exporters
+      {
+        job_name = "zeroclaw-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.181:9100"];
+            labels = {
+              instance = "homelab-zeroclaw";
+            };
+          }
+        ];
+      }
       # Jellyfin host exporters
       {
         job_name = "jellyfin-node";
