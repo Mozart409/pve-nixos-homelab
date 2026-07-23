@@ -987,8 +987,8 @@ resource "proxmox_virtual_environment_vm" "jellyfin_vm" {
   }
 
   memory {
-    dedicated = 4096
-    floating  = 2048
+    dedicated = 3072
+    floating  = 1536
   }
 
   # OS disk (scsi0 -> /dev/sda): btrfs root via disko-jellyfin.nix
