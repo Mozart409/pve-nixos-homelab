@@ -133,6 +133,7 @@
     iproute2
     iputils
     jq
+    kitty.terminfo
     mtr
     pv
     ripgrep
