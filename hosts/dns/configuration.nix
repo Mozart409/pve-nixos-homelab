@@ -91,8 +91,6 @@
           # keep-sorted start
           ''"albyhub.homelab.local. A 192.168.2.149"''
           ''"axon.homelab.local. A 192.168.2.149"''
-          ''"buildbot-master.homelab.local. A 192.168.2.177"''
-          ''"buildbot-worker-1.homelab.local. A 192.168.2.179"''
           # Homelab services with step-ca certificates
           ''"ca.homelab.local. A 192.168.2.160"''
           ''"cache.homelab.local. A 192.168.2.175"''
@@ -156,9 +154,7 @@
           ''"192.168.2.165 k3s-server-1.homelab.local"''
           ''"192.168.2.174 harbor.homelab.local"''
           ''"192.168.2.175 cache.homelab.local"''
-          ''"192.168.2.177 buildbot-master.homelab.local"''
           ''"192.168.2.178 forgejo.homelab.local"''
-          ''"192.168.2.179 buildbot-worker-1.homelab.local"''
           ''"192.168.2.180 hofvarpnir.homelab.local"''
           ''"192.168.2.180 jellyfin.homelab.local"''
           ''"192.168.2.183 zeroclaw.homelab.local"''

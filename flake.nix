@@ -119,14 +119,6 @@
         local = "192.168.2.178";
         tailscale = "homelab-forgejo";
       };
-      buildbot-master = {
-        local = "192.168.2.177";
-        tailscale = "homelab-buildbot-master";
-      };
-      buildbot-worker-1 = {
-        local = "192.168.2.179";
-        tailscale = "homelab-buildbot-worker-1";
-      };
       jellyfin = {
         local = "192.168.2.180";
         tailscale = "homelab-jellyfin";
@@ -495,34 +487,6 @@
             ./hosts/development/configuration.nix
           ];
         };
-
-        # buildbot-master = {
-        #   deployment = {
-        #     targetHost = targetHost "buildbot-master";
-        #     targetUser = "amadeus";
-        #     buildOnTarget = false;
-        #     tags = ["buildbot" "ci"];
-        #   };
-        #   imports = [
-        #     disko.nixosModules.disko
-        #     agenix.nixosModules.default
-        #     ./hosts/buildbot-master/configuration.nix
-        #   ];
-        # };
-
-        # buildbot-worker-1 = {
-        #   deployment = {
-        #     targetHost = targetHost "buildbot-worker-1";
-        #     targetUser = "amadeus";
-        #     buildOnTarget = false;
-        #     tags = ["buildbot" "ci" "worker"];
-        #   };
-        #   imports = [
-        #     disko.nixosModules.disko
-        #     agenix.nixosModules.default
-        #     ./hosts/buildbot-worker-1/configuration.nix
-        #   ];
-        # };
 
         jellyfin = {
           deployment = {
