@@ -273,7 +273,9 @@ in {
       # Alt: provider = "opencode-zen"; model = "minimax-m2.5"; (needs
       # OPENCODE_ZEN_API_KEY in hermes-opencode-zen-key.age).
       provider = "deepseek";
-      model = "deepseek-chat";
+      # deepseek-chat is deprecated 2026-07-24 and becomes a silent alias for
+      # deepseek-v4-flash; opt into the stronger v4-pro tier explicitly instead.
+      model = "deepseek-v4-pro";
 
       # Timezone Hermes uses for the timestamps it injects into the conversation
       # (hermes_time.now(), config.yaml `timezone` key). The HERMES_TIMEZONE env
@@ -419,11 +421,22 @@ in {
       # Stores facts in a local SQLite FTS5 DB at $HERMES_HOME/memory_store.db.
       # NumPy (added via extraPythonPackages below) enables HRR algebra
       # (probe/reason compositional queries).
-      memory.provider = "holographic";
+      # memory_char_limit/user_char_limit gate the BUILT-IN `memory` toolset
+      # (MEMORY.md/USER.md files) — separate from the holographic fact_store
+      # below, but same freeform `memory` key so they deep-merge fine. 4x the
+      # module defaults (2200/1375) to give the agent more headroom.
+      memory = {
+        provider = "holographic";
+        memory_char_limit = 8800;
+        user_char_limit = 5500;
+      };
       plugins.hermes-memory-store = {
         # Auto-extract facts from the conversation at session end.
         auto_extract = true;
         default_trust = 0.5;
+        # Lowered from the module default (0.3) so more auto-extracted facts
+        # clear the bar to persist/surface in retrieval.
+        min_trust_threshold = 0.2;
       };
 
       # Enable the moshi-hooks plugin (installed into the agent state dir by
@@ -547,6 +560,18 @@ in {
           `service="mobile_app_iphone_von_amadeus"`).
         - Store a memory fact reminding you to run this delivery on every
           scheduled job, so future cron runs recall it.
+
+        ## Memory & Fact Store
+        - Before answering anything about the user, their preferences, past
+          decisions, or homelab history: probe/reason with `fact_store`
+          FIRST. Don't answer from recall alone — check.
+        - The moment you learn something durable (a preference, a decision,
+          an infra fact, a recurring pattern), add or update it via
+          `fact_store` immediately. Don't wait for end-of-session
+          auto_extract — that's a backstop, not your primary path.
+        - Prefer updating an existing fact over creating a near-duplicate.
+        - `fact_store` (structured, queryable facts) and the `memory` tool
+          (MEMORY.md/USER.md free text) are separate — use both.
 
         ## Guidelines
         - Be concise and helpful
