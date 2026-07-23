@@ -12,14 +12,14 @@
     ../../modules/podman.nix
   ];
 
-  networking.hostName = "homelab-sandbox";
+  networking.hostName = "homelab-development";
 
   # Static IP configuration
   networking.interfaces.ens18 = {
     useDHCP = false;
     ipv4.addresses = [
       {
-        address = "192.168.2.176";
+        address = "192.168.2.182";
         prefixLength = 24;
       }
     ];

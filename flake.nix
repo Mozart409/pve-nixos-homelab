@@ -111,9 +111,9 @@
         local = "192.168.2.175";
         tailscale = "homelab-cache";
       };
-      sandbox = {
-        local = "192.168.2.176";
-        tailscale = "homelab-sandbox";
+      development = {
+        local = "192.168.2.182";
+        tailscale = "homelab-development";
       };
       forgejo = {
         local = "192.168.2.178";
@@ -203,7 +203,7 @@
         harbor = mkHost "harbor";
         cache = mkHost "cache";
         forgejo = mkHost "forgejo";
-        sandbox = mkHost "sandbox";
+        development = mkHost "development";
         buildbot-master = mkHost "buildbot-master";
         buildbot-worker-1 = mkHost "buildbot-worker-1";
         zeroclaw = mkHost "zeroclaw";
@@ -482,17 +482,17 @@
           ];
         };
 
-        sandbox = {
+        development = {
           deployment = {
-            targetHost = targetHost "sandbox";
+            targetHost = targetHost "development";
             targetUser = "amadeus";
             buildOnTarget = false;
-            tags = ["sandbox" "experiment"];
+            tags = ["development" "experiment"];
           };
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./hosts/sandbox/configuration.nix
+            ./hosts/development/configuration.nix
           ];
         };
 

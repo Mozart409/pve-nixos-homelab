@@ -444,14 +444,14 @@
           }
         ];
       }
-      # Sandbox host exporters
+      # Development host exporters
       {
-        job_name = "sandbox-node";
+        job_name = "development-node";
         static_configs = [
           {
-            targets = ["192.168.2.176:9100"];
+            targets = ["192.168.2.182:9100"];
             labels = {
-              instance = "homelab-sandbox";
+              instance = "homelab-development";
             };
           }
         ];

@@ -20,7 +20,7 @@ NixOS flakes, Colmena, and OpenTofu definitions for a Proxmox homelab.
 | `harbor` | 192.168.2.166 | Harbor container registry |
 | `rpi4-1` | 192.168.2.170 | Raspberry Pi 4 (edge/gateway) |
 | `cache` | 192.168.2.175 | Garage S3 + Attic Nix binary cache |
-| `sandbox` | 192.168.2.176 | Isolated dev/test sandbox VM |
+| `development` | 192.168.2.182 | Isolated dev/test development VM |
 | `buildbot-master` | 192.168.2.177 | Buildbot CI scheduler + web UI |
 | `forgejo` | 192.168.2.178 | Forgejo git forge (PostgreSQL backend) |
 | `buildbot-worker-1` | 192.168.2.179 | Buildbot worker (Nix builds) |
