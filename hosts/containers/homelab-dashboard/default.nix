@@ -50,7 +50,7 @@
         }
         {
           name = "Prometheus";
-          url = "http://192.168.2.135:9090";
+          url = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
           icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/prometheus.svg";
         }
         {
