@@ -117,7 +117,7 @@
           ''"pgadmin.homelab.local. A 192.168.2.134"''
           ''"prom-mcp.homelab.local. A 192.168.2.152"''
           ''"prometheus.homelab.local. A 192.168.2.135"''
-          ''"pve-gigabyte.local. A 192.168.2.42"''
+          ''"pve-gigabyte.local. A 192.168.2.46"''
           ''"romm.homelab.local. A 192.168.2.149"''
           ''"scratchpad.homelab.local. A 192.168.2.185"''
           ''"searxng.homelab.local. A 192.168.2.149"''
