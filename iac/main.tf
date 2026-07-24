@@ -276,8 +276,8 @@ resource "proxmox_virtual_environment_vm" "unifi_vm" {
   }
 
   memory {
-    dedicated = 2048
-    floating  = 1024
+    dedicated = 2560
+    floating  = 1280
   }
 
   disk {
@@ -408,8 +408,8 @@ resource "proxmox_virtual_environment_vm" "containers_vm" {
   }
 
   memory {
-    dedicated = 2560
-    floating  = 1280
+    dedicated = 3584
+    floating  = 1792
   }
 
   disk {
@@ -605,8 +605,8 @@ resource "proxmox_virtual_environment_vm" "fleet_vm" {
   }
 
   memory {
-    dedicated = 2048
-    floating  = 1024
+    dedicated = 3072
+    floating  = 1536
   }
 
   disk {
@@ -871,8 +871,8 @@ resource "proxmox_virtual_environment_vm" "jellyfin_vm" {
   }
 
   memory {
-    dedicated = 3072
-    floating  = 1536
+    dedicated = 4096
+    floating  = 2048
   }
 
   # OS disk (scsi0 -> /dev/sda): btrfs root via disko-jellyfin.nix
