@@ -508,12 +508,17 @@
           }
         ];
       }
-      # Proxmox VE hypervisor (bare-metal, not nix-managed) node_exporter
+      # Proxmox VE hypervisor (bare-metal, not nix-managed) node_exporter.
+      # Serves HTTPS with a self-signed cert (not step-ca), so skip verification.
       {
         job_name = "pve-node";
+        scheme = "https";
+        tls_config = {
+          insecure_skip_verify = true;
+        };
         static_configs = [
           {
-            targets = ["192.168.2.42:9100"];
+            targets = ["192.168.2.46:9100"];
             labels = {
               instance = "pve-gigabyte";
             };
