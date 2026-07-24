@@ -508,6 +508,18 @@
           }
         ];
       }
+      # Proxmox VE hypervisor (bare-metal, not nix-managed) node_exporter
+      {
+        job_name = "pve-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.42:9100"];
+            labels = {
+              instance = "pve-gigabyte";
+            };
+          }
+        ];
+      }
       # axon-gateway MCP gateway metrics. The container binds 127.0.0.1:8091 on
       # the containers host, so it is only reachable via its Caddy vhost over
       # HTTPS (step-ca cert, trusted here via modules/step-ca-trust.nix).
