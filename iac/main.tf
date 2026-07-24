@@ -1059,6 +1059,73 @@ resource "proxmox_virtual_environment_vm" "zeroclaw_vm" {
   on_boot = true
 }
 
+# Scratchpad VM (Fedora cloud image, ad-hoc testing)
+resource "proxmox_virtual_environment_vm" "scratchpad_vm" {
+  name        = "scratchpad"
+  description = "Scratchpad - Fedora cloud VM for ad-hoc testing"
+  tags        = ["terraform", "fedora", "scratchpad"]
+
+  node_name = "pve-gigabyte"
+  vm_id     = 4347
+
+  bios = "seabios"
+
+  keyboard_layout = "de"
+
+  cpu {
+    cores = 2
+    type  = "host"
+  }
+
+  memory {
+    dedicated = 2048
+    floating  = 1024
+  }
+
+  disk {
+    datastore_id = "zfs_pool"
+    file_id      = proxmox_virtual_environment_download_file.fedora_cloud_image.id
+    interface    = "scsi0"
+    size         = 256
+  }
+
+  network_device {
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  initialization {
+    datastore_id = "local-lvm"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.2.185/24"
+        gateway = "192.168.2.1"
+      }
+    }
+
+    user_account {
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
+  }
+
+  serial_device {}
+
+  # Enable QEMU Guest Agent
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
+
+  started = true
+
+  on_boot = true
+}
+
 # # K3s Server (Control Plane) VM
 # resource "proxmox_virtual_environment_vm" "k3s_server_1_vm" {
 #   name        = "k3s-server-1"
@@ -1225,6 +1292,7 @@ output "vm_ipv4_addresses" {
     development = proxmox_virtual_environment_vm.development_vm.ipv4_addresses
     jellyfin    = proxmox_virtual_environment_vm.jellyfin_vm.ipv4_addresses
     zeroclaw    = proxmox_virtual_environment_vm.zeroclaw_vm.ipv4_addresses
+    scratchpad  = proxmox_virtual_environment_vm.scratchpad_vm.ipv4_addresses
     # k3s_server_1 = proxmox_virtual_environment_vm.k3s_server_1_vm.ipv4_addresses
     # k3s_agent_1  = proxmox_virtual_environment_vm.k3s_agent_1_vm.ipv4_addresses
   }
