@@ -7,7 +7,7 @@ backup — pg_dump is not treated as a backup tool. The existing
 `services.postgresqlBackup` is **kept running in parallel through the transition**
 and removed once the first pgBackRest restore is rehearsed.
 
-Status: **planning / for discussion.** Nothing deployed.
+Status: **planning / ready to implement after commit.** Nothing deployed.
 
 ## Current state (verified)
 - **DB backup today:** `services.postgresqlBackup` — daily 03:00 `pg_dump`, zstd,
@@ -16,7 +16,7 @@ Status: **planning / for discussion.** Nothing deployed.
 - **Whole-VM:** the DB VM is backed up to **PBS → Cloudflare R2** (crash-
   consistent VM image, off-site). Configured at the Proxmox/PBS layer, not in
   this repo.
-- Filesystem **Btrfs**; PGDATA forced NoCoW (`+C`, tmpfiles `:471`).
+- Filesystem **Btrfs**; PGDATA forced NoCoW (`+C`, tmpfiles).
 - **All VMs share one ZFS pool on one Proxmox host.** This is the decisive
   constraint: any backup target that lives on a homelab VM (local-posix on the DB,
   or Garage on `cache`) is on the *same pool/host* as the DB → same failure
@@ -39,11 +39,12 @@ Status: **planning / for discussion.** Nothing deployed.
 
 ## Decision: pgBackRest via the native NixOS module, as the sole DB backup layer
 
-**Remove `services.postgresqlBackup`; adopt `services.pgbackrest`.** The module
-is a first-class citizen in our pinned nixpkgs — verified:
+**Adopt `services.pgbackrest`; keep `services.postgresqlBackup` until the first
+restore drill succeeds, then remove it.** The module is a first-class citizen in
+our pinned nixpkgs — verified:
 `nix eval .#nixosConfigurations.database.options.services.pgbackrest.enable`
-→ "Whether to enable pgBackRest." (`nixos/modules/services/backup/pgbackrest.nix`,
-473 lines in our pin.)
+→ "Whether to enable pgBackRest." (`nixos/modules/services/backup/pgbackrest.nix`
+in our pin.)
 
 What `enable = true` gives us automatically (read from the pinned module):
 - Adds `pkgs.pgbackrest`, generates `/etc/pgbackrest/pgbackrest.conf`, creates
@@ -63,7 +64,7 @@ What `enable = true` gives us automatically (read from the pinned module):
 PG18 needs no `wal_level`/`max_wal_senders` change (defaults suffice). 25.05's
 `pkgs.pgbackrest` is ≥2.54 (PG18-capable).
 
-### Tradeoff of dropping pg_dump (acknowledged, accepted)
+### Tradeoff of dropping pg_dump (acknowledged, accepted — after drill)
 pgBackRest is whole-cluster and restores only to the **same major version**; it
 can't do the single-table / cross-version "logical" restore pg_dump could. This
 is an accepted tradeoff — the whole-VM PBS→R2 image remains as a coarse fallback,
@@ -81,6 +82,9 @@ encrypted. R2 credentials already exist (you use R2 today). Config:
 Rejected: **Garage** and **local-posix** — both sit on the same ZFS pool as the
 DB, so neither is a second copy in any failure that matters.
 
+Repo attr name `r2` with `type = "s3"` is safe: the module only defaults
+`repo-host` for posix/sftp repos; S3 leaves `host` null.
+
 ### R2 durability / immutability posture (decided)
 **Versioning + lifecycle, not Object Lock.** Object Lock (WORM) would break
 pgBackRest's own retention — `pgbackrest expire` deletes expired backups, and
@@ -95,6 +99,10 @@ compromised R2 key on the DB host:
 - **Client-side `aes-256-cbc`** (below) — Cloudflare can't read contents.
 - True WORM, if ever wanted, = a *second* copy to a lock-enabled target under a
   *different* credential. Out of scope for now.
+
+**Correlated risk (accepted):** PBS VM images and pgBackRest both land in the
+same Cloudflare account. Homelab-acceptable; the only shared failure is "CF
+account gone."
 
 ### Retention: 2 full, not 1
 Goal is "restore current state," not deep PITR — so retention is small. **But
@@ -122,11 +130,12 @@ WAL replay bridges the gap between backups, so effective RPO ≈ minutes.
 ```nix
 # hosts/database/configuration.nix
 
-# remove: services.postgresqlBackup { ... }  (:260) and its /var/backup tmpfiles rule
+# KEEP services.postgresqlBackup { ... } through transition
+# (remove only after first successful restore drill — see Rollout §7)
 
 services.pgbackrest = {
   enable = true;
-  repos.r2 = {                     # any non-"localhost" name = non-local repo
+  repos.r2 = {                     # type=s3 → no default repo-host
     type = "s3";
     s3-bucket = "homelab-pgbackrest";
     s3-endpoint = "<accountid>.r2.cloudflarestorage.com";
@@ -137,10 +146,14 @@ services.pgbackrest = {
     retention-diff = 4;            # keep ~4 recent diffs + their hourly incrs
   };
   settings = {
+    # REQUIRED: module only writes pgbackrest.conf; conf.d is NOT auto-read
+    include-path = "/etc/pgbackrest/conf.d";
     compress-type = "zst";
     process-max = 2;
     archive-async = "y";           # don't block the DB if R2 is briefly unreachable
     spool-path = "/var/spool/pgbackrest";
+    # Bound spool growth under sustained R2 outage (tune after first week)
+    # archive-push-queue-max = "64MiB";  # optional; set once size is known
   };
   stanzas.default.jobs = {
     weekly = { schedule = "Sun 02:00";      type = "full"; };
@@ -150,14 +163,15 @@ services.pgbackrest = {
 };
 services.postgresql.settings.archive_timeout = "60";  # bound RPO on an idle DB
 # archive-async spool dir (writable by both postgres and pgbackrest):
+# postgres is a member of group pgbackrest (module)
 systemd.tmpfiles.rules = [ "d /var/spool/pgbackrest 0750 pgbackrest pgbackrest -" ];
 ```
 
 ### Secrets via agenix (module blocks secrets in the store)
 `cipher-pass`, `s3-key`, `s3-key-secret` are `disabledOption` by design. Set the
-non-secret keys in Nix; drop the secrets into pgBackRest's auto-read include dir
-`/etc/pgbackrest/conf.d/` (covers both the timer jobs and the postgres-run
-`archive_command`):
+non-secret keys in Nix; drop the secrets into an include file under
+`/etc/pgbackrest/conf.d/` (loaded because `include-path` is set above — covers
+both the timer jobs and the postgres-run `archive_command`):
 ```nix
 age.secrets.pgbackrest-secret = {
   file  = ../../secrets/pgbackrest-secret.age;   # see contents below
@@ -167,13 +181,19 @@ age.secrets.pgbackrest-secret = {
   mode  = "0640";
 };
 ```
-Secret file contents (INI):
+Secret file contents (INI). **`repo1-` is correct only while there is a single
+repo** (module numbers repos by attrName order). Comment this if a second repo is
+ever added:
 ```ini
 [global]
 repo1-cipher-pass=<openssl rand -base64 48>
 repo1-s3-key=<R2 access key id>
 repo1-s3-key-secret=<R2 secret access key>
 ```
+**Off-host copy of `cipher-pass`:** store in a password manager. Lose the
+passphrase → the encrypted R2 repo is unrecoverable junk. agenix on `database`
+alone is not enough.
+
 New secret → add the `database` host key as a recipient in `secrets/secrets.nix`
 and `agenix -e pgbackrest-secret.age` **from inside `secrets/`** (see AGENTS.md
 §6). Encryption is fixed at stanza-create — can't be added to an existing repo
@@ -183,27 +203,41 @@ without recreating the stanza.
 The `otel` host runs Prometheus + Grafana but has **no Alertmanager and no alert
 rules yet** — this backup work is the first thing worth paging on, so stand up
 Alertmanager here. All signals below are **verified present in the live
-Prometheus** (no new exporters needed):
+Prometheus** (no new exporters needed), except the gold-signal textfile metric
+we add on `database`:
 
 - `pg_stat_archiver_failed_count`, `pg_stat_archiver_archived_count` (postgres
   exporter on `database`).
 - `node_systemd_unit_state{instance="homelab-database", job="database-node"}` —
-  already scrapes all 105 postgresql units; will cover the new
-  `pgbackrest-default-*.service` oneshots automatically.
+  already scrapes all units; will cover the new `pgbackrest-default-*.service`
+  oneshots automatically.
 
-### Add Alertmanager + rules (`hosts/otel/configuration.nix`)
+### Add Alertmanager + rules + Caddy UI (`hosts/otel/configuration.nix`)
+
+Full scope: Alertmanager service, Prometheus wiring, Caddy UI proxy, and phone
+push via a thin webhook bridge (below).
+
 ```nix
 services.prometheus.alertmanager = {
   enable = true;
   port = 9093;
+  # Match prometheus pattern: handle_path strips prefix, so route-prefix=/
   webExternalUrl = "https://homelab-otel.dropbear-butterfly.ts.net/alertmanager";
+  extraFlags = [ "--web.route-prefix=/" ];
   configuration = {
-    route = { receiver = "homelab"; group_by = ["alertname"]; repeat_interval = "4h"; };
+    route = {
+      receiver = "homelab";
+      group_by = ["alertname"];
+      repeat_interval = "4h";
+    };
     receivers = [{
       name = "homelab";
-      # Webhook → Home Assistant automation → phone push (same path as existing
-      # HA notifications). HA side is a manual step, see below.
-      webhook_configs = [{ url = "http://<ha-ip>:8123/api/webhook/pgbackrest-alerts"; }];
+      # Local bridge on otel → HA notify (same phone path as axon/hamcp).
+      # See "Notification path" below — AM cannot speak MCP.
+      webhook_configs = [{
+        url = "http://127.0.0.1:9095/alert";  # alertmanager-ha-bridge
+        send_resolved = true;
+      }];
     }];
   };
 };
@@ -226,31 +260,69 @@ services.prometheus.rules = [
             labels: { severity: critical }
             annotations: { summary: "PostgreSQL WAL archiving to R2 is failing" }
           - alert: PostgresWALDiskFilling
-            expr: node_filesystem_avail_bytes{instance="homelab-database", mountpoint="/"} / node_filesystem_size_bytes{instance="homelab-database", mountpoint="/"} < 0.15
+            expr: node_filesystem_avail_bytes{instance="homelab-database", mountpoint="/"} / node_filesystem_size_bytes{instance="homelab-database", mountpoint="/"} < 0.25
             for: 10m
             labels: { severity: warning }
-            annotations: { summary: "database / below 15% free (WAL may be piling up)" }
+            annotations: { summary: "database / below 25% free (WAL/spool may be piling up)" }
+          - alert: PgBackRestNoRecentBackup
+            expr: |
+              (
+                time() - pgbackrest_last_backup_completion_timestamp_seconds > 90000
+              ) or (
+                absent(pgbackrest_last_backup_completion_timestamp_seconds) == 1
+              )
+            for: 30m
+            labels: { severity: critical }
+            annotations: { summary: "No pgBackRest backup completed in >25h (or metric missing)" }
   ''
 ];
 ```
-Also open TCP **9093** on otel's firewall and add a Caddy `/alertmanager*` vhost
-handle if you want the UI (mirror the existing `/prometheus` proxy).
 
-### Home Assistant receiver (manual, HA side)
-Alertmanager POSTs its JSON payload to an HA **webhook trigger**. Create an HA
-automation:
-- **Trigger:** webhook, id `pgbackrest-alerts` (local-only is fine; Alertmanager
-  is on the tailnet / LAN).
-- **Action:** `notify.mobile_app_<device>` with a title/message templated from the
-  payload (`{{ trigger.json.alerts[0].labels.alertname }}` /
-  `.annotations.summary`, and `.status` for firing vs resolved).
-This reuses your existing HA→phone push path; no new infra. Note the URL/id in the
-webhook_configs above must match.
+Caddy (both Tailscale + `otel.homelab.local` vhosts — mirror `/prometheus*`):
+```
+handle_path /alertmanager* {
+  reverse_proxy localhost:9093
+}
+```
+
+Firewall: `tailscale0` is already `trustedInterfaces`, so AM UI works over
+tailnet without opening 9093. Add `9093` to `allowedTCPPorts` only if LAN-without-
+tailscale access is wanted. **Webhook is outbound otel→bridge(local)→HA; no
+inbound 9093 required for paging.**
+
+### Notification path: Alertmanager → bridge → HA notify (not raw axon MCP)
+
+**Constraint:** Alertmanager only speaks HTTP webhooks. axon-gateway is an **MCP**
+aggregator (`https://axon.homelab.local/mcp`); AM cannot call `hamcp_call_service`
+directly.
+
+**Same end path as hermes/axon today** (verified in
+`hosts/hermes/skills/notifications/cron-result-delivery/SKILL.md`):
+
+- HA service: `notify.mobile_app_iphone_von_amadeus`
+- Via axon that is `hamcp_call_service(domain=notify, service=mobile_app_iphone_von_amadeus, …)`
+
+**Implementation (on `otel`):** a tiny local webhook receiver
+(`alertmanager-ha-bridge`) that:
+
+1. Accepts Alertmanager's JSON POST on `127.0.0.1:9095/alert`.
+2. Maps firing/resolved → title/message from `alerts[0].labels.alertname` /
+   `annotations.summary` / `status`.
+3. Calls Home Assistant REST:
+   `POST https://<ha-host>/api/services/notify/mobile_app_iphone_von_amadeus`
+   with a long-lived access token (agenix secret; HA already issues these —
+   same trust model as hamcp's HA token).
+
+Use `*.homelab.local` for the HA base URL (MagicDNS does not resolve between
+homelab VMs — AGENTS.md). Exact HA hostname/IP is a deploy-time fill-in.
+
+Keep the bridge loopback-only; no new public surface. Optional later: teach
+axon a first-class HTTP notify route and point AM at that instead — out of
+scope for v1.
 
 ### Gold-signal: PgBackRestNoRecentBackup (in scope)
-The rules above catch *failures*; they don't catch "the timer silently stopped and
-nothing ran." Add a node_exporter **textfile collector** on `database` to export
-the last-successful-backup time:
+The failure rules don't catch "the timer silently stopped." Add a node_exporter
+**textfile collector** on `database`:
 ```nix
 # hosts/database/configuration.nix — enable the textfile collector
 services.prometheus.exporters.node = {
@@ -261,7 +333,6 @@ systemd.tmpfiles.rules = [ "d /var/lib/node_exporter/textfile 0755 pgbackrest pg
 # 0755 (world-readable): node-exporter often runs DynamicUser, so it needs the dir
 # + .prom files readable without a shared group. Metrics aren't secret.
 
-# oneshot+timer: write last-backup timestamp as a Prometheus metric
 systemd.services.pgbackrest-info-metric = {
   after = [ "network-online.target" ];
   serviceConfig = { Type = "oneshot"; User = "pgbackrest"; Group = "pgbackrest"; };
@@ -282,16 +353,6 @@ systemd.timers.pgbackrest-info-metric = {
   timerConfig = { OnCalendar = "*:00/15"; Persistent = true; };  # every 15 min
 };
 ```
-Rule (add to the `postgres-backup` group):
-```
-- alert: PgBackRestNoRecentBackup
-  expr: time() - pgbackrest_last_backup_completion_timestamp_seconds > 90000  # >25h
-  for: 30m
-  labels: { severity: critical }
-  annotations: { summary: "No pgBackRest backup completed in >25h" }
-```
-Strongest "are backups actually happening" signal — catches a silently dead timer
-that all the failure-based alerts miss.
 
 ## Risks / gotchas (ordered by likelihood)
 1. **`--allow-group-access` does NOT apply retroactively.** The module sets it in
@@ -302,22 +363,27 @@ that all the failure-based alerts miss.
    (`/var/lib/postgresql` is 0750 via tmpfiles, but the `18/` initdb subdir is
    0700.)
 2. **Enabling `archive_mode` needs a full PostgreSQL restart** (not reload). The
-   first deploy bounces postgres → brief outage for forgejo/buildbot/romm/etc.
-   Do it in a quiet window.
+   first deploy bounces postgres → brief outage for forgejo/buildbot/romm/
+   hofvarpnir/etc. Do it in a quiet window.
 3. **R2 reachability from `database`** — the archive_command runs on *every* WAL
    switch; if R2 is unreachable, WAL piles up in pg_wal and can fill the disk.
-   Mitigated in the sketch (`archive-async=y` + `/var/spool/pgbackrest`) so a
-   brief R2 blip doesn't stall the DB, and by the `PostgresWALArchiveFailing` /
-   `PostgresWALDiskFilling` alerts. A *sustained* R2 outage still fills the disk
-   eventually — the alert is the backstop.
-4. **Btrfs NoCoW** — n/a for an S3 repo (no local repo dir). If we add Garage/
+   Mitigated (`archive-async=y` + spool) so a brief R2 blip doesn't stall the DB,
+   and by the `PostgresWALArchiveFailing` / `PostgresWALDiskFilling` alerts
+   (threshold 25% free). A *sustained* R2 outage still fills the disk eventually —
+   the alert is the backstop. Consider `archive-push-queue-max` after sizing.
+4. **Missing `include-path`** — without it, agenix secrets in conf.d are ignored
+   and check/backup fail with opaque S3/cipher errors. Set in `settings` (sketch).
+5. **Btrfs NoCoW** — n/a for an S3 repo (no local repo dir). If we add Garage/
    local later, apply `+C` to that dir.
+6. **Lost cipher-pass** — encrypted repo unrecoverable. Off-host password-manager
+   copy required (above).
 
 ## Rollout steps
-1. Create the R2 bucket (`homelab-pgbackrest`, versioning on) + an R2 API token
-   scoped to it. Put key/secret + cipher pass in the agenix secret.
-2. Land the Nix change (remove postgresqlBackup; add pgbackrest + secret).
-   `just fmt`, scoped eval
+1. Create the R2 bucket (`homelab-pgbackrest`, versioning on, 14-day noncurrent
+   lifecycle) + an R2 API token scoped to it. Put key/secret + cipher pass in the
+   agenix secret; **also** store cipher-pass off-host.
+2. Land the Nix change (**keep** `postgresqlBackup`; add pgbackrest + secret +
+   textfile metric). `just fmt`, scoped eval
    `nix eval .#nixosConfigurations.database.config.system.build.toplevel.drvPath`.
 3. Pre-deploy host fix: PGDATA group access (Risk #1). Confirm
    `sudo -u pgbackrest test -r <datadir>/global/pg_control`.
@@ -327,12 +393,12 @@ that all the failure-based alerts miss.
 6. First full: `sudo -u pgbackrest pgbackrest --stanza=default --type=full backup`;
    then `pgbackrest --stanza=default info`.
 7. **Rehearse a restore** to a scratch dir / throwaway VM (`pgbackrest restore`).
-   A backup you haven't restored isn't a backup. Only after this passes: remove
-   `services.postgresqlBackup`.
-8. **Alerting:** deploy Alertmanager + rules on `otel`
-   (`just colmena-apply-host otel`), open TCP 9093, wire the HA webhook receiver
-   (manual HA automation). Test by faking a failure (`systemctl start` a job with
-   R2 creds wrong, or `amtool`) and confirm the phone push lands.
+   A backup you haven't restored isn't a backup. **Only after this passes:**
+   remove `services.postgresqlBackup` + its `/var/backup/postgresql` tmpfiles rule
+   in a follow-up change.
+8. **Alerting:** deploy Alertmanager + rules + Caddy UI + HA notify bridge on
+   `otel` (`just colmena-apply-host otel`). Test by faking a failure (`systemctl
+   start` a job with bad R2 creds, or `amtool`) and confirm the phone push lands.
 
 ## Verification
 - `just fmt` + scoped per-host eval (full `nix flake check` OOMs — AGENTS.md).
@@ -341,26 +407,30 @@ that all the failure-based alerts miss.
 - `pg_stat_archiver`: `archived_count` climbing, `failed_count = 0`
   (Prometheus/Grafana). Alert on `failed_count > 0` and on pg_wal growth.
 - Restore rehearsal succeeds; restored cluster starts clean.
+- Phone push on firing + resolved; AM UI reachable at `/alertmanager`.
 
 ## Decisions locked in (plan is ready to implement)
 - **Repo:** Cloudflare R2, single off-site (shared ZFS pool rules out any on-host
   target; R2 accepted as the single off-site).
 - **Retention** 2 full / 4 diff; **schedule** weekly full + daily diff + hourly
   incr; goal = current-state restore, not deep PITR.
-- `archive-async=y` + spool dir from the start.
-- Keep `services.postgresqlBackup` through transition; remove after first restore
-  drill.
-- **Alerting:** new Alertmanager on `otel`, **receiver = webhook → Home Assistant
-  → phone push** (reuses existing HA notification path).
-- **Gold-signal `PgBackRestNoRecentBackup`** is **in scope** (textfile collector +
-  15-min metric refresh).
+- `archive-async=y` + spool dir from the start; `include-path` for conf.d secrets.
+- **Keep `services.postgresqlBackup` through transition; remove only after first
+  restore drill.**
+- **Alerting:** Alertmanager on `otel` + Caddy UI (`handle_path` + route-prefix)
+  + rules including gold-signal `PgBackRestNoRecentBackup` (textfile + absent()).
+- **Notify path:** AM webhook → local bridge on otel → HA REST
+  `notify.mobile_app_iphone_von_amadeus` (same phone path as axon/hamcp; AM cannot
+  call MCP directly).
 - **R2 durability:** versioning + 14-day noncurrent lifecycle + bucket-scoped
   token + client-side aes-256-cbc. **No Object Lock** (breaks pgBackRest expire).
+- Disk warning threshold **25%** free (was 15%).
 
 ## Remaining manual / external steps (not Nix)
 - Create R2 bucket `homelab-pgbackrest` (versioning on, 14-day noncurrent
   lifecycle, token scoped to the bucket); put key/secret + cipher pass in the
-  agenix secret.
-- HA automation: webhook trigger `pgbackrest-alerts` → `notify.mobile_app_*`.
+  agenix secret **and** cipher-pass in a password manager.
+- HA long-lived token for the otel bridge (agenix); confirm HA base URL as
+  `*.homelab.local`.
 - After first successful backup: **rehearse a restore**, then remove
   `services.postgresqlBackup`.
