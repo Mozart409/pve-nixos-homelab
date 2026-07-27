@@ -315,6 +315,64 @@ https://containers.homelab.local/oauth/oidc/callback
 No Open WebUI restart needed — retry login immediately. The Nix config is correct; this is
 purely the new 0.9.6 behavior surfacing the second origin.
 
+### Hermes Fails OPEN on a Malformed `config.yaml` (silent loss of every setting)
+
+Open WebUI shows *"Uh-oh! There was an issue with the response."* and the journal has:
+
+```
+provider=deepseek base_url=https://api.deepseek.com/v1 model= summary=HTTP 400:
+The supported API model names are deepseek-v4-pro or deepseek-v4-flash, but you passed .
+```
+
+An **empty `model=`** with a correct `provider`/`base_url` is the signature of a
+**config.yaml that hermes could not parse**. `gateway/run.py`'s
+`_load_gateway_config()` catches the YAML error and substitutes an **empty dict** —
+the agent starts "successfully" with *every* override silently discarded
+(`toolsets`, `platform_toolsets`, `approvals`, `terminal.backend`, `timezone`,
+`mcp_servers`, …). `provider`/`base_url`/`api_key` still look right because they come
+from a separate env bridge; `model` has **no env fallback**, so it resolves to `""`.
+
+Confirm with the startup log — it says so explicitly, and saves a copy:
+
+```bash
+sudo journalctl -u hermes-agent | grep -A3 'Failed to parse'
+# ⚠️  hermes config: Failed to parse …/config.yaml … Falling back to default config
+ls /var/lib/hermes/.hermes/config.yaml.corrupt.*
+```
+
+**Root cause (2026-07-24 → 07-27 incident): two writers with incompatible list
+indentation.** `moshi-hook install` rewrites `$HERMES_HOME/.hermes/config.yaml` to
+register its plugin using 4-space sequence items; the hermes-agent module's
+activation-time `hermes-config-merge` re-dumps the **whole** file via PyYAML using
+2-space items. Neither recognizes the other's form, so `install` **inserts** a
+duplicate `    - moshi-hooks` above the merge's `  - moshi-hooks` — two sequence
+items at different depths, which is unparseable:
+
+```yaml
+plugins:
+  enabled:
+    - moshi-hooks   # inserted by moshi-hook install (4-space)
+  - moshi-hooks     # written by hermes-config-merge (2-space)
+```
+
+The agent ran three days on built-in defaults before anyone chatted with it, so
+**absence of errors is not evidence the config is live.**
+
+- **Fixed by:** a version-stamped guard so `moshi-hook install` runs once per
+  release instead of every boot (`hosts/hermes/moshi-hook.nix`), plus a
+  `hermes-config-check` oneshot ordered after it and `requires`-d by `hermes-agent`
+  (`hosts/hermes/configuration.nix`) that repairs mixed-indent duplicates and
+  **blocks startup** on an unparseable config or a missing `model`.
+- **Verify a config is actually live** (do this after any hermes deploy):
+  ```bash
+  sudo systemctl status hermes-config-check      # must be active/exited
+  sudo journalctl -u hermes-agent -b | grep -c 'Falling back to default config'   # must be 0
+  ```
+- **General rule:** `hermes-config-merge` does a `deep_merge(existing, nix)` and
+  **re-dumps the entire file**, so it reformats keys Nix does not manage and never
+  prunes removed ones. Any third-party tool that edits `config.yaml` in place will
+  eventually collide with it.
+
 ### Multi-Disk VMs: Pin Disko Devices by `/dev/disk/by-id`, Never `/dev/sdX`
 
 On a Proxmox VM with more than one disk, Linux `/dev/sdX` names follow disk
