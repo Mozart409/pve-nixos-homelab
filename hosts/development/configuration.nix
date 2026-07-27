@@ -12,6 +12,13 @@
 
   networking.hostName = "homelab-development";
 
+  # This VM has TWO disks — the 256 GB OS disk (scsi0) and a 4 MB cloud-init
+  # drive on the ATA bus — so /dev/sdX enumeration is not stable and disko could
+  # target the cloud-init disk inside the nixos-anywhere installer. Override
+  # modules/disko-config.nix's lib.mkDefault "/dev/sda" with the stable by-id
+  # path. See AGENTS.md §6 "Multi-Disk VMs: Pin Disko Devices by /dev/disk/by-id".
+  disko.devices.disk.main.device = "/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi0";
+
   # Static IP configuration
   networking.interfaces.ens18 = {
     useDHCP = false;
