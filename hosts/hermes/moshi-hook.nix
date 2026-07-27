@@ -34,6 +34,9 @@
   # declarative via `plugins.enabled = ["moshi-hooks"]` in ../configuration.nix.
   # `hermes-config-check` (../configuration.nix) repairs + validates the file after
   # this unit, covering the one boot after a version bump where `install` does run.
+  # That unit is `RemainAfterExit`, so it needed `partOf = moshi-hook-setup` to be
+  # dragged along when a deploy restarts THIS unit mid-boot; without it the repair
+  # simply never ran and the corruption surfaced on the next deploy's activation.
   installStamp = "${hermesHome}/.hermes/.moshi-hook-installed-${pkgs.moshi-hook.version}";
 
   # Pair (if not already) + install, run as the hermes user with HOME pointed
@@ -44,7 +47,12 @@
   moshiPairInstall = pkgs.writeShellScript "hermes-moshi-pair-install" ''
     set -u
     moshi=${pkgs.moshi-hook}/bin/moshi-hook
-    if ! "$moshi" status --json >/dev/null 2>&1; then
+    # `status --json` exits 0 even when the host is UNPAIRED, so guarding on its
+    # exit code silently skipped pairing forever — hermes was found running
+    # unpaired, i.e. no notification ever reached the phone. Test the `paired`
+    # field itself. (Same bug was fixed in modules/moshi-hook-user.nix.)
+    if ! "$moshi" status --json 2>/dev/null \
+         | ${pkgs.jq}/bin/jq -e '.paired == true' >/dev/null 2>&1; then
       token="$(cat ${config.age.secrets.moshi-device-id.path} 2>/dev/null)"
       if [ -z "$token" ]; then
         echo "hermes-moshi-pair-install: moshi-device-id secret unreadable, skipping" >&2
