@@ -946,16 +946,20 @@ resource "proxmox_virtual_environment_vm" "development_vm" {
     type  = "host"
   }
 
+  # Sized against the hand-built reference host running the same harness:
+  # opencode peaked at 570 MB RSS with Claude Code not yet running, and /nix
+  # alone consumed 21 GB. Claude Code (node) plus the bun-hosted opencode
+  # plugins land here too, hence the headroom over that box's 2 GB.
   memory {
-    dedicated = 1024
-    floating  = 512
+    dedicated = 4096
+    floating  = 2048
   }
 
   disk {
     datastore_id = "zfs_pool"
     file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
-    size         = 32
+    size         = 256
   }
 
   network_device {
