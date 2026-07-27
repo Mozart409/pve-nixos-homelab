@@ -57,7 +57,7 @@ Ordered by impact.
 ## Verification (per change, before deploy)
 - `just fmt` then `nix flake check`.
 - Refactors (fold-modules, stateVersion) must be **no-ops** on the realized
-  system — `just colmena-build` + `just drift` should show no toplevel change for
+  system — `just colmena-build` should show no toplevel change for
   already-correct hosts.
 - For generated DNS / Prometheus: build `dns` + `otel`, diff rendered config vs
   current to prove equality before relying on generation.
