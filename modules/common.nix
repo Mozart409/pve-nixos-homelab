@@ -49,14 +49,17 @@
     shellAliases = {
       l = "ls -lah";
       lg = "lazygit";
-      ld = "lazydocker";
       sys = "systemctl status";
       syr = "systemctl restart";
       k = "kubectl";
       flk = "cd /etc/nixos";
-      dps = "docker compose ps";
-      dup = "docker compose up -d --build --remove-orphans";
-      dwn = "docker compose down";
+      # Container aliases are podman-only; modules/podman.nix sets
+      # dockerCompat = false, so there is no `docker` binary to fall back on.
+      # The d* names are kept for muscle memory but run podman-compose.
+      dps = "podman-compose ps";
+      dup = "podman-compose up -d --build --remove-orphans";
+      dwn = "podman-compose down";
+      pps = "podman-compose ps";
       pup = "podman-compose up -d";
       pwn = "podman-compose down";
       n = "nvim .";
