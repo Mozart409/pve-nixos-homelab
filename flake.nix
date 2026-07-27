@@ -215,7 +215,8 @@
             {
               nixpkgs.hostPlatform = system;
               # claude-code is unfree; the colmenaHive sets this globally, but
-              # the nix-build / nix flake check / colmena-drift path needs it here.
+              # plain nixosSystem entries need it too so `nix build
+              # .#nixosConfigurations.development...` works standalone.
               nixpkgs.config.allowUnfree = true;
             }
             disko.nixosModules.disko
