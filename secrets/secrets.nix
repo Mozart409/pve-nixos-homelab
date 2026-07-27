@@ -8,7 +8,7 @@ let
   hostCache = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3zPdNuF7/Xwxxhs6isTeG1K3fodO+lbQdWcfZUid4k root@homelab-cache";
   hostContainers = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKHmDtkEG9WNd6bvbEM3+HhdfnSu29o5bYskujiM6VdF root@homelab-containers";
   hostDatabase = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMOzKKGEVZy4w556Y3n1KQQrWVJUxU7XfHULii9W1qTr amadeus@homelab-database";
-  hostDevelopment = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMOQ8L4iUJhFK2Y3GkQGOFRdNZga45GXT6SPkRwxh5S/ root@homelab-minimal";
+  hostDevelopment = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINpHEt4OMS5HwaSunrmU68JzkM2gu1MVcXqKZSQAhMe8 root@homelab-development";
   hostDns = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILXKgvCX3XImCFgba09r+oEezHtDjG5zTPszYqOalfc3 root@homelab-dns";
   hostFleet = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICLI6UX6dd+pyXOd8TIQ3NY3Ryff2gCH4oTd1YWjvzm8 root@homelab-fleet";
   hostForgejo = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIByBR3nP+bKlGcC6p62Pg5w1cPZsdh1FHBE6RUfbchDo root@homelab-forgejo";
