@@ -874,6 +874,18 @@ in {
     after = ["moshi-hook-setup.service"];
     wants = ["moshi-hook-setup.service"];
     before = ["hermes-agent.service"];
+    # `RemainAfterExit` means this only ever runs ONCE per boot. On a moshi-hook
+    # version bump, colmena restarts moshi-hook-setup mid-deploy — long after
+    # this unit went active at boot — so `moshi-hook install` corrupted
+    # config.yaml with nothing left to repair it. The damage then surfaced on the
+    # NEXT deploy, where the `hermes-agent-setup` ACTIVATION script parses the
+    # file before any unit runs and dies with a YAML ParserError (exit 2), which
+    # this unit's `before = hermes-agent.service` ordering cannot prevent —
+    # activation scripts run during switch-to-configuration, ahead of all units.
+    #
+    # PartOf propagates moshi-hook-setup's restart to this unit, and `after=`
+    # sequences it behind the install, so the repair always follows a rewrite.
+    partOf = ["moshi-hook-setup.service"];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
