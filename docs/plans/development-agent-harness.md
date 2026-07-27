@@ -70,7 +70,7 @@ nix eval .#nixosConfigurations.development.config.system.build.toplevel.drvPath
 
 `colmena apply` still works (`colmenaHive.meta.nixpkgs` sets `allowUnfree`), but
 `nix flake check`, `nix build .#nixosConfigurations.development`, and
-`tools/colmena-drift.sh` all fail.
+and `nix build .#nixosConfigurations.development` all fail.
 
 **Fix:** add `nixpkgs.config.allowUnfree = true;` to the inline module, and add
 `homeManagerNixvim` to the module list — same divergence jellyfin's comment at
@@ -340,11 +340,12 @@ target may have left behind, so there is exactly one config file.
 `nodejs`/`npm`. (`cargo` was present on scratchpad but nothing in this harness
 needs it — skip unless you want it.)
 
-### P2-11 · `development` is excluded from drift detection
+### P2-11 · ~~`development` is excluded from drift detection~~ — obsolete
 
-`tools/colmena-drift.sh:15-18` lists 14 hosts; `development` is not among them,
-so `just colmena-drift` never checks it. Add it (blocked on P0-1, since drift
-evaluates `nixosConfigurations`).
+Dropped during the rebase onto `main`: `tools/colmena-drift.sh` was removed
+wholesale in `a0ba785 chore(tools): remove colmena-drift script, just recipe, and
+doc references`, so there is no host list to add `development` to. Drift is now
+covered by `just colmena-build-host <host>`.
 
 ### P2-12 · Pairing failures are invisible
 
@@ -430,15 +431,14 @@ genuinely warranted (`agenix-reprovision-rekey`, AGENTS.md §6).
 
 ### Phase A — repo changes (offline, no deploy)
 
-1. **P0-1** flake fix — unblocks every subsequent `nix eval` / drift check.
+1. **P0-1** flake fix — unblocks every subsequent `nix eval` / build of this host.
 2. **P0-3** moshi-hook 0.2.59 bump + delete the stale project-local comment.
 3. **P0-2** moshi-hook → `systemd.user.services` + `users.users.amadeus.linger`.
 4. **P1-7** `modules/herdr.nix` (`config.toml` + opencode integration oneshot).
 5. **P1-4 / P2-10** `bun` + `nodejs` into `systemPackages`. *(Not `mosh` — already
    provided by `modules/common.nix:100`.)*
 6. **P2-9** retarget the opencode merge to `opencode.jsonc`.
-7. **P2-12** pairing-failure signal; **P2-11** add `development` to
-   `tools/colmena-drift.sh`.
+7. **P2-12** pairing-failure signal. *(P2-11 dropped — see above.)*
 8. **P2-13** `iac/main.tf`: disk 32 → 256 GB, memory 1024 → 4096 / floating 2048.
 9. Drive-by: fix the contradictory `openFirewall` comment at
    `modules/common.nix:95-99`.
