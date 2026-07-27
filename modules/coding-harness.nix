@@ -59,13 +59,18 @@
     // lib.optionalAttrs (opencodePlugins != []) {plugin = opencodePlugins;}));
 
   # ~/.claude.json holds Claude Code's own live session/account state
-  # alongside `mcpServers`, and ~/.config/opencode/opencode.json is written
+  # alongside `mcpServers`, and ~/.config/opencode/opencode.jsonc is written
   # to by opencode itself too — neither is safe to fully overwrite/symlink
   # from the Nix store. Deep-merge instead (jq's `*` recursively merges
   # objects, right-hand side wins per key) so Nix owns exactly the keys it
   # sets here and leaves everything else (auth, manually-added MCP servers,
   # etc.) untouched. Mirrors hermes-agent's config.yaml merge convention:
   # Nix wins for the keys it sets, never prunes.
+  #
+  # NB opencode's config file is `.jsonc`, NOT `.json` — that is what it
+  # actually reads (verified on the reference host). Despite the extension it
+  # must stay comment-free: jq cannot parse JSONC, so a hand-added `//` comment
+  # would break this merge.
   mergeJson = pkgs.writeShellScript "coding-harness-merge-json" ''
     set -eu
     target="$1"
@@ -83,8 +88,13 @@
     set -u
     ${mergeJson} "${home}/.claude.json" "${claudeConfigFragment}" \
       || echo "coding-harness: failed to merge ~/.claude.json" >&2
-    ${mergeJson} "${home}/.config/opencode/opencode.json" "${opencodeConfigFragment}" \
-      || echo "coding-harness: failed to merge opencode.json" >&2
+    ${mergeJson} "${home}/.config/opencode/opencode.jsonc" "${opencodeConfigFragment}" \
+      || echo "coding-harness: failed to merge opencode.jsonc" >&2
+
+    # Earlier revisions of this module wrote opencode.json, which opencode does
+    # not read. Remove it so there is exactly one config file and no confusion
+    # about which one is live.
+    rm -f "${home}/.config/opencode/opencode.json"
   '';
 in {
   systemd.services.coding-harness-config = {
