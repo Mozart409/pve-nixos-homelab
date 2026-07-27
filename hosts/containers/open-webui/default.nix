@@ -36,6 +36,13 @@
     enable = true;
     port = 8088;
     environment = {
+      # The upstream unit sets no HOME, and a post-flake-bump Open WebUI calls
+      # `os.path.expanduser("~")` during startup. With HOME unset that returns
+      # the literal "~", and it aborts with
+      #   RuntimeError: Could not determine home directory
+      # taking the whole service down. Point it at the state dir it already owns.
+      HOME = "/var/lib/open-webui";
+
       # Force env vars to always take precedence over database-stored config.
       # Without this, ConfigVar settings (web search, API endpoints) are read
       # from the SQLite DB on restart and env vars are silently ignored.
