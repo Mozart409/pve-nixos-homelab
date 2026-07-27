@@ -23,10 +23,9 @@ The project uses `just` as a command runner. Always prefer `just` commands over 
 - **Dry Run**: `just nixos-test <host>`
   - Performs a dry-run build for a specific host.
   - Example: `just nixos-test ferron`
-- **Deployment Drift**: `just drift` (all hosts) or `just drift <host> [<host>…]`
-  - Reports which hosts are behind the current checkout (`tools/colmena-drift.sh`).
-  - There is no `colmena-diff` recipe; to preview a build without deploying use
-    `just colmena-build-host <host>`.
+- **Preview a build without deploying**: `just colmena-build-host <host>`
+  - There is no drift/diff recipe; compare `readlink /run/current-system` on the
+    host against the path this prints if you need to check what is deployed.
 
 - **Initial Install**: `just deploy-<host> <ip>`
   - Uses `nixos-anywhere` to install NixOS on a fresh machine.
@@ -130,8 +129,6 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
         sign mid-push (`agent refused operation`) after the first few hosts, so
         some activate and the rest fail at "Push failed". Fix the agent and
         re-run; already-done hosts are no-ops.
-    -   **Check for drift:** `just drift` (or `just drift <host>`) should report
-        every host up to date.
     -   **Restart services `colmena apply` does NOT bounce** (config written but
         not reloaded):
         -   `hermes` — `sudo systemctl restart hermes-agent` after SOUL.md /

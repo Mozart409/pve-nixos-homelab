@@ -171,8 +171,7 @@
             nixpkgs.hostPlatform = system;
             # colmenaHive.meta.nixpkgs sets this globally for colmena builds;
             # plain nixosSystem entries need it too so `nix build
-            # .#nixosConfigurations.<host>...` works standalone (e.g. for
-            # tools/colmena-drift.sh).
+            # .#nixosConfigurations.<host>...` works standalone.
             nixpkgs.config.allowUnfree = true;
           }
           disko.nixosModules.disko
