@@ -206,12 +206,21 @@
         harbor = mkHost "harbor";
         cache = mkHost "cache";
         forgejo = mkHost "forgejo";
+        # Explicit (not mkHost) so `herdr` can be passed via specialArgs, and so
+        # nixvim is baked in even on a nixos-anywhere reinstall. Mirrors
+        # colmenaHive defaults — see the jellyfin entry below.
         development = nixpkgs.lib.nixosSystem {
           specialArgs = {inherit herdr;};
           modules = [
-            {nixpkgs.hostPlatform = system;}
+            {
+              nixpkgs.hostPlatform = system;
+              # claude-code is unfree; the colmenaHive sets this globally, but
+              # the nix-build / nix flake check / colmena-drift path needs it here.
+              nixpkgs.config.allowUnfree = true;
+            }
             disko.nixosModules.disko
             agenix.nixosModules.default
+            homeManagerNixvim
             ./hosts/development/configuration.nix
           ];
         };
