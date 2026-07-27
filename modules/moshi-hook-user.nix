@@ -24,7 +24,12 @@
   moshiPairInstall = pkgs.writeShellScript "moshi-pair-install-${user}" ''
     set -eu
     moshi=${pkgs.moshi-hook}/bin/moshi-hook
-    if ! "$moshi" status --json >/dev/null 2>&1; then
+
+    # `moshi-hook status --json` exits 0 even when the host is UNPAIRED, so the
+    # exit code is useless as a guard — it silently skipped pairing entirely and
+    # left the daemon running unpaired. Test the `paired` field instead.
+    if ! "$moshi" status --json 2>/dev/null \
+         | ${pkgs.jq}/bin/jq -e '.paired == true' >/dev/null 2>&1; then
       token="$(cat ${config.age.secrets.moshi-device-id.path})"
       if [ -z "$token" ]; then
         echo "moshi-hook-setup: moshi-device-id secret is empty" >&2
@@ -32,6 +37,11 @@
       fi
       "$moshi" pair --token "$token"
     fi
+
+    # `install` skips the claude target outright when ~/.claude is absent, which
+    # is the case on a freshly provisioned host where Claude Code has never run.
+    # Create it first so the hooks land without a manual first launch.
+    mkdir -p "$HOME/.claude"
     "$moshi" install
   '';
 in {
