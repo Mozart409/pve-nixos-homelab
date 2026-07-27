@@ -49,7 +49,7 @@ Provides:
 - Format: `just fmt`
 - Check flake & hosts: `just nixos-check`
 - Dry build a host: `just nixos-test <host>`
-- Colmena diff: `just colmena-diff` or `just colmena-diff-host <host>`
+- Build a host via Colmena: `just colmena-build-host <host>`
 
 ### Deploy
 
