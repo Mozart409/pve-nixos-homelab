@@ -70,6 +70,17 @@
     mode = "0400";
   };
 
+  # opencode-zen provider key (env-file: OPENCODE_ZEN_API_KEY=...). Declared
+  # under the generic `opencode-zen-key` attribute that modules/coding-harness.nix
+  # looks for, while the file itself is per-host — every consumer gets its own
+  # key so a leak is contained and revocation is per-host. hermes keeps its own
+  # separate hermes-opencode-zen-key.age.
+  age.secrets.opencode-zen-key = {
+    file = ../../secrets/development-opencode-zen-key.age;
+    owner = "amadeus";
+    mode = "0400";
+  };
+
   # Development tools for experiments
   environment.systemPackages = with pkgs; [
     # keep-sorted start

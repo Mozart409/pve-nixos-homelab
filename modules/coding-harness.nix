@@ -84,6 +84,45 @@
     mv "$tmp" "$target"
   '';
 
+  # opencode's provider credentials live in auth.json, NOT in opencode.jsonc, and
+  # opencode rewrites that file when other providers are added — so merge our key
+  # in rather than overwriting. The value is piped through the environment (jq's
+  # `env.`) instead of `--arg`, so it never appears in argv / `ps` output.
+  #
+  # Gated on the host declaring `age.secrets.opencode-zen-key`: each consumer
+  # supplies its OWN per-host key file (see hosts/development), so a leak is
+  # contained and revocation is per-host. Hosts that declare nothing (zeroclaw)
+  # simply skip this — the attribute must not be referenced at all there, or
+  # evaluation fails.
+  hasOpencodeKey = config.age.secrets ? opencode-zen-key;
+
+  applyOpencodeAuth = lib.optionalString hasOpencodeKey ''
+    secret=${config.age.secrets.opencode-zen-key.path}
+    authfile="${home}/.local/share/opencode/auth.json"
+    if [ -r "$secret" ]; then
+      set -a; . "$secret"; set +a
+      if [ -n "''${OPENCODE_ZEN_API_KEY:-}" ]; then
+        mkdir -p "$(dirname "$authfile")"
+        [ -f "$authfile" ] || (umask 077; echo '{}' > "$authfile")
+        tmp="$(mktemp)"
+        if OPENCODE_ZEN_API_KEY="$OPENCODE_ZEN_API_KEY" ${pkgs.jq}/bin/jq \
+             '.opencode = {type: "api", key: env.OPENCODE_ZEN_API_KEY}' \
+             "$authfile" > "$tmp"; then
+          (umask 077; mv "$tmp" "$authfile")
+          chmod 0600 "$authfile"
+        else
+          rm -f "$tmp"
+          echo "coding-harness: failed to merge opencode auth.json" >&2
+        fi
+      else
+        echo "coding-harness: opencode-zen-key has no OPENCODE_ZEN_API_KEY" >&2
+      fi
+      unset OPENCODE_ZEN_API_KEY
+    else
+      echo "coding-harness: opencode-zen-key unreadable, skipping auth.json" >&2
+    fi
+  '';
+
   applyConfig = pkgs.writeShellScript "coding-harness-apply" ''
     set -u
     ${mergeJson} "${home}/.claude.json" "${claudeConfigFragment}" \
@@ -95,11 +134,15 @@
     # not read. Remove it so there is exactly one config file and no confusion
     # about which one is live.
     rm -f "${home}/.config/opencode/opencode.json"
+    ${applyOpencodeAuth}
   '';
 in {
   systemd.services.coding-harness-config = {
     description = "Central MCP/plugin config for Claude Code + opencode (${user})";
     wantedBy = ["multi-user.target"];
+    # Only needed once this reads a secret; harmless on hosts without one.
+    after = ["agenix.target"];
+    wants = ["agenix.target"];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
