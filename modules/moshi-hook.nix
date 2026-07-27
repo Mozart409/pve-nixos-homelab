@@ -4,6 +4,14 @@
   # `version` + `sha256` from the rjyo/homebrew-moshi formula
   # (https://github.com/rjyo/homebrew-moshi) when updating.
   #
+  # NB on bumping `version`: hosts/hermes/moshi-hook.nix stamps `moshi-hook
+  # install` per-version, so a bump re-runs it on the next hermes deploy — and
+  # `install` rewrites hermes' config.yaml with a list indent that collides with
+  # `hermes-config-merge`, corrupting the file. `hermes-config-check` repairs it
+  # before hermes-agent starts, so this is safe; expect a "repaired mixed-indent"
+  # line in that unit's journal. See AGENTS.md §6 "Hermes Fails OPEN on a
+  # Malformed config.yaml".
+  #
   # Package only, exposed as `pkgs.moshi-hook` via overlay so every host that
   # imports this module can reference the same derivation from its own file
   # (pair/install/serve wiring stays per-host — see hosts/hermes/moshi-hook.nix

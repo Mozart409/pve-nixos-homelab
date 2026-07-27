@@ -363,6 +363,13 @@ The agent ran three days on built-in defaults before anyone chatted with it, so
   `hermes-config-check` oneshot ordered after it and `requires`-d by `hermes-agent`
   (`hosts/hermes/configuration.nix`) that repairs mixed-indent duplicates and
   **blocks startup** on an unparseable config or a missing `model`.
+- **Bumping `moshi-hook`'s `version` re-triggers the corruption once — expected.**
+  The stamp is keyed on the version, so a bump in `modules/moshi-hook.nix` makes
+  `install` run again on the next deploy, and it will re-insert the mis-indented
+  duplicate. `hermes-config-check` repairs it before `hermes-agent` starts, so the
+  deploy still succeeds — you will just see `repaired mixed-indent/duplicate
+  sequence items` in its journal. That line is the guard working, not a new bug.
+  Only investigate if the unit *fails* (it blocks the agent when it cannot repair).
 - **Verify a config is actually live** (do this after any hermes deploy):
   ```bash
   sudo systemctl status hermes-config-check      # must be active/exited
