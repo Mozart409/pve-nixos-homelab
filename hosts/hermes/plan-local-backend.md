@@ -165,7 +165,7 @@ hermes runtime itself; needs a quick functional check after switch.
 ## 6. Verification
 
 1. `just fmt` then `just nixos-check`.
-2. `just colmena-diff-host hermes` to eyeball the unit/service delta.
+2. `just colmena-build-host hermes` to eyeball the unit/service delta.
 3. Deploy; then on the host (`amadeus@192.168.2.155`, sudo):
    - `systemctl status hermes-agent` clean; no `ExecStartPre`/podman units referenced.
    - From Open WebUI: `execute_code` runs python; `terminal` runs `ls`/`git`; a vault edit
