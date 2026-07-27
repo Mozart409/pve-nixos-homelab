@@ -6,6 +6,11 @@
 # current flake builds for it. Colmena has no built-in drift command, so we
 # build each host locally and compare against the live system path.
 #
+# We build `colmenaHive.nodes.<h>`, NOT `nixosConfigurations.<h>`: the latter is
+# produced by mkHost, which omits the home-manager/nixvim layer (see flake.nix),
+# so its toplevel NEVER equals what `colmena apply` deployed and every host would
+# report a false DRIFT.
+#
 # Output is one line per host: OK / DRIFT / UNREACHABLE / BUILD-FAIL.
 set -uo pipefail
 
@@ -25,11 +30,15 @@ fi
 drift=0
 for h in "${hosts[@]}"; do
   want=$(nix build --no-link --print-out-paths \
-           ".#nixosConfigurations.$h.config.system.build.toplevel" 2>/dev/null) || {
+           ".#colmenaHive.nodes.$h.config.system.build.toplevel" 2>/dev/null) || {
     printf 'BUILD-FAIL  %s\n' "$h"; drift=1; continue; }
 
-  have=$(colmena exec --on "$h" -- readlink /run/current-system 2>/dev/null \
-           | grep -oE '/nix/store/[^[:space:]]+' | tail -1) || true
+  # colmena writes per-node command output to STDERR (prefixed "<node> | "), so
+  # this must capture 2>&1 — discarding stderr yields an empty result and every
+  # host reports UNREACHABLE. Match only nixos-system paths so a store path
+  # appearing inside an error message can't be mistaken for the live system.
+  have=$(colmena exec --on "$h" -- readlink /run/current-system 2>&1 \
+           | grep -oE '/nix/store/[^[:space:]]*nixos-system[^[:space:]]*' | tail -1) || true
   if [[ -z "$have" ]]; then
     printf 'UNREACHABLE %s\n' "$h"; drift=1; continue
   fi
