@@ -1,12 +1,4 @@
-{
-  config,
-  lib,
-  pkgs,
-  herdr,
-  ...
-}: let
-  herdrPkgs = herdr.packages.${pkgs.stdenv.hostPlatform.system};
-in {
+{pkgs, ...}: {
   imports = [
     ../../modules/common.nix
     ../../modules/disko-config.nix
@@ -15,6 +7,7 @@ in {
     ../../modules/podman.nix
     ../../modules/moshi-hook-user.nix
     ../../modules/coding-harness.nix
+    ../../modules/herdr.nix
   ];
 
   networking.hostName = "homelab-development";
@@ -71,29 +64,32 @@ in {
   };
 
   # Development tools for experiments
-  environment.systemPackages = with pkgs;
-    [
-      # keep-sorted start
-      bat
-      claude-code
-      curl
-      delta
-      docker-compose
-      eza
-      fd
-      fzf
-      git
-      htop
-      httpie
-      jq
-      lazygit
-      neovim
-      opencode
-      ripgrep
-      tmux
-      wget
-      yq
-      # keep-sorted end
-    ]
-    ++ [herdrPkgs.herdr];
+  environment.systemPackages = with pkgs; [
+    # keep-sorted start
+    bat
+    # bun + nodejs: opencode's global plugins (~/.config/opencode/plugins/
+    # moshi-hooks.ts, herdr-agent-state.js) import @opencode-ai/plugin and
+    # bun:sqlite, and opencode bootstraps their node_modules on first run.
+    bun
+    claude-code
+    curl
+    delta
+    eza
+    fd
+    fzf
+    git
+    htop
+    httpie
+    jq
+    lazygit
+    neovim
+    nodejs
+    opencode
+    podman-compose
+    ripgrep
+    tmux
+    wget
+    yq
+    # keep-sorted end
+  ];
 }
