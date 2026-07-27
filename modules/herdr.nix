@@ -42,6 +42,12 @@
     # standalone plugin file, auto-loaded from that dir).
     ${herdrPkg}/bin/herdr integration install opencode
 
+    # `herdr integration install claude` hard-fails with "claude directory not
+    # found … install claude code first" when ~/.claude is absent, which it is on
+    # a freshly provisioned host until Claude Code is first launched. Create it
+    # so the integration installs declaratively instead of needing a manual run.
+    mkdir -p "${home}/.claude"
+
     # claude: writes ~/.claude/hooks/herdr-agent-state.sh AND registers hook
     # entries in ~/.claude/settings.json — a .sh in hooks/ is inert on its own,
     # Claude Code only fires hooks listed in settings.json.
