@@ -20,10 +20,10 @@
     (final: prev: {
       moshi-hook = prev.stdenv.mkDerivation rec {
         pname = "moshi-hook";
-        version = "0.2.58";
+        version = "0.2.59";
         src = prev.fetchurl {
           url = "https://cdn.getmoshi.app/hook/v${version}/moshi-hook_Linux_x86_64.tar.gz";
-          sha256 = "638046c07451e0ce15b0b7ffb6fc2d77d6fd647ba28715511357759cf2b34585";
+          sha256 = "2a7c41bb119d293de6dd5ce82e71381cd8a2dd6d2a543a7d188e605fed6a5446";
         };
         sourceRoot = ".";
         dontStrip = true;
