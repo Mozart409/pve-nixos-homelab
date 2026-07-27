@@ -8,14 +8,39 @@
   # (services.hermes-agent.stateDir default == HOME).
   hermesHome = "/var/lib/hermes";
 
+  # `moshi-hook install` REWRITES $HERMES_HOME/.hermes/config.yaml in place to
+  # register the plugin, and it is NOT safe to rerun against a file another
+  # writer has reformatted — despite upstream calling it idempotent.
+  #
+  # Two writers touch that file, with INCOMPATIBLE list styles:
+  #   - the hermes-agent module's activation-time `hermes-config-merge` re-dumps
+  #     the WHOLE file via PyYAML, emitting sequences at 2-space indent
+  #     (`  - moshi-hooks`);
+  #   - `moshi-hook install` writes/matches its own 4-space style
+  #     (`    - moshi-hooks`).
+  # Neither recognizes the other's form, so running `install` on a file the merge
+  # just normalized makes it INSERT a duplicate 4-space item directly under
+  # `enabled:`, above the existing 2-space one. Two sequence items at different
+  # depths is unparseable YAML, and hermes fails OPEN on a parse error
+  # (gateway/run.py:_load_gateway_config -> empty dict), silently discarding every
+  # override — `model` included. The DeepSeek API then gets model="" and returns
+  # HTTP 400 "supported API model names are deepseek-v4-pro or deepseek-v4-flash,
+  # but you passed .". See AGENTS.md §6 for the full incident.
+  #
+  # Fix: run `install` only ONCE per moshi-hook version. The stamp lives in the
+  # agent state dir, so a state-dir wipe re-runs it, and a version bump re-runs it
+  # (the `--target hermes` hook files may change between releases). Steady state
+  # therefore has a SINGLE writer — the Nix merge — and the registration stays
+  # declarative via `plugins.enabled = ["moshi-hooks"]` in ../configuration.nix.
+  # `hermes-config-check` (../configuration.nix) repairs + validates the file after
+  # this unit, covering the one boot after a version bump where `install` does run.
+  installStamp = "${hermesHome}/.hermes/.moshi-hook-installed-${pkgs.moshi-hook.version}";
+
   # Pair (if not already) + install, run as the hermes user with HOME pointed
   # at the REAL hermes-agent home so `install` wires the moshi-hooks plugin
-  # into $HERMES_HOME/.hermes/config.yaml — which hermes-agent's
-  # `plugins.enabled = ["moshi-hooks"]` (../configuration.nix) expects.
-  # `status --json` guards re-pairing; `install` is documented upstream as
-  # safe/idempotent to rerun ("leaves user-owned hooks alone", "survives an
-  # upgrade"). Mirrors vaultBootstrap/repoSync's soft-fail convention (log +
-  # exit 0) so a transient hiccup never blocks hermes-agent from starting.
+  # into $HERMES_HOME/.hermes/config.yaml. `status --json` guards re-pairing.
+  # Mirrors vaultBootstrap/repoSync's soft-fail convention (log + exit 0) so a
+  # transient hiccup never blocks hermes-agent from starting.
   moshiPairInstall = pkgs.writeShellScript "hermes-moshi-pair-install" ''
     set -u
     moshi=${pkgs.moshi-hook}/bin/moshi-hook
@@ -30,7 +55,15 @@
         exit 0
       fi
     fi
-    "$moshi" install || echo "hermes-moshi-pair-install: install failed" >&2
+    if [ -e ${installStamp} ]; then
+      echo "hermes-moshi-pair-install: hooks already installed for v${pkgs.moshi-hook.version}; skipping (would rewrite config.yaml)"
+      exit 0
+    fi
+    if "$moshi" install; then
+      touch ${installStamp}
+    else
+      echo "hermes-moshi-pair-install: install failed" >&2
+    fi
   '';
 in {
   systemd.services.moshi-hook-setup = {

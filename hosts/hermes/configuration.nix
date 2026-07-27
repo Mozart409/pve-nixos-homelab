@@ -126,6 +126,127 @@
     $git fetch origin --prune --quiet \
       || echo "hermes-repo-bootstrap: fetch failed" >&2
   '';
+
+  # ── config.yaml integrity gate ────────────────────────────────────────────
+  # hermes fails OPEN on a malformed config.yaml: gateway/run.py's
+  # _load_gateway_config() catches the YAML ParserError and substitutes an EMPTY
+  # dict, so the agent starts "successfully" with every override discarded. Only
+  # `provider`/`base_url`/`api_key` survive (separate env bridge); `model` has NO
+  # env fallback, so it resolves to "" and DeepSeek rejects the request with
+  # HTTP 400. That is a silent, days-long degradation — the failure mode this
+  # unit exists to convert into a loud one.
+  #
+  # Runs AFTER moshi-hook-setup (the only non-Nix writer) and BEFORE hermes-agent,
+  # which `requires` it — so a config we cannot make sense of blocks the start
+  # instead of quietly demoting the agent to built-in defaults.
+  configCheckPython = pkgs.python3.withPackages (ps: [ps.pyyaml]);
+  configCheck = pkgs.writeScript "hermes-config-check" ''
+    #!${configCheckPython}/bin/python3
+    """Validate, minimally repair, and gate the hermes agent's config.yaml."""
+    import os
+    import shutil
+    import sys
+    import time
+    from pathlib import Path
+
+    import yaml
+
+    path = Path(sys.argv[1])
+    if not path.exists():
+        print(f"hermes-config-check: {path} does not exist yet; nothing to check")
+        sys.exit(0)
+
+    raw = path.read_text()
+
+
+    def parse(text):
+        return yaml.safe_load(text) or {}
+
+
+    def normalize_sequence_runs(text):
+        """Re-indent mixed-depth block-sequence runs and drop exact duplicates.
+
+        The known corruption is two `- moshi-hooks` items at different depths under
+        `plugins.enabled:` (the Nix merge dumps at 2-space, moshi-hook writes at
+        4-space, and each inserts a duplicate it cannot see). A run of consecutive
+        `- ` lines always belongs to ONE sequence, so flattening the run to its
+        shallowest indent and dropping repeats restores a parseable document
+        without disturbing anything else in the file.
+        """
+        lines = text.splitlines()
+        out = []
+        i = 0
+        while i < len(lines):
+            if not lines[i].lstrip().startswith("- "):
+                out.append(lines[i])
+                i += 1
+                continue
+            run = []
+            while i < len(lines) and lines[i].lstrip().startswith("- "):
+                run.append(lines[i])
+                i += 1
+            indent = min(len(ln) - len(ln.lstrip()) for ln in run)
+            seen = set()
+            for ln in run:
+                item = ln.strip()
+                if item in seen:
+                    continue
+                seen.add(item)
+                out.append(" " * indent + item)
+        return "\n".join(out) + "\n"
+
+
+    changed = False
+    try:
+        data = parse(raw)
+    except yaml.YAMLError as exc:
+        print(f"hermes-config-check: {path} is not valid YAML:\n{exc}", file=sys.stderr)
+        try:
+            data = parse(normalize_sequence_runs(raw))
+        except yaml.YAMLError:
+            stamp = time.strftime("%Y%m%d-%H%M%S")
+            backup = path.with_suffix(f".yaml.corrupt.{stamp}")
+            shutil.copy2(path, backup)
+            print(
+                "hermes-config-check: automatic repair FAILED. Starting hermes now "
+                "would fail open to an EMPTY config and silently ignore every "
+                "override (model, toolsets, mcp_servers, ...). Blocking hermes-agent. "
+                f"Corrupt copy saved at {backup}.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        changed = True
+        print("hermes-config-check: repaired mixed-indent/duplicate sequence items")
+
+    plugins = data.get("plugins")
+    if isinstance(plugins, dict) and isinstance(plugins.get("enabled"), list):
+        deduped = list(dict.fromkeys(plugins["enabled"]))
+        if deduped != plugins["enabled"]:
+            plugins["enabled"] = deduped
+            changed = True
+            print("hermes-config-check: de-duplicated plugins.enabled")
+
+    # An empty/absent model is unrecoverable at runtime: there is no env fallback,
+    # so the agent would start and 400 on the first message. Fail here instead.
+    if not data.get("model"):
+        print(
+            "hermes-config-check: no `model` set in config.yaml — the agent would "
+            "send an empty model and every request would fail. Blocking hermes-agent.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if changed:
+        mode = path.stat().st_mode & 0o777
+        tmp = path.with_suffix(".yaml.tmp")
+        with tmp.open("w") as fh:
+            yaml.dump(data, fh, default_flow_style=False, sort_keys=False)
+        os.chmod(tmp, mode)
+        tmp.replace(path)
+        print(f"hermes-config-check: rewrote {path}")
+
+    print(f"hermes-config-check: OK (model={data.get('model')!r})")
+  '';
 in {
   imports = [
     ../../modules/common.nix
@@ -456,10 +577,13 @@ in {
         min_trust_threshold = 0.2;
       };
 
-      # Enable the moshi-hooks plugin (installed into the agent state dir by
-      # `moshi-hook install`, see ./moshi-hook.nix). Declaring it here makes the
-      # registration Nix-owned so it's re-applied even after a state-dir wipe;
-      # the plugin's code files still live in $HERMES_HOME/.hermes/plugins.
+      # Enable the moshi-hooks plugin (code files installed into the agent state
+      # dir by `moshi-hook install`, see ./moshi-hook.nix). Declaring it here makes
+      # the registration Nix-owned so it survives a state-dir wipe. This key is the
+      # SOLE reason `moshi-hook install` must not run on every boot: it rewrites
+      # config.yaml with a conflicting list indent and corrupts the file (see the
+      # stamp guard in ./moshi-hook.nix and AGENTS.md §6). Keep Nix the only steady-
+      # state writer of plugins.enabled.
       plugins.enabled = ["moshi-hooks"];
 
       # Web search via the self-hosted SearXNG on the containers host (free,
@@ -634,6 +758,10 @@ in {
   # extraPackages on the service PATH, so no path override is needed here.
   systemd.services.hermes-agent = {
     wants = ["agenix.target" "hermes-vault-bootstrap.service" "hermes-repo-sync.service" "moshi-hook-setup.service"];
+    # `requires` (not `wants`) on the config gate: a config.yaml we cannot parse
+    # must BLOCK the start, because hermes would otherwise fail open to an empty
+    # config and run for days on built-in defaults. See configCheck above.
+    requires = ["hermes-config-check.service"];
     after = [
       "agenix.target"
       "tailscaled.service"
@@ -641,6 +769,7 @@ in {
       "hermes-vault-bootstrap.service"
       "hermes-repo-sync.service"
       "moshi-hook-setup.service"
+      "hermes-config-check.service"
     ];
     serviceConfig = {
       # ── Config integrity ("must stay nix") ──────────────────────────────────
@@ -732,6 +861,25 @@ in {
       User = "hermes";
       Group = "hermes";
       ExecStart = repoSync;
+    };
+  };
+
+  # ── config.yaml integrity gate ────────────────────────────────────────────
+  # Ordered between the last non-Nix writer (moshi-hook-setup) and hermes-agent,
+  # which `requires` this unit — so a config.yaml that cannot be parsed or has no
+  # `model` fails the start loudly instead of silently demoting the agent to
+  # built-in defaults. Runs as hermes so the rewritten file keeps its ownership.
+  systemd.services.hermes-config-check = {
+    description = "Validate + repair the hermes agent config.yaml before startup";
+    after = ["moshi-hook-setup.service"];
+    wants = ["moshi-hook-setup.service"];
+    before = ["hermes-agent.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "hermes";
+      Group = "hermes";
+      ExecStart = "${configCheck} ${hermesHome}/.hermes/config.yaml";
     };
   };
 
