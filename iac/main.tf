@@ -1055,8 +1055,8 @@ resource "proxmox_virtual_environment_vm" "zeroclaw_vm" {
     timeout = "60s"
   }
 
-  started = true
-  on_boot = true
+  started = false
+  on_boot = false
 }
 
 # Scratchpad VM (Fedora cloud image, ad-hoc testing)
