@@ -7,6 +7,18 @@
 }: let
   mcpPackages = homelab-mcp.packages.${pkgs.stdenv.hostPlatform.system};
 
+  # Restart nonce for the secret-consuming MCP servers.
+  #
+  # agenix rewrites /run/agenix/<name> in place, so re-encrypting a secret leaves
+  # the generated unit file byte-identical. switch-to-configuration restarts a
+  # unit only when its definition changes, so it sees nothing to do and the
+  # service keeps serving with the credential it read at startup — the symptom is
+  # a redeployed token that still gets 401.
+  #
+  # Bump this string whenever a secret's *content* changes; that changes
+  # restartTriggers -> the unit definition -> a restart on the next colmena apply.
+  secretNonce = "2026-07-28-pbs-token";
+
   # Caddy vhost template: step-ca TLS + reverse proxy to a loopback MCP server.
   mkMcpVhost = port: {
     extraConfig = ''
@@ -144,6 +156,8 @@ in {
     lib.genAttrs ["pbsmcp-server" "pgmcp-server" "hamcp-server"] (_: {
       wants = ["agenix.target"];
       after = ["agenix.target"];
+      # See secretNonce above: forces a restart when a secret is re-encrypted.
+      restartTriggers = [secretNonce];
     })
     // {
       # Give Caddy access to Tailscale socket for cert fetching

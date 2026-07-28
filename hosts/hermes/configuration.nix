@@ -17,6 +17,21 @@
   hermesHome = "/var/lib/hermes"; # services.hermes-agent.stateDir default == $HOME
   vaultPath = "${hermesHome}/workspace/vault"; # the shared Obsidian vault clone
 
+  # ── Restart nonce ─────────────────────────────────────────────────────────
+  # hermes-agent reads its credentials and its prompt/config at startup, and
+  # everything it reads lives at a STABLE path that a deploy rewrites in place:
+  # agenix drops secrets at /run/agenix/<name>, and a root activation script
+  # (re)writes config.yaml / SOUL.md / USER.md and the skill tree under
+  # ${hermesHome}. None of that changes the generated unit file, so
+  # switch-to-configuration finds nothing to restart and the agent keeps running
+  # with the previous prompt and credentials — the long-standing "deploys don't
+  # restart hermes-agent" footgun in AGENTS.md §3.
+  #
+  # Bump this string whenever a secret, SOUL.md, USER.md, config.yaml, or a
+  # skill changes; that changes restartTriggers -> the unit definition -> a
+  # restart on the next colmena apply.
+  secretNonce = "2026-07-28-hermes-initial";
+
   # ── Extra (declarative) skills ────────────────────────────────────────────
   # Custom skills shipped from this repo, exposed to Hermes read-only via the
   # `skills.external_dirs` config key (see settings below). Hermes' skill loader
@@ -771,6 +786,9 @@ in {
       "moshi-hook-setup.service"
       "hermes-config-check.service"
     ];
+    # See secretNonce above: forces a restart when a secret, SOUL.md, USER.md,
+    # config.yaml, or a skill is changed by a deploy.
+    restartTriggers = [secretNonce];
     serviceConfig = {
       # ── Config integrity ("must stay nix") ──────────────────────────────────
       # Under the `local` backend the agent's tools run AS the hermes user, and
