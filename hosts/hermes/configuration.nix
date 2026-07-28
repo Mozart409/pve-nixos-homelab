@@ -904,6 +904,15 @@ in {
     # PartOf propagates moshi-hook-setup's restart to this unit, and `after=`
     # sequences it behind the install, so the repair always follows a rewrite.
     partOf = ["moshi-hook-setup.service"];
+    # `partOf` only covers the moshi-hook path. Every activation ALSO re-runs
+    # hermes-config-merge, which rewrites config.yaml — and that alone leaves this
+    # unit active-since-boot, so the gate never sees the merged file. Harmless
+    # while hermes-agent also stayed up across deploys; not harmless now that
+    # secretNonce restarts it, because the agent would then load a config this
+    # unit never validated. Sharing the nonce re-runs the check and the agent
+    # together, in `before =` order. Observed 2026-07-28: agent restarted at
+    # 12:20, this unit's last run was the previous day.
+    restartTriggers = [secretNonce];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
