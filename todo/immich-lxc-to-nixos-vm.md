@@ -36,9 +36,11 @@ into the morning — see the related storage work below.
 | `catalog.pcat1.didx` | 29.7 MB — a very large catalog, i.e. a very high file count |
 | Backup target | `pbs-r2` datastore (`r2-store`), selection `104` |
 | Backup schedule | **`sun 01:00`** — moved off daily 2026-07-28 to stop the daily morning stall. An ~18 h run starting Sunday 01:00 still saturates the pool until ~19:00 Sunday. |
-| immich on CT 104 | **2.7.5** → nixpkgs 3.0.3 is a **major** upgrade (see Phase 0.1) |
+| immich on CT 104 | **3.0.3** — upgraded in place 2026-07-29 (was 2.7.5). **Same version as nixpkgs → the cutover is no longer a version jump.** |
 | Pool read ceiling | ~1.15 MB/s @ ~39 IOPS, ~30 KB avg read |
-| immich in pinned nixpkgs | **3.0.3** (`services.immich` available) |
+| immich in pinned nixpkgs | **3.0.3** (`services.immich` available) — verified `nix eval` 2026-07-29 |
+| vectorchord in pinned nixpkgs | **1.1.1** (`postgresql18Packages.vectorchord`) |
+| default `services.postgresql` package | **18.4** — what the immich VM gets unless pinned |
 | Central Postgres (`homelab-database`) | `pkgs.postgresql_18` |
 | Next free LAN IP | `192.168.2.185` (`.184` is the current highest) |
 | Next free `vm_id` | `4348` |
@@ -46,7 +48,24 @@ into the morning — see the related storage work below.
 
 ## Status
 
-**Not started.** Planning only — nothing implemented.
+**Not started** in this repo — planning only, no host/IaC/DNS changes yet.
+
+**2026-07-29: the blocking prerequisite is done.** CT 104 was upgraded in place
+**2.7.5 → 3.0.3**, which is exactly the "upgrade first, move second" sequencing
+the Risks section recommended. Source and target now run the *same* immich
+version, so the cutover is a same-version dump/restore + file copy rather than a
+forward-only schema migration across a major release. The pgvecto.rs →
+VectorChord extension swap was performed by immich's own 3.x upgrade path on the
+LXC, not by us at cutover time — the highest-risk item in this plan is retired.
+
+Reported on the LXC after the upgrade: immich 3.0.3, ExifTool 13.59, Node
+v24.13.0, libvips 8.18.4, ImageMagick 7.1.2-21, FFmpeg 7.1.3-Jellyfin. Those are
+the LXC image's bundled dependencies; the nixpkgs build pins its own and minor
+differences there are expected and harmless — only the **immich version, the
+Postgres major, and the vchord version** need to line up.
+
+What is now left is ordinary work: provision the VM (Phase 1), stand up a clean
+immich (Phase 2), move the data (Phase 3), cut over (Phase 4).
 
 ---
 
@@ -89,36 +108,45 @@ into the morning — see the related storage work below.
 
 ## Phase 0 — Prerequisites (do before anything else)
 
-- [ ] **0.1 Plan the 2.7.5 → 3.0.3 major upgrade.** *Blocking — the single
-  highest risk in this migration.* The direction is safe (the LXC is **older**
-  than nixpkgs, and immich migrates forward only), but this crosses a major
-  version **and** an extension swap.
+- [x] **0.1 The 2.7.5 → 3.0.3 major upgrade — DONE 2026-07-29, in place on CT
+  104.** This was the single blocking risk and it is now behind us. immich
+  performed its own pgvecto.rs → VectorChord migration during the upgrade, on
+  the source, where it is revertible from a PBS snapshot — instead of at cutover
+  time on a half-migrated new host. Source and target are now both 3.0.3, so
+  Phase 3 is a **same-version** dump/restore.
 
-  nixpkgs' `immich.nix` (lines ~81–93) states:
+- [ ] **0.1a Record the source DB's extension and version state** — cheap, and
+  it determines whether Phase 3.5 needs a manual reindex. On CT 104, in the
+  immich database:
 
-  > `database.enableVectors` has been deprecated as pgvecto.rs is no longer
-  > available. From now on, vectorchord is used instead.
+  ```sql
+  \dx                                    -- expect vchord + vector, NOT vectors/pgvecto.rs
+  SELECT extname, extversion FROM pg_extension ORDER BY extname;
+  SHOW server_version;
+  SHOW shared_preload_libraries;         -- expect vchord.so
+  ```
 
-  So 2.7.5 almost certainly stores its smart-search embeddings under
-  **pgvecto.rs**, while 3.0.3 requires **VectorChord**. A plain
-  `pg_dump`/`pg_restore` will not carry a vector column and its index across
-  extensions. Before touching data:
+  - [ ] Confirm `vchord` is present and `vectors` (pgvecto.rs) is **gone**. If
+        `vectors` is still installed, the 3.x upgrade left a half-migrated DB —
+        stop and finish the extension migration on the LXC before copying
+        anything.
+  - [ ] Note the **`vchord` version**. nixpkgs ships **1.1.1**. If the LXC's is
+        older, the restored `face_index` / `clip_index` must be rebuilt on the
+        VM — see Phase 3.5. The module's automatic reindex only fires when it
+        observes the version *change between two runs on the same cluster*, so
+        it will **not** trigger on a fresh restore.
 
-  - [ ] Confirm which vector extension CT 104's Postgres actually has
-        (`\dx` in the immich DB).
-  - [ ] Read immich's 3.0 release notes and upgrade guide for the documented
-        pgvecto.rs → VectorChord path, and whether intermediate versions must be
-        stepped through rather than jumping straight to 3.0.3.
-  - [ ] Establish whether embeddings can simply be **dropped and regenerated**
-        after cutover. If smart search can rebuild from the originals, that
-        sidesteps the extension migration entirely — at the cost of a
-        CPU-expensive re-index, which interacts with the ML decision in
-        "Open" above. This is likely the pragmatic path; confirm it first.
-  - [ ] Rehearse the restore on a throwaway VM before the real cutover.
+- [ ] **0.1b Confirm the Postgres major version on CT 104.** nixpkgs' default
+  `services.postgresql` is **18.4**; immich's container images have historically
+  shipped 14/16/17, so a cross-major restore is likely. This is routine but
+  changes the plan: dump with the **target's** `pg_dump` (18.x) against the
+  source server, or pin `services.postgresql.package` on the VM to the source
+  major. Decide which before Phase 2.1 — the pin is a one-line config change now
+  and a rebuild-and-reload later.
 
-- [ ] **0.1b** Also confirm the Postgres **major** version on CT 104. A
-  cross-major dump/restore is fine, but it changes the `pg_dump` invocation and
-  must be planned alongside the extension change.
+- [ ] **0.1c Rehearse the restore** on a throwaway VM (or on the immich VM
+  before real data lands). Much lower stakes than it was pre-upgrade — you are
+  validating a dump/restore across Postgres majors, not an app migration.
 - [ ] **0.2 Inventory the LXC.** Record `mediaLocation` (upload path), the
   Postgres version and DB name, the immich uid/gid, any non-default env vars,
   and whether Redis is local. `pct config 104` on the PVE host plus the
@@ -161,6 +189,14 @@ into the morning — see the related storage work below.
 - [ ] **2.1 Enable `services.immich`** — `enable`, `host`/`port`,
   `mediaLocation`, `database.createDB = true` (local Postgres + pgvector +
   vectorchord), Redis. Decide `machine-learning.enable` per the open question.
+  Set `services.postgresql.package` per the 0.1b decision (default is 18.4).
+  The module already does the rest: it adds `pgvector` + `vectorchord` to
+  `extensions`, sets `shared_preload_libraries = ["vchord.so"]` and
+  `search_path = "\"$user\", public, vectors"`, and runs a
+  `postgresql-setup` `ExecStartPost` that `CREATE EXTENSION IF NOT EXISTS`es
+  all seven (`unaccent`, `uuid-ossp`, `cube`, `earthdistance`, `pg_trgm`,
+  `vector`, `vchord`) and `ALTER EXTENSION … UPDATE`s them. Do not hand-roll
+  any of that.
 - [ ] **2.2 Caddy vhost** `immich.homelab.local` with the step-ca ACME directory,
   `reverse_proxy` to the immich port. Copy the jellyfin pattern. Set generous
   body-size limits — immich uploads are large.
@@ -176,7 +212,9 @@ into the morning — see the related storage work below.
   a frozen source. (The hofvarpnir migration was easy precisely because the
   source was stopped throughout.)
 - [ ] **3.2 `pg_dump`** the immich database on the LXC. Copy the dump off before
-  touching anything else.
+  touching anything else. Per 0.1b, if the majors differ, run the dump with the
+  **newer** `pg_dump` (from the VM, over the network) — an older `pg_dump`
+  cannot produce a reliable dump for a newer server, but the reverse is fine.
 - [ ] **3.3 rsync the library** to the new VM's `mediaLocation`. 74 GiB off an
   HDD pool of small files — **expect many hours**, same physics as the backup.
   Run it in `tmux`/`screen`, use `rsync -aHAX --info=progress2`, and be ready to
@@ -185,7 +223,17 @@ into the morning — see the related storage work below.
   the immich service user on the VM. *(The hofvarpnir migration hit exactly this
   — files arrived as uid 1000 and needed re-chowning to 999.)*
 - [ ] **3.5 Stop immich on the VM, restore the dump, start it.** Immich runs its
-  schema migrations on startup; watch the journal until they finish.
+  schema migrations on startup; watch the journal until they finish. Since both
+  sides are 3.0.3 there should be **no** schema migration — if the journal shows
+  a long migration run, something is not what you think it is; stop and check.
+  If 0.1a found the source `vchord` older than nixpkgs' **1.1.1**, rebuild the
+  vector indexes by hand after the restore — the module's automatic reindex does
+  not fire on a fresh restore:
+
+  ```sql
+  REINDEX INDEX face_index;
+  REINDEX INDEX clip_index;
+  ```
 - [ ] **3.6 Verify before trusting it:** photo count matches the source, albums
   and faces intact, thumbnails render, a new upload succeeds, mobile app syncs.
   Do **not** proceed until this passes.
@@ -215,15 +263,20 @@ into the morning — see the related storage work below.
 
 ## Risks and gotchas
 
-- **The 2.7.5 → 3.0.3 major upgrade (0.1) is the one blocking risk.** Everything
-  else is recoverable; a forward-only schema migration combined with a
-  pgvecto.rs → VectorChord extension swap is not. Rehearse it on a throwaway VM.
-  Treat "drop and regenerate embeddings" as the likely escape hatch.
-- **Two changes at once.** This migration bundles a platform move (LXC → VM) with
-  a major app upgrade. If the cutover goes wrong it will not be obvious which
-  caused it. Consider upgrading immich **in place on the LXC first**, verifying,
-  and only then moving the platform — slower, but each step is independently
-  revertible.
+- ~~**The 2.7.5 → 3.0.3 major upgrade is the one blocking risk.**~~ **Retired
+  2026-07-29** — done in place on the LXC. The pgvecto.rs → VectorChord swap and
+  the forward-only schema migration both happened on the source, where a PBS
+  snapshot can roll them back.
+- ~~**Two changes at once.**~~ **Resolved the way this section recommended:**
+  the app upgrade and the platform move are now sequential and independently
+  revertible. Keep them that way — do not bundle another immich version bump
+  into the cutover. If a flake update lands a newer immich before Phase 3, either
+  upgrade the LXC to match first or pin `services.immich.package` on the VM to
+  3.0.3 for the cutover and bump afterwards.
+- **Version parity is now the thing to watch, not version distance.** Three
+  things must line up at restore: immich version (3.0.3 both sides — hold it
+  there), Postgres major (0.1b), and `vchord` version (0.1a; nixpkgs has 1.1.1,
+  and a mismatch means a manual `REINDEX` in 3.5, not a failure).
 - **Dirty bitmaps are lost on VM shutdown or host reboot**, so an occasional full
   sequential read of the disk still happens. That is ~1 h/TB sequential on this
   pool — vastly better than 18 h random, but not free.
