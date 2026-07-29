@@ -14,6 +14,8 @@
     ../../modules/podman.nix
     # Declaratively pinned SSO/OIDC plugin (Pocket ID auth).
     ./sso-plugin.nix
+    # Declaratively themed web client (overrides services.jellyfin.package).
+    ./web-theme.nix
     # hofvarpnir media fetch-and-store app (OCI container, migrated off the LXC).
     ./hofvarpnir.nix
   ];
