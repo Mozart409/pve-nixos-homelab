@@ -162,7 +162,7 @@
           ''"192.168.2.184 development.homelab.local"''
           ''"192.168.2.185 scratchpad.homelab.local"''
           ''"192.168.2.208 homeassistant.local"''
-          ''"192.168.2.42 pve-gigabyte.local"''
+          ''"192.168.2.46 pve-gigabyte.local"''
           ''"192.168.2.71 wotan.homelab.local"''
           # keep-sorted end
         ];
