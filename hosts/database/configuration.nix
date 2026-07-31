@@ -148,11 +148,18 @@
   # Set the password and read-only grants for the pgmcp `mcp` role.
   systemd.services.postgresql-mcp-password = {
     description = "Set pgmcp PostgreSQL role password and read-only grants";
-    # Depends on postgresql.service, not postgresql-ensure-users.service (which
-    # does not exist in this nixpkgs); ensureUsers runs in postgresql.service's
-    # postStart, so the role exists once that unit is up.
-    after = ["postgresql.service" "agenix.service"];
-    requires = ["postgresql.service"];
+    # ORDERING GOTCHA (applies to every password setter in this file):
+    # order on postgresql-SETUP.service, never postgresql.service.
+    # ensureUsers/ensureDatabases run in the setup unit; postgresql.service
+    # reports ready as soon as the server accepts connections, which is well
+    # before any role has been created. Ordering only on postgresql.service
+    # races role creation and fails with `role "<name>" does not exist` — but
+    # only on the deploy that first introduces the role, so the bug stays
+    # dormant afterwards and a green deploy proves nothing. This unit failed
+    # exactly that way when the mcp role was added (2026-07-31).
+    # (postgresql-ensure-users.service does not exist in this nixpkgs.)
+    after = ["postgresql-setup.service" "agenix.service"];
+    requires = ["postgresql-setup.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
@@ -175,11 +182,9 @@
   # Set password for terraform user after PostgreSQL creates the user
   systemd.services.postgresql-terraform-password = {
     description = "Set Terraform PostgreSQL user password";
-    # Depends on postgresql.service, not postgresql-ensure-users.service (which
-    # does not exist in this nixpkgs); ensureUsers runs in postgresql.service's
-    # postStart, so the role exists once that unit is up.
-    after = ["postgresql.service" "agenix.service"];
-    requires = ["postgresql.service"];
+    # See the ordering gotcha on postgresql-mcp-password above.
+    after = ["postgresql-setup.service" "agenix.service"];
+    requires = ["postgresql-setup.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
@@ -195,11 +200,9 @@
   # Set password for forgejo user after PostgreSQL creates the user
   systemd.services.postgresql-forgejo-password = {
     description = "Set Forgejo PostgreSQL user password";
-    # Depends on postgresql.service, not postgresql-ensure-users.service (which
-    # does not exist in this nixpkgs); ensureUsers runs in postgresql.service's
-    # postStart, so the role exists once that unit is up.
-    after = ["postgresql.service" "agenix.service"];
-    requires = ["postgresql.service"];
+    # See the ordering gotcha on postgresql-mcp-password above.
+    after = ["postgresql-setup.service" "agenix.service"];
+    requires = ["postgresql-setup.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
@@ -213,13 +216,11 @@
   };
 
   # Set password for romm user after PostgreSQL creates the user.
-  # Depends on postgresql.service (not postgresql-ensure-users.service, which
-  # does not exist in this nixpkgs — ensureUsers runs in postgresql.service's
-  # postStart, so the role exists once that unit is up).
+  # See the ordering gotcha on postgresql-mcp-password above.
   systemd.services.postgresql-romm-password = {
     description = "Set RomM PostgreSQL user password";
-    after = ["postgresql.service" "agenix.service"];
-    requires = ["postgresql.service"];
+    after = ["postgresql-setup.service" "agenix.service"];
+    requires = ["postgresql-setup.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
@@ -233,13 +234,11 @@
   };
 
   # Set password for hofvarpnir user after PostgreSQL creates the user.
-  # Depends on postgresql.service (not postgresql-ensure-users.service, which
-  # does not exist in this nixpkgs — ensureUsers runs in postgresql.service's
-  # postStart, so the role exists once that unit is up).
+  # See the ordering gotcha on postgresql-mcp-password above.
   systemd.services.postgresql-hofvarpnir-password = {
     description = "Set hofvarpnir PostgreSQL user password";
-    after = ["postgresql.service" "agenix.service"];
-    requires = ["postgresql.service"];
+    after = ["postgresql-setup.service" "agenix.service"];
+    requires = ["postgresql-setup.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
@@ -252,13 +251,14 @@
     '';
   };
 
-  # Set the postgres superuser password from agenix. Depends on
-  # postgresql.service (role creation runs in its postStart), not the nonexistent
-  # postgresql-ensure-users.service — same gotcha as the other setters above.
+  # Set the postgres superuser password from agenix. The `postgres` role is
+  # created by initdb, not by ensureUsers, so this one never actually raced —
+  # but it orders on postgresql-setup.service anyway for consistency with the
+  # setters above (see the ordering gotcha on postgresql-mcp-password).
   systemd.services.postgresql-superuser-password = {
     description = "Set postgres superuser password";
-    after = ["postgresql.service" "agenix.service"];
-    requires = ["postgresql.service"];
+    after = ["postgresql-setup.service" "agenix.service"];
+    requires = ["postgresql-setup.service"];
     wantedBy = ["multi-user.target"];
     serviceConfig = {
       Type = "oneshot";
@@ -308,14 +308,18 @@
     };
   };
 
-  # Create pgbouncer auth file with postgres user
-  # In production, use agenix for the password
+  # Create pgbouncer auth file with postgres user.
+  # Orders after postgresql-superuser-password, not just postgresql.service:
+  # the script reads the postgres role's scram hash out of pg_authid, and that
+  # hash is written by the superuser-password setter. Racing it is not a hard
+  # failure — the script falls back to an empty userlist and pgbouncer switches
+  # to auth_query — so the symptom is silent, not a failed unit.
   systemd.services.pgbouncer-userlist = {
     description = "Generate PgBouncer userlist";
     wantedBy = ["pgbouncer.service"];
     before = ["pgbouncer.service"];
-    after = ["postgresql.service"];
-    requires = ["postgresql.service"];
+    after = ["postgresql-superuser-password.service"];
+    requires = ["postgresql-superuser-password.service"];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
