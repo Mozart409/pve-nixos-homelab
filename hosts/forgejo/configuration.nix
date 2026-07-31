@@ -33,6 +33,13 @@
 
     database = {
       type = "postgres";
+      # NOTE: `host`/`port` below are DEAD CONFIG. `createDatabase` defaults to
+      # true, which makes the module provision a LOCAL postgresql on this host
+      # and connect over the unix socket (`socket = /run/postgresql`) — the
+      # generated app.ini has `HOST = /run/postgresql`, not 192.168.2.134. The
+      # real data (128 tables, ~19 MB) lives here, and the `forgejo` database on
+      # the database host is an empty leftover. Set `createDatabase = false` if
+      # you ever actually want to centralise it (requires a pg_dump migration).
       host = "192.168.2.134";
       port = 5432;
       name = "forgejo";
@@ -85,6 +92,20 @@
     file = ../../secrets/forgejo-db-password.age;
     owner = "forgejo";
     group = "forgejo";
+  };
+
+  # Nightly dump of the LOCAL forgejo database (see the database note above --
+  # this is where the real data lives). The database host's postgresqlBackup has
+  # been dumping its own empty `forgejo` database, so before this was enabled
+  # Forgejo had no backup at all.
+  services.postgresqlBackup = {
+    enable = true;
+    databases = ["forgejo"];
+    location = "/var/backup/postgresql";
+    # 02:30, i.e. clear of the database host's 03:00 job -- both VMs sit on the
+    # same HDD-backed zfs pool, so overlapping dumps contend for the same spindles.
+    startAt = "02:30";
+    compression = "zstd";
   };
 
   # Prometheus exporters
