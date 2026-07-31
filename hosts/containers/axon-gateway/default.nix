@@ -43,9 +43,49 @@
     transport = "http"
     enabled = true
 
+    # Postgres: one backend per database. pgmcp holds a single connection pool
+    # from one URL and no tool takes a database argument, so each database needs
+    # its own server instance (see hosts/mcp_vm/configuration.nix). The backend
+    # name prefixes the tool names — pguptime_run_query, pgforgejo_run_query, …
     [[backends]]
-    name = "pg"
-    url = "https://pg-mcp.homelab.local/mcp"
+    name = "pguptime"
+    url = "https://pg-uptime-mcp.homelab.local/mcp"
+    transport = "http"
+    enabled = true
+
+    [[backends]]
+    name = "pgappdb"
+    url = "https://pg-appdb-mcp.homelab.local/mcp"
+    transport = "http"
+    enabled = true
+
+    [[backends]]
+    name = "pgappuser"
+    url = "https://pg-appuser-mcp.homelab.local/mcp"
+    transport = "http"
+    enabled = true
+
+    [[backends]]
+    name = "pgterraform"
+    url = "https://pg-terraform-mcp.homelab.local/mcp"
+    transport = "http"
+    enabled = true
+
+    [[backends]]
+    name = "pgforgejo"
+    url = "https://pg-forgejo-mcp.homelab.local/mcp"
+    transport = "http"
+    enabled = true
+
+    [[backends]]
+    name = "pgromm"
+    url = "https://pg-romm-mcp.homelab.local/mcp"
+    transport = "http"
+    enabled = true
+
+    [[backends]]
+    name = "pghofvarpnir"
+    url = "https://pg-hofvarpnir-mcp.homelab.local/mcp"
     transport = "http"
     enabled = true
 

@@ -28,7 +28,7 @@ in {
 
   "attic-server-token.age".publicKeys = [amadeus amadeusAge hostCache];
   "axon-gateway-env.age".publicKeys = [amadeus amadeusAge hostContainers hostHermes hostDevelopment hostZeroclaw];
-  "buildbot-db-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostDatabase];
+  "buildbot-db-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster];
   "buildbot-webhook-secret.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster];
   "buildbot-worker-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostBuildBotWorker1];
   "dashboard-env.age".publicKeys = [amadeus amadeusAge hostContainers];
@@ -56,9 +56,16 @@ in {
   "moshi-device-id.age".publicKeys = [amadeus amadeusAge hostHermes hostDevelopment hostZeroclaw]; # plain auth token
   "open-webui-env.age".publicKeys = [amadeus amadeusAge hostContainers];
   "pbs-mcp-token.age".publicKeys = [amadeus amadeusAge hostMcp];
-  "pg-mcp-database-url.age".publicKeys = [amadeus amadeusAge hostMcp];
+  "pg-mcp-appdb-url.age".publicKeys = [amadeus amadeusAge hostMcp];
+  "pg-mcp-appuser-url.age".publicKeys = [amadeus amadeusAge hostMcp];
+  "pg-mcp-forgejo-url.age".publicKeys = [amadeus amadeusAge hostMcp];
+  "pg-mcp-hofvarpnir-url.age".publicKeys = [amadeus amadeusAge hostMcp];
+  "pg-mcp-romm-url.age".publicKeys = [amadeus amadeusAge hostMcp];
+  "pg-mcp-terraform-url.age".publicKeys = [amadeus amadeusAge hostMcp];
+  "pg-mcp-uptime-url.age".publicKeys = [amadeus amadeusAge hostMcp];
   "pgadmin-oauth2-secret.age".publicKeys = [amadeus amadeusAge hostDatabase];
   "pgadmin-pwd.age".publicKeys = [amadeus amadeusAge hostDatabase];
+  "pgmcp-role-password.age".publicKeys = [amadeus amadeusAge hostDatabase];
   "postgres-superuser-password.age".publicKeys = [amadeus amadeusAge hostDatabase];
   "romm-db-password.age".publicKeys = [amadeus amadeusAge hostContainers hostDatabase];
   "romm-env.age".publicKeys = [amadeus amadeusAge hostContainers];
