@@ -532,19 +532,19 @@
           ];
         };
 
-        zeroclaw = {
-          deployment = {
-            targetHost = targetHost "zeroclaw";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["zeroclaw" "ai"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/zeroclaw/configuration.nix
-          ];
-        };
+        # zeroclaw = {
+        #   deployment = {
+        #     targetHost = targetHost "zeroclaw";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["zeroclaw" "ai"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/zeroclaw/configuration.nix
+        #   ];
+        # };
 
         # Raspberry Pi 4 - builds on target (uses aarch64 binary cache)
         # "rpi4-1" = {
