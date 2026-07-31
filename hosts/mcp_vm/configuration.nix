@@ -31,6 +31,30 @@
       }
     '';
   };
+
+  # Postgres MCP servers on the `database` host: one instance per database.
+  #
+  # pgmcp builds a single connection pool from PG_DATABASE_URL and no tool takes
+  # a database argument (`database_size` is literally `SELECT
+  # current_database()`), so a Postgres connection's one-database scope is the
+  # server's scope too — reaching N databases means N instances. They all share
+  # the cluster-wide read-only `mcp` role defined on the database host; only the
+  # trailing /<db> of the connection URL differs.
+  #
+  # `buildbot` is deliberately absent: its master/worker VMs are gone and the
+  # database/role were dropped from the database host.
+  homelabDatabases = {
+    appdb = 8085;
+    appuser = 8086;
+    terraform = 8087;
+    forgejo = 8088;
+    romm = 8089;
+    hofvarpnir = 8090;
+  };
+
+  pgVhostName = db: "pg-${db}-mcp.homelab.local";
+  pgUnitName = db: "pgmcp-${db}-server";
+  pgSecretName = db: "pg-mcp-${db}-url";
 in {
   imports = [
     ../../modules/common.nix
@@ -65,95 +89,130 @@ in {
   services.caddy = {
     enable = true;
 
-    # Tailscale hostname (kept for backwards compatibility -> Home Assistant MCP)
-    virtualHosts."homelab-mcp.dropbear-butterfly.ts.net" = {
-      extraConfig = ''
-        tls {
-          get_certificate tailscale
-        }
+    virtualHosts =
+      {
+        # Tailscale hostname (kept for backwards compatibility -> Home Assistant MCP)
+        "homelab-mcp.dropbear-butterfly.ts.net" = {
+          extraConfig = ''
+            tls {
+              get_certificate tailscale
+            }
 
-        handle {
-          reverse_proxy http://localhost:8084
-        }
-      '';
-    };
+            handle {
+              reverse_proxy http://localhost:8084
+            }
+          '';
+        };
 
-    # Home Assistant MCP keeps the historical mcp.homelab.local name so the
-    # axon-gateway "hamcp" backend URL stays valid.
-    virtualHosts."mcp.homelab.local" = mkMcpVhost 8084;
-    virtualHosts."pbs-mcp.homelab.local" = mkMcpVhost 8080;
-    virtualHosts."pg-mcp.homelab.local" = mkMcpVhost 8081;
-    virtualHosts."prom-mcp.homelab.local" = mkMcpVhost 8082;
-    virtualHosts."loki-mcp.homelab.local" = mkMcpVhost 8083;
+        # Home Assistant MCP keeps the historical mcp.homelab.local name so the
+        # axon-gateway "hamcp" backend URL stays valid.
+        "mcp.homelab.local" = mkMcpVhost 8084;
+        "pbs-mcp.homelab.local" = mkMcpVhost 8080;
+        # Renamed from pg-mcp.homelab.local now that several Postgres MCP
+        # instances exist; this one is the uptime-forge TimescaleDB.
+        "pg-uptime-mcp.homelab.local" = mkMcpVhost 8081;
+        "prom-mcp.homelab.local" = mkMcpVhost 8082;
+        "loki-mcp.homelab.local" = mkMcpVhost 8083;
+      }
+      # One vhost per database on the `database` host.
+      // lib.mapAttrs' (db: port: lib.nameValuePair (pgVhostName db) (mkMcpVhost port)) homelabDatabases;
   };
 
-  age.secrets.homeassistant-token = {
-    file = ../../secrets/homeassistant-token.age;
-  };
-  age.secrets.pbs-mcp-token = {
-    file = ../../secrets/pbs-mcp-token.age;
-  };
-  age.secrets.pg-mcp-database-url = {
-    file = ../../secrets/pg-mcp-database-url.age;
-  };
+  age.secrets =
+    {
+      homeassistant-token = {
+        file = ../../secrets/homeassistant-token.age;
+      };
+      pbs-mcp-token = {
+        file = ../../secrets/pbs-mcp-token.age;
+      };
+      pg-mcp-uptime-url = {
+        file = ../../secrets/pg-mcp-uptime-url.age;
+      };
+    }
+    # postgres://mcp:<pw>@database.homelab.local:5432/<db> — same read-only role
+    # and password for every entry, one database each.
+    // lib.mapAttrs' (db: _:
+      lib.nameValuePair (pgSecretName db) {
+        file = ../../secrets/${pgSecretName db}.age;
+      })
+    homelabDatabases;
 
-  # All five MCP servers from the homelab-mcp-servers monorepo, as hardened
-  # native systemd services (DynamicUser, secrets via LoadCredential).
-  services.homelab-mcp.servers = {
-    pbsmcp-server = {
-      enable = true;
-      package = mcpPackages.pbsmcp-server;
-      host = "https://pbs.dropbear-butterfly.ts.net/";
-      tokenFile = config.age.secrets.pbs-mcp-token.path;
-      bind = "127.0.0.1:8080";
-      allowedHosts = ["pbs-mcp.homelab.local" "localhost" "127.0.0.1"];
-    };
+  # Every MCP server from the homelab-mcp-servers monorepo, as hardened native
+  # systemd services (DynamicUser, secrets via LoadCredential). The five named
+  # instances below map 1:1 onto the workspace binaries; the generated
+  # pgmcp-<db>-server set reuses the pgmcp binary via `serverType`.
+  services.homelab-mcp.servers =
+    {
+      pbsmcp-server = {
+        enable = true;
+        package = mcpPackages.pbsmcp-server;
+        host = "https://pbs.dropbear-butterfly.ts.net/";
+        tokenFile = config.age.secrets.pbs-mcp-token.path;
+        bind = "127.0.0.1:8080";
+        allowedHosts = ["pbs-mcp.homelab.local" "localhost" "127.0.0.1"];
+      };
 
-    pgmcp-server = {
-      enable = true;
-      package = mcpPackages.pgmcp-server;
-      # The full connection URL (with password) travels via tokenFile ->
-      # PG_DATABASE_URL; no host option needed.
-      tokenFile = config.age.secrets.pg-mcp-database-url.path;
-      bind = "127.0.0.1:8081";
-      allowedHosts = ["pg-mcp.homelab.local" "localhost" "127.0.0.1"];
-    };
+      # uptime-forge TimescaleDB (on the containers host).
+      pgmcp-server = {
+        enable = true;
+        package = mcpPackages.pgmcp-server;
+        # The full connection URL (with password) travels via tokenFile ->
+        # PG_DATABASE_URL; no host option needed.
+        tokenFile = config.age.secrets.pg-mcp-uptime-url.path;
+        bind = "127.0.0.1:8081";
+        allowedHosts = ["pg-uptime-mcp.homelab.local" "localhost" "127.0.0.1"];
+      };
 
-    prommcp-server = {
-      enable = true;
-      package = mcpPackages.prommcp-server;
-      # Prometheus on the otel host; port 9090 is opened in its firewall.
-      host = "http://otel.homelab.local:9090";
-      bind = "127.0.0.1:8082";
-      allowedHosts = ["prom-mcp.homelab.local" "localhost" "127.0.0.1"];
-    };
+      prommcp-server = {
+        enable = true;
+        package = mcpPackages.prommcp-server;
+        # Prometheus on the otel host; port 9090 is opened in its firewall.
+        host = "http://otel.homelab.local:9090";
+        bind = "127.0.0.1:8082";
+        allowedHosts = ["prom-mcp.homelab.local" "localhost" "127.0.0.1"];
+      };
 
-    lokimcp-server = {
-      enable = true;
-      package = mcpPackages.lokimcp-server;
-      host = "http://otel.homelab.local:3100";
-      bind = "127.0.0.1:8083";
-      allowedHosts = ["loki-mcp.homelab.local" "localhost" "127.0.0.1"];
-    };
+      lokimcp-server = {
+        enable = true;
+        package = mcpPackages.lokimcp-server;
+        host = "http://otel.homelab.local:3100";
+        bind = "127.0.0.1:8083";
+        allowedHosts = ["loki-mcp.homelab.local" "localhost" "127.0.0.1"];
+      };
 
-    hamcp-server = {
-      enable = true;
-      package = mcpPackages.hamcp-server;
-      host = "https://homeassistant.dropbear-butterfly.ts.net";
-      tokenFile = config.age.secrets.homeassistant-token.path;
-      bind = "127.0.0.1:8084";
-      allowedHosts = [
-        "mcp.homelab.local"
-        "homelab-mcp.dropbear-butterfly.ts.net"
-        "localhost"
-        "127.0.0.1"
-      ];
-    };
-  };
+      hamcp-server = {
+        enable = true;
+        package = mcpPackages.hamcp-server;
+        host = "https://homeassistant.dropbear-butterfly.ts.net";
+        tokenFile = config.age.secrets.homeassistant-token.path;
+        bind = "127.0.0.1:8084";
+        allowedHosts = [
+          "mcp.homelab.local"
+          "homelab-mcp.dropbear-butterfly.ts.net"
+          "localhost"
+          "127.0.0.1"
+        ];
+      };
+    }
+    # One pgmcp instance per database on the `database` host. serverType pins the
+    # PG_* env prefix — without it the module would derive PGMCP-<DB>-SERVER from
+    # the instance name and the server would find no config at all.
+    // lib.mapAttrs' (db: port:
+      lib.nameValuePair (pgUnitName db) {
+        enable = true;
+        serverType = "pgmcp-server";
+        package = mcpPackages.pgmcp-server;
+        tokenFile = config.age.secrets.${pgSecretName db}.path;
+        bind = "127.0.0.1:${toString port}";
+        allowedHosts = [(pgVhostName db) "localhost" "127.0.0.1"];
+      })
+    homelabDatabases;
 
   systemd.services =
     # Secret-consuming servers must wait for agenix to place the credentials.
-    lib.genAttrs ["pbsmcp-server" "pgmcp-server" "hamcp-server"] (_: {
+    lib.genAttrs (["pbsmcp-server" "pgmcp-server" "hamcp-server"]
+      ++ map pgUnitName (builtins.attrNames homelabDatabases)) (_: {
       wants = ["agenix.target"];
       after = ["agenix.target"];
       # See secretNonce above: forces a restart when a secret is re-encrypted.

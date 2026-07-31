@@ -40,13 +40,6 @@
     group = "postgres";
   };
 
-  # Buildbot database password
-  age.secrets.buildbot-db-password = {
-    file = ../../secrets/buildbot-db-password.age;
-    owner = "postgres";
-    group = "postgres";
-  };
-
   # RomM database password
   age.secrets.romm-db-password = {
     file = ../../secrets/romm-db-password.age;
@@ -66,6 +59,15 @@
   # (root-owned 0400 by default is fine: systemd reads them during unit setup).
   age.secrets.pgadmin-pwd.file = ../../secrets/pgadmin-pwd.age;
   age.secrets.pgadmin-oauth2-secret.file = ../../secrets/pgadmin-oauth2-secret.age;
+
+  # Password for the read-only `mcp` role consumed by the pgmcp MCP servers on
+  # the mcp host. The same password is embedded in each pg-mcp-<db>-url.age
+  # secret over there — rotating it means re-encrypting all of them.
+  age.secrets.pgmcp-role-password = {
+    file = ../../secrets/pgmcp-role-password.age;
+    owner = "postgres";
+    group = "postgres";
+  };
 
   # postgres superuser password so TCP clients (pgAdmin, etc.) can authenticate
   # over scram-sha-256 as a full DBA. The passwordless `peer` rule only covers the
@@ -109,7 +111,7 @@
     '';
 
     # Initial databases (names must match usernames when using ensureDBOwnership)
-    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo" "buildbot" "romm" "hofvarpnir"];
+    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo" "romm" "hofvarpnir"];
 
     # Initial users
     ensureUsers = [
@@ -126,10 +128,6 @@
         ensureDBOwnership = true;
       }
       {
-        name = "buildbot";
-        ensureDBOwnership = true;
-      }
-      {
         name = "romm";
         ensureDBOwnership = true;
       }
@@ -137,7 +135,41 @@
         name = "hofvarpnir";
         ensureDBOwnership = true;
       }
+      # Read-only role for the pgmcp MCP servers. No ensureDBOwnership: it owns
+      # nothing and must never create anything. CONNECT is granted to PUBLIC on
+      # every database by default, so this role reaches all of them; read access
+      # comes from pg_read_all_data below.
+      {
+        name = "mcp";
+      }
     ];
+  };
+
+  # Set the password and read-only grants for the pgmcp `mcp` role.
+  systemd.services.postgresql-mcp-password = {
+    description = "Set pgmcp PostgreSQL role password and read-only grants";
+    # Depends on postgresql.service, not postgresql-ensure-users.service (which
+    # does not exist in this nixpkgs); ensureUsers runs in postgresql.service's
+    # postStart, so the role exists once that unit is up.
+    after = ["postgresql.service" "agenix.service"];
+    requires = ["postgresql.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "postgres";
+    };
+    # pg_read_all_data is a cluster-wide predefined role (PG14+): membership
+    # grants SELECT on every table, view and sequence in *every* database,
+    # including ones created later, without per-database grants. Pairing it with
+    # a read-only default transaction means the role cannot write even if pgmcp
+    # ever sent something other than a SELECT.
+    script = ''
+      PASSWORD=$(cat ${config.age.secrets.pgmcp-role-password.path})
+      ${config.services.postgresql.package}/bin/psql -c "ALTER USER mcp WITH PASSWORD '$PASSWORD';"
+      ${config.services.postgresql.package}/bin/psql -c "GRANT pg_read_all_data TO mcp;"
+      ${config.services.postgresql.package}/bin/psql -c "ALTER ROLE mcp SET default_transaction_read_only = on;"
+    '';
   };
 
   # Set password for terraform user after PostgreSQL creates the user
@@ -177,23 +209,6 @@
     script = ''
       PASSWORD=$(cat ${config.age.secrets.forgejo-db-password.path})
       ${config.services.postgresql.package}/bin/psql -c "ALTER USER forgejo WITH PASSWORD '$PASSWORD';"
-    '';
-  };
-
-  # Set password for buildbot user after PostgreSQL creates the user
-  systemd.services.postgresql-buildbot-password = {
-    description = "Set Buildbot PostgreSQL user password";
-    after = ["postgresql.service" "agenix.service"];
-    requires = ["postgresql.service"];
-    wantedBy = ["multi-user.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "postgres";
-    };
-    script = ''
-      PASSWORD=$(cat ${config.age.secrets.buildbot-db-password.path})
-      ${config.services.postgresql.package}/bin/psql -c "ALTER USER buildbot WITH PASSWORD '$PASSWORD';"
     '';
   };
 
@@ -259,7 +274,7 @@
   # Backup configuration
   services.postgresqlBackup = {
     enable = true;
-    databases = ["appdb" "terraform" "forgejo" "buildbot" "romm" "hofvarpnir"];
+    databases = ["appdb" "terraform" "forgejo" "romm" "hofvarpnir"];
     location = "/var/backup/postgresql";
     startAt = "03:00";
     compression = "zstd";
