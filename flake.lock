@@ -432,11 +432,11 @@
         "rust-overlay": "rust-overlay_3"
       },
       "locked": {
-        "lastModified": 1785236119,
-        "narHash": "sha256-Oj3OAhDiUyUqrhVnmcIoaBjWiwIIdPMV1NPr0j1G7e0=",
-        "ref": "refs/heads/fix/pbs-mcp-logs",
-        "rev": "00267b7c59f0df72da98723ec02dba429176d157",
-        "revCount": 71,
+        "lastModified": 1785507148,
+        "narHash": "sha256-bWEzHEieed/9Vfvahr7KwgoEKv5LfyJVa3iumdCRedI=",
+        "ref": "refs/heads/main",
+        "rev": "2a0d2a91b69db09e20688ead06e6a7c28a7b166e",
+        "revCount": 74,
         "type": "git",
         "url": "file:///home/amadeus/code/rust/homelab-mcp-servers"
       },
