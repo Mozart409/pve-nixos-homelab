@@ -49,7 +49,56 @@ most important clue.
 | Verify job | `v-b4b3326e-0c8d`, schedule `sat 01:15` |
 | Notifications | Every failing run logs `queued notification (id=…)`. None have been seen. |
 
-## Status — DIAGNOSED 2026-08-01, fix not yet applied
+## Status — RESOLVED 2026-08-01
+
+**Fix applied and confirmed.** Verify job set to `read-threads=1` /
+`verify-threads=4`; a full `--ignore-verified false` pass at those settings
+returned **`TASK OK`, all 5 groups, 0 errors, 59 minutes** — the first genuinely
+clean verify on `r2-store` since at least April. All three snapshots that
+"failed" at 16 threads passed, `vm/4327` included.
+
+| Group | Chunk data read | Errors |
+| --- | --- | --- |
+| `ct/102` | 1.1 GB | 0 |
+| `ct/104` | 65 GB | 0 |
+| `vm/4323` | 10.4 GB | 0 |
+| `vm/4327` | 10.8 GB | 0 |
+| `vm/4341` | 8.3 GB | 0 |
+
+Beware the hollow green: a `Run Now` with **Skip Verified** on completed in
+**1 second** with `TASK OK`, having skipped every group as "recently verified" —
+*including the three that had just failed*. Only `--ignore-verified false`
+proves anything.
+
+### Also done 2026-08-01
+
+- **Retention raised off `keep-last=1`** — nightly job now `keep-daily=7` +
+  `keep-weekly=4`; immich job `keep-last=2` → `4`. One restore point was the
+  single largest real risk in this whole investigation.
+- **Notification delivery root-caused.** Postfix queue held deferred mail to
+  `amadeus@mozart409.com` failing with
+  `Name service error for name=mozart409.com type=MX: Host not found`. PBS was
+  generating notifications correctly for three months; **DNS MX resolution on the
+  PBS host** ate every one. `relayhost` empty, no `root:` alias. Queue flushed
+  (`postsuper -d ALL`, 5 messages).
+- **Rebuilt on a webhook:** target `ha-push` → `http://192.168.2.208:8123/api/webhook/pbs-notify`,
+  `default-matcher` retargeted to it, `mail-to-root` disabled.
+
+### Still open
+
+- [ ] **HA automation** (webhook_id `pbs-notify`) + endpoint **Test** — blocked
+      on Home Assistant being down (ConBee USB wedge).
+- [ ] **A second, HA-independent target.** Right now `ha-push` is the only
+      channel and it dies exactly when the homelab does. PBS's native **SMTP**
+      endpoint needs only an A record and credentials, so it dodges both the MX
+      bug and the HA dependency.
+- [ ] **Upgrade PBS 4.1.1 → 4.2.4** (Phase 3.2).
+- [ ] **`dig MX mozart409.com`** from the PBS host — A records resolve fine
+      (R2 works), so this is MX-specific and may affect other hosts.
+
+---
+
+## Original diagnosis (2026-08-01)
 
 **Root cause: the verify job's `read-threads = 16`.** PBS's default is **1**.
 Against an S3 backend, 16 concurrent chunk reads produce a small but steady rate
