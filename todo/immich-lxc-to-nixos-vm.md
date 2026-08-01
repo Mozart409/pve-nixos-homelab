@@ -27,15 +27,38 @@ For contrast, on the same pool the same night:
 This gets strictly worse as the library grows, and it is what saturates the pool
 into the morning — see the related storage work below.
 
+### Re-measured 2026-08-01 (PBS task times, `03:00` job)
+
+The gap widened once the VMs had warm dirty bitmaps, and the run picked up a
+**fourth** VM (`vm/4341`, forgejo) whose first-ever backup gives us the number
+this document was previously only estimating.
+
+| Guest | Type | Method | Duration |
+| --- | --- | --- | --- |
+| `ct/102` | container | pxar, file-level | 7 min |
+| `vm/4323` | VM | block-level, **incremental** | **7 min** |
+| `vm/4327` | VM | block-level, **incremental** | **7 min** |
+| `vm/4341` | VM | block-level, **first-ever full** | **16 min** |
+| **`ct/104` (immich)** | **container** | **pxar, file-level** | **8 h 32 m** (2026-07-28, `OK`) |
+
+Two things this settles:
+
+- **The Jul 28 run did finish** — 01:38 → 10:11 UTC, status `OK`, 8 h 32 m. The
+  "unfinished" note above was written while it was still running. So 8.5 h is
+  the *completion* time for a 74 GiB library, not a floor.
+- **`vm/4341` is the cold-cache datapoint.** A 40 GiB disk, no dirty bitmap, full
+  block read: **16 minutes**. See the revised dirty-bitmap risk below.
+
 **Live facts (verified 2026-07-28):**
 
 | Fact | Value |
 | --- | --- |
-| Last complete snapshot | `ct/104` @ 2026-07-27 01:13:46 UTC |
-| `root.pxar.didx` | **79,383,215,582 B ≈ 74 GiB** (OS + library) |
+| Last complete snapshot | `ct/104` @ **2026-07-28 01:38:15 UTC** — the only one in the datastore, and it **fails verification** (see below) |
+| `root.pxar.didx` | **79,395,864,927 B ≈ 74 GiB** (OS + library) |
 | `catalog.pcat1.didx` | 29.7 MB — a very large catalog, i.e. a very high file count |
 | Backup target | `pbs-r2` datastore (`r2-store`), selection `104` |
-| Backup schedule | **`sun 01:00`** — moved off daily 2026-07-28 to stop the daily morning stall. An ~18 h run starting Sunday 01:00 still saturates the pool until ~19:00 Sunday. |
+| Backup schedule | **`sun 01:00`**, retention **keep-last=2** — moved off daily 2026-07-28 to stop the daily morning stall. An ~8.5 h run starting Sunday 01:00 saturates the pool until mid-morning Sunday. First run on the new schedule is **2026-08-02 01:00**. |
+| Verification state | **`failed`** — `root.pxar.didx`, 3 chunks could not be verified (verify job 2026-08-01). The single existing immich snapshot is **not restorable**. |
 | immich on CT 104 | **3.0.3** — upgraded in place 2026-07-29 (was 2.7.5). **Same version as nixpkgs → the cutover is no longer a version jump.** |
 | Pool read ceiling | ~1.15 MB/s @ ~39 IOPS, ~30 KB avg read |
 | immich in pinned nixpkgs | **3.0.3** (`services.immich` available) — verified `nix eval` 2026-07-29 |
@@ -66,6 +89,14 @@ Postgres major, and the vchord version** need to line up.
 
 What is now left is ordinary work: provision the VM (Phase 1), stand up a clean
 immich (Phase 2), move the data (Phase 3), cut over (Phase 4).
+
+**2026-08-01: re-measured against live PBS data.** The case is stronger than
+when this was written — see the re-measured table above. `vm/4341`'s first-ever
+backup supplies the cold-cache number the Risks section was estimating, and it
+retires the dirty-bitmap caveat outright. One thing got *worse*, though: the
+single existing `ct/104` snapshot now **fails verification**, so the migration's
+fallback position is gone. Immich has no restorable backup until either the
+2026-08-02 run produces a clean one or the VM is stood up. Still not started.
 
 ---
 
@@ -248,14 +279,23 @@ immich (Phase 2), move the data (Phase 3), cut over (Phase 4).
 - [ ] **4.3** Confirm the Prometheus target is UP and the node appears on the
   dashboard.
 - [ ] **4.4** Let the VM run a week with backups verified green, **then** destroy
-  CT 104 and reclaim its storage. Keep the last pxar snapshot until you are sure.
+  CT 104 and reclaim its storage. ~~Keep the last pxar snapshot until you are
+  sure.~~ **That safety net does not exist** — the last pxar snapshot fails
+  verification (see Risks). Until the VM has its own verified-green backup, the
+  running CT 104 filesystem *is* the only copy. Treat 4.4 as a hard gate.
 
 ---
 
 ## Verification
 
 - First VM backup completes in **minutes, not hours** — the whole point.
-- A second consecutive backup is faster still (dirty bitmap warm).
+  Concrete target from the 2026-08-01 measurements: **≲30 min** for the first
+  (cold, no bitmap) run, benchmarked against `vm/4341`'s 16 min for 40 GiB.
+  Anything approaching an hour means something is wrong.
+- A second consecutive backup is faster still (dirty bitmap warm) — the other
+  VMs land at **~7 min**; expect immich in that range once incremental.
+- **The backup verifies green.** New criterion — the current pxar snapshot does
+  not, so "it completed" is not sufficient evidence that it is restorable.
 - `rate(node_pressure_io_waiting_seconds_total{instance="pve-gigabyte"}[15m])`
   no longer shows the multi-hour morning plateau.
 - Photo/album/face counts match pre-migration.
@@ -277,9 +317,18 @@ immich (Phase 2), move the data (Phase 3), cut over (Phase 4).
   things must line up at restore: immich version (3.0.3 both sides — hold it
   there), Postgres major (0.1b), and `vchord` version (0.1a; nixpkgs has 1.1.1,
   and a mismatch means a manual `REINDEX` in 3.5, not a failure).
-- **Dirty bitmaps are lost on VM shutdown or host reboot**, so an occasional full
-  sequential read of the disk still happens. That is ~1 h/TB sequential on this
-  pool — vastly better than 18 h random, but not free.
+- ~~**Dirty bitmaps are lost on VM shutdown or host reboot**, so an occasional
+  full sequential read of the disk still happens.~~ **Measured 2026-08-01 and
+  effectively retired.** `vm/4341`'s first-ever backup — no bitmap, full block
+  read of a 40 GiB disk — took **16 minutes**. Extrapolated to an ~80 GiB immich
+  VM that is roughly **30 minutes cold**, against 8 h 32 m for the current pxar
+  walk. The worst case after migration beats the best case before it by ~17×.
+  Post-reboot full runs are a non-event, not a caveat.
+- **The existing pxar snapshot is corrupt.** `ct/104`'s only snapshot fails
+  verification (3 bad chunks in `root.pxar.didx`). Immich currently has **no
+  restorable backup at all**, which raises the stakes on Phase 3: the source LXC
+  is the only copy of the library until the VM is populated and verified. Do not
+  destroy or repurpose anything on CT 104 during cutover.
 - **This does not make immich faster.** The photos stay on the same 2 HDDs.
   Thumbnail generation, ML jobs, and library scans are random-IO heavy and will
   be exactly as slow as they are today. The migration fixes the *backup*
@@ -299,3 +348,12 @@ way:
   workload. Moves metadata and small blocks off the HDDs, which speeds up the
   pxar walk, immich's own thumbnail/scan work, and every other VM on the host.
   Cheaper and lower-risk than this migration; consider doing it first.
+  (Superseded by [`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md),
+  which chose a separate `ssd_pool` over a `special` vdev — see its Decisions.)
+
+## Unrelated to speed, but affects this plan
+
+[`pbs-verify-failures.md`](./pbs-verify-failures.md) — `r2-store` verification
+has failed **every week since April**, on rotating guests, `ct/104` among them.
+That is why this document's fallback snapshot is untrustworthy. It is a
+correctness problem on a different axis and **this migration does not fix it**.
