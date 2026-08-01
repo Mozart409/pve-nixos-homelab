@@ -58,7 +58,7 @@ Two things this settles:
 | `catalog.pcat1.didx` | 29.7 MB — a very large catalog, i.e. a very high file count |
 | Backup target | `pbs-r2` datastore (`r2-store`), selection `104` |
 | Backup schedule | **`sun 01:00`**, retention **keep-last=2** — moved off daily 2026-07-28 to stop the daily morning stall. An ~8.5 h run starting Sunday 01:00 saturates the pool until mid-morning Sunday. First run on the new schedule is **2026-08-02 01:00**. |
-| Verification state | **`failed`** — `root.pxar.didx`, 3 chunks could not be verified (verify job 2026-08-01). The single existing immich snapshot is **not restorable**. |
+| Verification state | **Clean — the earlier `failed` flag was a false alarm.** Re-verified 2026-08-01 at `--read-threads 1`: **0 errors** across all 74 GiB. The weekly job's `read-threads=16` was manufacturing phantom chunk errors on an S3 backend. See [`pbs-verify-failures.md`](./pbs-verify-failures.md). |
 | immich on CT 104 | **3.0.3** — upgraded in place 2026-07-29 (was 2.7.5). **Same version as nixpkgs → the cutover is no longer a version jump.** |
 | Pool read ceiling | ~1.15 MB/s @ ~39 IOPS, ~30 KB avg read |
 | immich in pinned nixpkgs | **3.0.3** (`services.immich` available) — verified `nix eval` 2026-07-29 |
@@ -93,10 +93,11 @@ immich (Phase 2), move the data (Phase 3), cut over (Phase 4).
 **2026-08-01: re-measured against live PBS data.** The case is stronger than
 when this was written — see the re-measured table above. `vm/4341`'s first-ever
 backup supplies the cold-cache number the Risks section was estimating, and it
-retires the dirty-bitmap caveat outright. One thing got *worse*, though: the
-single existing `ct/104` snapshot now **fails verification**, so the migration's
-fallback position is gone. Immich has no restorable backup until either the
-2026-08-02 run produces a clean one or the VM is stood up. Still not started.
+retires the dirty-bitmap caveat outright. A verification scare the same day —
+the `ct/104` snapshot appearing corrupt — was **chased down and dismissed**: the
+weekly verify job runs `read-threads=16` against the S3 backend and fabricates
+chunk errors. Re-verified single-threaded, 0 errors. Immich's backup is intact
+and the migration's fallback position holds. Still not started.
 
 ---
 
@@ -279,10 +280,9 @@ fallback position is gone. Immich has no restorable backup until either the
 - [ ] **4.3** Confirm the Prometheus target is UP and the node appears on the
   dashboard.
 - [ ] **4.4** Let the VM run a week with backups verified green, **then** destroy
-  CT 104 and reclaim its storage. ~~Keep the last pxar snapshot until you are
-  sure.~~ **That safety net does not exist** — the last pxar snapshot fails
-  verification (see Risks). Until the VM has its own verified-green backup, the
-  running CT 104 filesystem *is* the only copy. Treat 4.4 as a hard gate.
+  CT 104 and reclaim its storage. Keep the last pxar snapshot until you are sure
+  — and it **is** a real safety net: verified clean 2026-08-01 once the verify
+  job's bogus thread count was taken out of the picture.
 
 ---
 
@@ -324,11 +324,12 @@ fallback position is gone. Immich has no restorable backup until either the
   VM that is roughly **30 minutes cold**, against 8 h 32 m for the current pxar
   walk. The worst case after migration beats the best case before it by ~17×.
   Post-reboot full runs are a non-event, not a caveat.
-- **The existing pxar snapshot is corrupt.** `ct/104`'s only snapshot fails
-  verification (3 bad chunks in `root.pxar.didx`). Immich currently has **no
-  restorable backup at all**, which raises the stakes on Phase 3: the source LXC
-  is the only copy of the library until the VM is populated and verified. Do not
-  destroy or repurpose anything on CT 104 during cutover.
+- ~~**The existing pxar snapshot is corrupt.**~~ **Withdrawn same day.** The
+  `failed` verification state was an artifact of the verify job's
+  `read-threads=16` against the S3 backend, not damage. Re-verified single-
+  threaded on 2026-08-01: **0 errors**. Immich *does* have a restorable backup.
+  The ordinary Phase 3 care still applies — keep CT 104 intact until the VM is
+  populated and verified — but there is no elevated risk here.
 - **This does not make immich faster.** The photos stay on the same 2 HDDs.
   Thumbnail generation, ML jobs, and library scans are random-IO heavy and will
   be exactly as slow as they are today. The migration fixes the *backup*
@@ -351,9 +352,11 @@ way:
   (Superseded by [`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md),
   which chose a separate `ssd_pool` over a `special` vdev — see its Decisions.)
 
-## Unrelated to speed, but affects this plan
+## Unrelated to speed — resolved, no longer affects this plan
 
 [`pbs-verify-failures.md`](./pbs-verify-failures.md) — `r2-store` verification
-has failed **every week since April**, on rotating guests, `ct/104` among them.
-That is why this document's fallback snapshot is untrustworthy. It is a
-correctness problem on a different axis and **this migration does not fix it**.
+failed **every week since April**, `ct/104` among the rotating victims.
+**Diagnosed 2026-08-01: the verify job's `read-threads=16` against the S3
+backend, not data corruption.** The backups were always fine. Recorded here only
+so the next reader does not re-panic at a `failed` verification flag on this
+datastore.
