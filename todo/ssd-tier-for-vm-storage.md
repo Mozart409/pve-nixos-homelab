@@ -62,8 +62,26 @@ already done during the investigation:
 - ✅ `zfs_arc_max` raised **3 GiB → 8 GiB** (live + `/etc/modprobe.d/zfs.conf` +
   `update-initramfs -u -k all`). Host boots plain GRUB; `proxmox-boot-tool` is
   not configured. **Outside this repo and OpenTofu** — `iac-apply` cannot wipe it.
-- ✅ PBS services restarted — it was running **4.1.1 with 4.2.3-1 installed**
-  (never restarted after an `apt` upgrade).
+- ❌ ~~PBS services restarted — it was running **4.1.1 with 4.2.3-1 installed**
+  (never restarted after an `apt` upgrade).~~ **This was a misreading. Corrected
+  2026-08-01.** `proxmox-backup-manager version` prints
+  `<package> <AVAILABLE version> running version: <RUNNING version>` — so
+  "`4.2.4-1 running version: 4.1.1`" never meant a newer package was sitting
+  installed-but-not-loaded. Verified on the host:
+
+  | Check | Result |
+  | --- | --- |
+  | `dpkg -l \| grep proxmox-backup-server` | `4.1.1-1` |
+  | `apt policy proxmox-backup-server` | **Installed `4.1.1-1`, Candidate `4.2.4-1`** |
+  | Last dpkg upgrade | **2026-01-12**, 4.0.14-1 → 4.1.1-1 |
+  | Both daemons' start time | 2026-07-29 12:43:23 CEST (clean, simultaneous) |
+
+  Installed and running agree at 4.1.1. **The restart fixed a problem that did
+  not exist.** The real finding is different and larger: **PBS has not been
+  upgraded since January 2026** and is four releases behind (4.2.1 → 4.2.4).
+  Tracked in [`pbs-verify-failures.md`](./pbs-verify-failures.md) — the S3
+  datastore backend is a young feature and this store has been running
+  seven-month-old code against it the entire time.
 
 Also already mitigated, separately: the immich backup moved from daily to
 `sun 01:00`, which took the 8-hour pool saturation from every night to once a
