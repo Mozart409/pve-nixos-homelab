@@ -81,20 +81,54 @@ proves anything.
   generating notifications correctly for three months; **DNS MX resolution on the
   PBS host** ate every one. `relayhost` empty, no `root:` alias. Queue flushed
   (`postsuper -d ALL`, 5 messages).
-- **Rebuilt on a webhook:** target `ha-push` → `http://192.168.2.208:8123/api/webhook/pbs-notify`,
-  `default-matcher` retargeted to it, `mail-to-root` disabled.
+- **Rebuilt on a webhook — WORKING end to end.** Target `ha-push` →
+  `http://192.168.2.208:8123/api/webhook/pbs-notify`, `default-matcher`
+  retargeted to it, `mail-to-root` disabled. HA automation routes by severity:
+  everything to the notification panel, `error`/`warning` also push to the phone.
+- **Upgraded PBS 4.1.1 → 4.2.4** — installed and running now agree.
+
+### ⚠️ The webhook JSON-escaping trap (cost an hour)
+
+The obvious body template is **broken** and fails *silently*:
+
+```
+{"title": "{{ title }}", "message": "{{ message }}", "severity": "{{ severity }}"}
+```
+
+PBS messages contain **raw newlines** — even its own test message ends with one —
+and a literal control character inside a JSON string is invalid JSON. HA accepts
+the POST (`200 OK` at the HTTP layer), fails to parse the body, and **never fires
+the trigger**. Nothing is logged on either side. `curl` with a hand-written
+payload works fine, which makes it look like a PBS dispatcher bug; it is not.
+
+**Use the `json` helper — no quotes around the values, it supplies them:**
+
+```
+{"title": {{ json title }}, "message": {{ json message }}, "severity": {{ json severity }}}
+```
+
+This matters far beyond the Test button: a verify failure lists each failed
+snapshot on its own line, so **every alert worth having would have vanished**.
+
+Diagnosis that cracked it: `timeout 30 tcpdump -i any -n -A 'host <ha-ip> and port 8123'`
+while pressing Test — the raw request body is visible immediately. Reach for that
+before assuming a dispatcher bug; both PBS's logs and HA's were silent.
 
 ### Still open
 
-- [ ] **HA automation** (webhook_id `pbs-notify`) + endpoint **Test** — blocked
-      on Home Assistant being down (ConBee USB wedge).
-- [ ] **A second, HA-independent target.** Right now `ha-push` is the only
-      channel and it dies exactly when the homelab does. PBS's native **SMTP**
+- [ ] **A second, HA-independent target.** `ha-push` is the only channel and it
+      dies exactly when the homelab does — as it did today. PBS's native **SMTP**
       endpoint needs only an A record and credentials, so it dodges both the MX
       bug and the HA dependency.
-- [ ] **Upgrade PBS 4.1.1 → 4.2.4** (Phase 3.2).
-- [ ] **`dig MX mozart409.com`** from the PBS host — A records resolve fine
-      (R2 works), so this is MX-specific and may affect other hosts.
+- [x] **`dig MX mozart409.com`** — resolves fine (Proton MX, 300s TTL). Not
+      MX-specific: the failures were **intermittent**, and PBS's sole resolver is
+      **`100.100.100.100`** (Tailscale MagicDNS). Since PBS reaches R2 through
+      that same resolver, this is a latent single point of failure *under the
+      backups*. Split out into
+      [`dns-tailscale-spof.md`](./dns-tailscale-spof.md).
+- [ ] **Post-reboot fleet check** — `pgadmin.service` blocked the `database` VM's
+      boot for ~3 min and Caddy failed 5× before recovering. Probably cold-start
+      races; confirm they are not permanent.
 
 ---
 
