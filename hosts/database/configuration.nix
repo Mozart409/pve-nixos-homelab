@@ -54,6 +54,14 @@
     group = "postgres";
   };
 
+  # attic (binary cache index) database password. The same password is embedded
+  # in attic-db-url.age on the cache host — rotating it means re-encrypting both.
+  age.secrets.attic-db-password = {
+    file = ../../secrets/attic-db-password.age;
+    owner = "postgres";
+    group = "postgres";
+  };
+
   # pgAdmin initial (internal fallback) admin password and Pocket-ID OAuth2 client
   # secret. Both are consumed by the pgAdmin service below via systemd credentials
   # (root-owned 0400 by default is fine: systemd reads them during unit setup).
@@ -111,7 +119,7 @@
     '';
 
     # Initial databases (names must match usernames when using ensureDBOwnership)
-    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo" "romm" "hofvarpnir"];
+    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo" "romm" "hofvarpnir" "attic"];
 
     # Initial users
     ensureUsers = [
@@ -133,6 +141,12 @@
       }
       {
         name = "hofvarpnir";
+        ensureDBOwnership = true;
+      }
+      # atticd on the cache host. Owns its database because sea-orm runs schema
+      # migrations at startup, so it needs DDL rights, not just DML.
+      {
+        name = "attic";
         ensureDBOwnership = true;
       }
       # Read-only role for the pgmcp MCP servers. No ensureDBOwnership: it owns
@@ -176,6 +190,24 @@
       ${config.services.postgresql.package}/bin/psql -c "ALTER USER mcp WITH PASSWORD '$PASSWORD';"
       ${config.services.postgresql.package}/bin/psql -c "GRANT pg_read_all_data TO mcp;"
       ${config.services.postgresql.package}/bin/psql -c "ALTER ROLE mcp SET default_transaction_read_only = on;"
+    '';
+  };
+
+  # Set password for the attic user after PostgreSQL creates it.
+  systemd.services.postgresql-attic-password = {
+    description = "Set attic PostgreSQL user password";
+    # See the ordering gotcha on postgresql-mcp-password above.
+    after = ["postgresql-setup.service" "agenix.service"];
+    requires = ["postgresql-setup.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "postgres";
+    };
+    script = ''
+      PASSWORD=$(cat ${config.age.secrets.attic-db-password.path})
+      ${config.services.postgresql.package}/bin/psql -c "ALTER USER attic WITH PASSWORD '$PASSWORD';"
     '';
   };
 

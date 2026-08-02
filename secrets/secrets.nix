@@ -26,6 +26,8 @@ let
 in {
   # keep-sorted start
 
+  "attic-db-password.age".publicKeys = [amadeus amadeusAge hostDatabase]; # raw password; same value inside attic-db-url.age
+  "attic-db-url.age".publicKeys = [amadeus amadeusAge hostCache]; # env-file: ATTIC_SERVER_DATABASE_URL=postgresql://...
   "attic-push-token.age".publicKeys = [amadeus amadeusAge hostDevelopment]; # plain JWT, not KEY=value
   "attic-server-token.age".publicKeys = [amadeus amadeusAge hostCache];
   "axon-gateway-env.age".publicKeys = [amadeus amadeusAge hostContainers hostHermes hostDevelopment hostZeroclaw];
