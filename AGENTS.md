@@ -150,6 +150,49 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
         (redirect to login) and `406` (MCP endpoints needing an `Accept` header)
         are also healthy — `000` means down or a TLS-trust failure.
 
+6.  **Git Remotes: GitHub Is a Manual Mirror — Check It and Say So**
+
+    There are two remotes, and they are **not** kept in sync automatically.
+    Server-side push mirroring is deliberately **not** configured.
+
+    -   `origin` → Forgejo (`forgejo.homelab.local:2222`). **Canonical.** All
+        agent commits, branches and PRs go here, and only here.
+    -   `github` → `https://github.com/Mozart409/pve-nixos-homelab.git`.
+        A mirror that only ever advances when a human pushes to it, so it
+        silently falls behind.
+
+    **At the end of any task that produced commits, check the gap and tell the
+    user.** Agents push to Forgejo only — never push to `github` yourself.
+
+    ```bash
+    git status --short                       # working tree clean? anything unstaged?
+    git fetch github                         # refresh the mirror's ref
+    git log --oneline github/main..main      # commits GitHub is missing
+    ```
+
+    If `github/main..main` is non-empty, end the task with an explicit nudge,
+    e.g. *"GitHub is 3 commits behind Forgejo — run `git push github main` to
+    sync it."* Report the count and let the user run it.
+
+    **Never add GitHub as a second push URL on `origin`.** It looks like free
+    mirroring and instead produces split-brain, because git does not push to
+    multiple URLs atomically:
+
+    -   Forgejo rejects the push (agents landed a PR, so it is ahead) while
+        GitHub accepts it. The remotes now disagree.
+    -   Git still records `origin/main` at the pushed SHA, because *one* URL
+        succeeded — poisoning the remote-tracking reflog.
+    -   `pull.rebase = true` is set, and `git pull --rebase` defaults to
+        `--fork-point`, which reads that reflog to decide which local commits
+        upstream has already seen. It finds the commit there, concludes upstream
+        dropped it deliberately, and **silently discards it** — no conflict, no
+        warning, the commit is simply gone from the rebased branch.
+
+    This cost a real commit on 2026-08-02 (`fix(cache): grant atticd secret
+    access by group`), which vanished from the working tree while still existing
+    on GitHub and in the reflog. Recover such a commit with
+    `git reflog` + `git cherry-pick <sha>`.
+
 ## 4. Key Technologies
 -   **NixOS**: Operating System.
 -   **Flakes**: Project structure and dependency management.
