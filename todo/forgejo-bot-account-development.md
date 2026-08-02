@@ -62,11 +62,22 @@ Then re-encrypt (from *inside* `secrets/` — AGENTS.md §6), keeping the
 ```bash
 curl -s -X POST https://forgejo.homelab.local/api/v1/user/repos \
   -H "Authorization: token $FORGEJO_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name":"REPO","private":false}' | jq -r .ssh_url
+  -d '{"name":"REPO","private":false}' \
+  | jq -r '.ssh_url | sub("homelab-forgejo\\.dropbear-butterfly\\.ts\\.net"; "forgejo.homelab.local")'
 ```
+
+The `sub()` is not cosmetic — see the `ssh_url` gotcha below.
 
 ## Gotchas hit while building this
 
+- **The `ssh_url` the API returns is unusable from homelab VMs.** It is built
+  from the forge's `ROOT_URL` (`homelab-forgejo.dropbear-butterfly.ts.net`), and
+  MagicDNS `*.ts.net` names do not resolve between homelab VMs (AGENTS.md §6) —
+  a `git clone` of it fails with `Name or service not known`. Substitute
+  `forgejo.homelab.local`, which resolves via the `dns` host and matches the
+  `~/.ssh/config` block. Left as-is rather than setting `server.SSH_DOMAIN` on
+  the forge, because the ts.net URL is the one that works from a laptop away
+  from the LAN — changing it would fix the VMs and break remote access.
 - The SSH user is **`forgejo`**, not `git` — `git@` is silently rejected.
 - `forgejo admin user create` has **no `--full-name` flag**; set the display name
   afterwards via `PATCH /api/v1/user/settings`.
