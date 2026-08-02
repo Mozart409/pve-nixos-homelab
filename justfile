@@ -123,3 +123,49 @@ rpi-flash device: clear
   @read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
   sudo dd if=result/sd-image/*.img of={{device}} bs=4096 conv=fsync status=progress
 
+# --- Attic binary cache (hosts/cache) -------------------------------------
+
+# ONE-TIME bootstrap: mint an admin token from the atticd signing secret, create
+# the `homelab` cache, and mark it public. Public means pulls need no
+# credentials, so consumers only need the public key in
+# modules/attic-cache.nix — no netrc or agenix secret on every host. Pushing
+# still requires the token this prints.
+attic-init:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  host=amadeus@192.168.2.175
+  echo "==> minting admin token on cache host"
+  # Heredoc via `sudo sh -s` so the token-minting script is not mangled by
+  # nested shell quoting. atticd-atticadm needs the RS256 secret that the
+  # systemd unit gets from environmentFile, hence sourcing it explicitly.
+  token=$(ssh "$host" 'sudo sh -s' <<'REMOTE' | tail -1
+  set -eu
+  set -a
+  . /run/agenix/attic-server-token
+  set +a
+  atticd-atticadm make-token --sub admin --validity 1y \
+    --pull '*' --push '*' --delete '*' \
+    --create-cache '*' --configure-cache '*' \
+    --configure-cache-retention '*' --destroy-cache '*'
+  REMOTE
+  )
+  echo "==> logging in and creating the 'homelab' cache"
+  ssh "$host" "attic login homelab https://cache.homelab.local '$token'"
+  ssh "$host" "attic cache create homelab || echo '(cache already exists)'"
+  ssh "$host" "attic cache configure homelab --public"
+  echo
+  echo "==> push token (store it; needed by any host that pushes):"
+  echo "$token"
+  echo
+  just attic-info
+
+# Print the cache's public signing key — the value that belongs in
+# modules/attic-cache.nix's `publicKey`.
+attic-info:
+  @ssh amadeus@192.168.2.175 "attic cache info homelab"
+
+# Push a closure to the cache. Defaults to this machine's current system.
+# Builds land in the local store first; this uploads them for everyone else.
+attic-push path="/run/current-system":
+  attic push homelab {{path}}
+
