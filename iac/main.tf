@@ -941,8 +941,12 @@ resource "proxmox_virtual_environment_vm" "development_vm" {
 
   keyboard_layout = "de"
 
+  # Several agent sessions routinely realise a flake devShell at the same time.
+  # Nix evaluation is single-threaded per eval, so concurrent cold devShells
+  # queue on cores rather than sharing them: 4 parallel evals on 2 vCPU drove
+  # load to 12.9. Sized for ~4-6 concurrent sessions with room for the agents.
   cpu {
-    cores = 2
+    cores = 6
     type  = "host"
   }
 
@@ -950,9 +954,16 @@ resource "proxmox_virtual_environment_vm" "development_vm" {
   # opencode peaked at 570 MB RSS with Claude Code not yet running, and /nix
   # alone consumed 21 GB. Claude Code (node) plus the bun-hosted opencode
   # plugins land here too, hence the headroom over that box's 2 GB.
+  #
+  # Raised from 4096 after concurrent devShell realisation pushed the working
+  # set to ~6.7 GB and exhausted all 4 GB of swap. Swap here is the btrfs
+  # swapfile from modules/disko-config.nix, backed by the 2-HDD zfs_pool, so
+  # swapping costs ~78 IOPS shared with every other VM - this host must have
+  # enough RAM to never reach for it. floating lets it balloon back down to
+  # 4 GB when the sessions are idle.
   memory {
-    dedicated = 4096
-    floating  = 2048
+    dedicated = 12288
+    floating  = 4096
   }
 
   disk {
