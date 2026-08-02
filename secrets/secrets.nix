@@ -26,6 +26,7 @@ let
 in {
   # keep-sorted start
 
+  "attic-push-token.age".publicKeys = [amadeus amadeusAge hostDevelopment]; # plain JWT, not KEY=value
   "attic-server-token.age".publicKeys = [amadeus amadeusAge hostCache];
   "axon-gateway-env.age".publicKeys = [amadeus amadeusAge hostContainers hostHermes hostDevelopment hostZeroclaw];
   "buildbot-db-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster];
