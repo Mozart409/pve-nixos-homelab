@@ -167,13 +167,13 @@ attic-info:
 # Push a closure to the cache. Defaults to this machine's current system.
 # Builds land in the local store first; this uploads them for everyone else.
 #
-# -j 1 on purpose. attic defaults to 5 parallel upload jobs, but atticd keeps its
-# index in SQLite (one writer at a time) on the cache VM's disk, which lives on
-# the 2-HDD zfs_pool shared by every VM (~78 IOPS total). Five writers queue
-# behind each other until the connection pool gives up, and the push dies with
-# `Database error: Failed to acquire connection from pool: Connection pool timed
-# out` — losing every path in flight. Serialized is slower but actually finishes,
-# and it stops a cache push from starving the other VMs of IO.
-attic-push path="/run/current-system" jobs="1":
+# `jobs` was pinned to 1 while atticd kept its index in SQLite: one writer at a
+# time on the 2-HDD zfs_pool (~78 IOPS cluster-wide) meant five parallel uploads
+# queued behind each other until the pool gave up, killing the push with
+# `Connection pool timed out` and `database is locked`. Since the index moved to
+# Postgres on the database host, attic's own default of 5 completes — the same
+# 15-minute window went from 19 pool timeouts to 1. Lower it again if a push
+# ever starts starving the other VMs of IO; the disks are still the ceiling.
+attic-push path="/run/current-system" jobs="5":
   attic push -j {{jobs}} homelab {{path}}
 
