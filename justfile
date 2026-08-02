@@ -166,6 +166,14 @@ attic-info:
 
 # Push a closure to the cache. Defaults to this machine's current system.
 # Builds land in the local store first; this uploads them for everyone else.
-attic-push path="/run/current-system":
-  attic push homelab {{path}}
+#
+# -j 1 on purpose. attic defaults to 5 parallel upload jobs, but atticd keeps its
+# index in SQLite (one writer at a time) on the cache VM's disk, which lives on
+# the 2-HDD zfs_pool shared by every VM (~78 IOPS total). Five writers queue
+# behind each other until the connection pool gives up, and the push dies with
+# `Database error: Failed to acquire connection from pool: Connection pool timed
+# out` — losing every path in flight. Serialized is slower but actually finishes,
+# and it stops a cache push from starving the other VMs of IO.
+attic-push path="/run/current-system" jobs="1":
+  attic push -j {{jobs}} homelab {{path}}
 
