@@ -41,6 +41,25 @@
     enabledCollectors = ["systemd" "processes"];
   };
 
+  # Compressed RAM swap, as the first line of defence under memory pressure.
+  #
+  # The only other swap here is the 4 GB btrfs swapfile from
+  # modules/disko-config.nix, which lives on the root disk — i.e. on the 2-HDD
+  # zfs_pool that backs every VM in the cluster (~78 IOPS total). When several
+  # agent sessions realise a devShell at once this host exhausted all 4 GB of
+  # it, and every page fault then competed for those IOPS, so a busy
+  # `development` degraded unrelated VMs. zram absorbs the same spike in RAM at
+  # zero IO cost.
+  #
+  # NixOS gives zram priority 5 against the swapfile's default, so the kernel
+  # fills zram first and only reaches for the disk once zram is full — which
+  # keeps the HDD path as a genuine last resort rather than the default.
+  zramSwap = {
+    enable = true;
+    algorithm = "zstd";
+    memoryPercent = 25;
+  };
+
   # Podman (+ Docker compat, container DNS) comes from ../../modules/podman.nix
 
   networking.firewall = {
@@ -141,6 +160,7 @@
   environment.systemPackages = with pkgs; [
     # keep-sorted start
     bat
+    btop
     # bun + nodejs: opencode's global plugins (~/.config/opencode/plugins/
     # moshi-hooks.ts, herdr-agent-state.js) import @opencode-ai/plugin and
     # bun:sqlite, and opencode bootstraps their node_modules on first run.
