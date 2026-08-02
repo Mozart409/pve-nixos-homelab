@@ -4,12 +4,24 @@
   pkgs,
   ...
 }: {
-  # Attic server token for admin operations
+  # Attic server token for admin operations (the RS256 signing secret).
+  #
+  # services.atticd runs with DynamicUser = true, so although its unit says
+  # User=atticd that account is transient — systemd materialises it at service
+  # start and it does NOT exist in /etc/passwd. Owning this secret by "atticd"
+  # therefore fails activation outright with `chown: invalid user:
+  # 'atticd:atticd'`, which is not recoverable at runtime.
+  #
+  # Grant access by group instead: a real group that the dynamic user joins via
+  # SupplementaryGroups below. That keeps DynamicUser's isolation instead of
+  # trading it away for a static account just to satisfy chown.
   age.secrets.attic-server-token = {
     file = ../../../secrets/attic-server-token.age;
-    owner = "atticd";
-    group = "atticd";
+    group = "atticd-secrets";
+    mode = "0440";
   };
+
+  users.groups.atticd-secrets = {};
 
   # Attic binary cache server
   services.atticd = {
@@ -55,11 +67,15 @@
     };
   };
 
-  # Ensure atticd data directories exist
-  systemd.tmpfiles.rules = [
-    "d /var/lib/atticd 0750 atticd atticd -"
-    "d /var/lib/atticd/storage 0750 atticd atticd -"
-  ];
+  # Let the transient atticd user read the signing secret above.
+  systemd.services.atticd.serviceConfig.SupplementaryGroups = ["atticd-secrets"];
+
+  # NB: no systemd.tmpfiles rules for /var/lib/atticd. The unit sets
+  # StateDirectory=atticd, and under DynamicUser systemd owns that path — real
+  # state lives in /var/lib/private/atticd with /var/lib/atticd as a symlink to
+  # it. Declaring `d /var/lib/atticd` would both fight that symlink and fail on
+  # the same non-existent atticd user as the secret did. atticd creates its own
+  # storage/ subdirectory beneath it.
 
   # `attic` (client) for cache administration — creating caches, minting push
   # tokens, reading the public signing key. `atticd-atticadm` ships with the
