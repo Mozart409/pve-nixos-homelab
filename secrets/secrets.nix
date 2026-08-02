@@ -32,6 +32,7 @@ in {
   "buildbot-webhook-secret.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster];
   "buildbot-worker-password.age".publicKeys = [amadeus amadeusAge hostBuildBotMaster hostBuildBotWorker1];
   "dashboard-env.age".publicKeys = [amadeus amadeusAge hostContainers];
+  "development-forgejo-token.age".publicKeys = [amadeus amadeusAge hostDevelopment];
   "development-opencode-zen-key.age".publicKeys = [amadeus amadeusAge hostDevelopment];
   "fleet-enroll-secret.age".publicKeys = users;
   "fleet-mysql-password.age".publicKeys = [amadeus amadeusAge hostFleet];

@@ -1,4 +1,8 @@
-{pkgs, ...}: {
+{
+  config,
+  pkgs,
+  ...
+}: {
   imports = [
     ../../modules/common.nix
     ../../modules/disko-config.nix
@@ -51,6 +55,35 @@
     ];
   };
 
+  # Forgejo access for Claude Code, which runs interactively as amadeus and
+  # pushes/creates repos as the `developmentbot` account. The keypair itself is
+  # a plain local credential at ~/.ssh/id_ed25519 (generated once on the host,
+  # public half registered on the account) — deliberately NOT an agenix secret:
+  # the repos live on Forgejo, so a wiped VM just registers a fresh key.
+  #
+  # NB: the SSH user is "forgejo" (the built-in Forgejo SSH server's user), NOT
+  # "git" — connecting as git@ is silently rejected. See AGENTS.md §7.
+  programs.ssh.extraConfig = ''
+    Host forgejo.homelab.local
+      Port 2222
+      User forgejo
+      IdentityFile ~/.ssh/id_ed25519
+      IdentitiesOnly yes
+      StrictHostKeyChecking accept-new
+  '';
+
+  # Commit identity, so a reinstall doesn't leave git prompting for one.
+  # Matches the bot account the SSH key authenticates as.
+  programs.git = {
+    enable = true;
+    config = {
+      user.name = "developmentbot";
+      user.email = "developmentbot@homelab.local";
+      init.defaultBranch = "main";
+      pull.rebase = true;
+    };
+  };
+
   # Moshi pairing token (plain raw text, NOT KEY=value — read directly by
   # modules/moshi-hook-user.nix's pair script). Owned by amadeus so
   # moshi-hook-setup (User=amadeus) can read it.
@@ -81,6 +114,29 @@
     mode = "0400";
   };
 
+  # Forgejo API token for the `developmentbot` account (env-file:
+  # FORGEJO_TOKEN=...). Needed ONLY to create repos over the REST API — git
+  # itself authenticates with the ~/.ssh/id_ed25519 key registered on that
+  # account, so losing this token costs nothing but a re-mint. Owned by amadeus
+  # because Claude Code runs interactively as amadeus.
+  age.secrets.development-forgejo-token = {
+    file = ../../secrets/development-forgejo-token.age;
+    owner = "amadeus";
+    mode = "0400";
+  };
+
+  # Export FORGEJO_TOKEN into every interactive login shell. `interactiveShellInit`
+  # is types.lines, so this MERGES with modules/coding-harness.nix's identical
+  # block for axon-gateway-env rather than conflicting. Gated on readability, so
+  # it's a silent no-op for any user other than the secret's owner.
+  environment.interactiveShellInit = ''
+    if [ -r "${config.age.secrets.development-forgejo-token.path}" ]; then
+      set -a
+      . "${config.age.secrets.development-forgejo-token.path}"
+      set +a
+    fi
+  '';
+
   # Development tools for experiments
   environment.systemPackages = with pkgs; [
     # keep-sorted start
@@ -95,7 +151,7 @@
     eza
     fd
     fzf
-    git
+    # git comes from programs.git above (which also writes /etc/gitconfig)
     htop
     httpie
     jq
