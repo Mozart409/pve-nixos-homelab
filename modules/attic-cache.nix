@@ -13,7 +13,7 @@
   # A wrong value here fails SILENTLY: nix rejects narinfos it cannot verify and
   # quietly falls back to building from source, so the cache appears to "work"
   # while doing nothing. If substitution seems to be ignored, check this first.
-  publicKey = "homelab:REPLACE_WITH_REAL_KEY";
+  publicKey = "homelab:aswnRAo2zbP13gGnUTCINX78X/lURQgPAfrgNpHpQpY=";
 in {
   # nixpkgs declares `substituters` with mkAfter and `trusted-public-keys` as a
   # plain list (nixos/modules/config/nix.nix), so both MERGE with the upstream
