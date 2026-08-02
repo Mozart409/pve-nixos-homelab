@@ -3,7 +3,35 @@
   lib,
   pkgs,
   ...
-}: {
+}: let
+  # Attic namespaces every binary-cache URL under the cache name:
+  # /{cache}/nix-cache-info, /{cache}/{hash}.narinfo, /{cache}/nar/{...}.
+  # So the only safe layout is "Garage claims /s3/*, atticd gets the rest" —
+  # an explicit allowlist of attic paths cannot work, because the cache name is
+  # the first segment and is not known here.
+  #
+  # This previously ended in `handle { respond "OK" 200 }`, which answered
+  # /{cache}/nix-cache-info itself: nix got the literal body "OK" where it
+  # expected cache metadata, and the cache silently never functioned.
+  cacheRouting = ''
+    # Garage S3 API
+    handle /s3/* {
+      uri strip_prefix /s3
+      reverse_proxy localhost:3900
+    }
+
+    # Health probe. Attic has no unauthenticated root route, so uptime checks
+    # need a path of their own rather than relying on a catch-all responder.
+    handle /health {
+      respond "OK" 200
+    }
+
+    # Everything else is atticd: /api/* plus every per-cache binary-cache path.
+    handle {
+      reverse_proxy localhost:8080
+    }
+  '';
+in {
   imports = [
     ../../modules/common.nix
     ../../modules/disko-config.nix
@@ -45,33 +73,7 @@
           get_certificate tailscale
         }
 
-        # Attic binary cache API
-        handle /api/* {
-          reverse_proxy localhost:8080
-        }
-
-        # Attic cache endpoints
-        handle /_nix-cache-info {
-          reverse_proxy localhost:8080
-        }
-
-        handle /*.narinfo {
-          reverse_proxy localhost:8080
-        }
-
-        handle /nar/* {
-          reverse_proxy localhost:8080
-        }
-
-        # Garage S3 API
-        handle /s3/* {
-          uri strip_prefix /s3
-          reverse_proxy localhost:3900
-        }
-
-        handle {
-          respond "OK" 200
-        }
+        ${cacheRouting}
       '';
     };
 
@@ -82,33 +84,7 @@
           ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
-        # Attic binary cache API
-        handle /api/* {
-          reverse_proxy localhost:8080
-        }
-
-        # Attic cache endpoints
-        handle /_nix-cache-info {
-          reverse_proxy localhost:8080
-        }
-
-        handle /*.narinfo {
-          reverse_proxy localhost:8080
-        }
-
-        handle /nar/* {
-          reverse_proxy localhost:8080
-        }
-
-        # Garage S3 API
-        handle /s3/* {
-          uri strip_prefix /s3
-          reverse_proxy localhost:3900
-        }
-
-        handle {
-          respond "OK" 200
-        }
+        ${cacheRouting}
       '';
     };
   };
