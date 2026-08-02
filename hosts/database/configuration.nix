@@ -421,6 +421,21 @@
     "oauth2_client_secret:${config.age.secrets.pgadmin-oauth2-secret.path}"
   ];
 
+  # pgadmin's ExecStartPre (`pgadmin4-cli setup-db`) needs far longer than
+  # systemd's default 90s TimeoutStartSec on this host, so the unit failed on
+  # essentially every deploy — always killed at exactly 90s, always in start-pre.
+  #
+  # It is not waiting on anything: pgAdmin's own config database is internal
+  # SQLite, so setup-db never contacts PostgreSQL. It is simply IO-bound. Merely
+  # loading the CLI (`pgadmin4-cli --help`, which does no database work at all)
+  # takes ~48s here — 1.7s of it user CPU, the rest waiting on the ~10k files of
+  # the pgadmin closure coming off the 2-HDD zfs_pool (~78 IOPS cluster-wide).
+  # Add any concurrent IO — a colmena apply, an attic push — and 90s is gone.
+  #
+  # Raising the timeout is the honest fix: the work genuinely takes this long,
+  # and it only runs at startup. It is not masking a hang.
+  systemd.services.pgadmin.serviceConfig.TimeoutStartSec = "10min";
+
   environment.etc."pgadmin/config_system.py".text = ''
     import os
     with open(os.path.join(os.environ['CREDENTIALS_DIRECTORY'], 'oauth2_client_secret')) as _f:
