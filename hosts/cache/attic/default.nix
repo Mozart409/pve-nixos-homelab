@@ -29,11 +29,37 @@
     DynamicUser = lib.mkForce false;
     User = "atticd";
     Group = "atticd";
+
+    # services.atticd.environmentFile is a single path, but the DB URL has to be
+    # a second file so it can be rotated independently of the signing secret.
+    # systemd applies EnvironmentFile entries in order, so both are loaded.
+    EnvironmentFile = lib.mkForce [
+      config.age.secrets.attic-server-token.path
+      config.age.secrets.attic-db-url.path
+    ];
   };
 
   # Attic server token for admin operations (the RS256 signing secret).
   age.secrets.attic-server-token = {
     file = ../../../secrets/attic-server-token.age;
+    owner = "atticd";
+    group = "atticd";
+    mode = "0400";
+  };
+
+  # PostgreSQL connection URL, as an env-file line:
+  #   ATTIC_SERVER_DATABASE_URL=postgresql://attic:<pw>@192.168.2.134/attic
+  #
+  # It lives in a secret rather than in `settings.database.url` below because
+  # settings are rendered into a world-readable /nix/store TOML — a password
+  # there would be readable by every user on this host. atticd reads this env
+  # var and it takes precedence over the TOML.
+  #
+  # The password is the same value as attic-db-password.age on the database
+  # host; rotating it means re-encrypting both, exactly like the pg-mcp-*-url
+  # secrets on the mcp host.
+  age.secrets.attic-db-url = {
+    file = ../../../secrets/attic-db-url.age;
     owner = "atticd";
     group = "atticd";
     mode = "0400";
@@ -76,10 +102,44 @@
         default-retention-period = "6 months";
       };
 
-      # Database configuration (SQLite by default)
-      database = {
-        url = "sqlite:///var/lib/atticd/server.db?mode=rwc";
-      };
+      # Database: PostgreSQL on the `database` host (192.168.2.134), NOT the
+      # module default of a local SQLite file.
+      #
+      # SQLite could not carry this workload. Every pushed path is its own
+      # transaction and SQLite allows a single writer, so attic's default 5
+      # parallel upload jobs serialised behind each other on the 2-HDD zfs_pool
+      # (~78 IOPS shared cluster-wide). Even 64-byte paths failed, with
+      # `Connection pool timed out` and `(code: 5) database is locked`.
+      # `synchronous=NORMAL` would have cut the per-commit fsync cost, but sqlx
+      # 0.9 rejects pragmas as connection-URL parameters (`unknown query
+      # parameter journal_mode`) and `synchronous` is per-connection state that
+      # cannot be set externally — so there was no way to reach it from config.
+      #
+      # Postgres removes the single-writer limit outright, and its WAL group
+      # commit folds many small transactions into far fewer fsyncs, which is the
+      # cost that actually hurt here. It does not raise the pool's IOPS ceiling
+      # — pushes are still bounded by the disks — but they stop *failing*.
+      #
+      # `database.url` must be ABSENT from the generated TOML, which is why this
+      # is an mkForce of the whole `database` attrset rather than simply not
+      # setting the key.
+      #
+      # attic declares the field as `#[serde(default =
+      # "load_database_url_from_env")]`: a TOML value always WINS, and
+      # ATTIC_SERVER_DATABASE_URL is consulted only when the key is missing. So
+      # any placeholder here silently defeats attic-db-url.age. Merely omitting
+      # it is not enough either — the NixOS module supplies
+      # `database.url = lib.mkDefault "sqlite:///var/lib/atticd/server.db"`,
+      # so leaving it unset quietly restores local SQLite (which is exactly what
+      # happened on the first attempt at this migration).
+      #
+      # With the attrset forced empty, the runtime URL comes from
+      # attic-db-url.age and attic panics with an explicit message if that env
+      # var is ever missing — it cannot fail silently back to SQLite.
+      #
+      # The build-time config check still passes: the module exports a throwaway
+      # ATTIC_SERVER_DATABASE_URL="sqlite://:memory:" just for it.
+      database = lib.mkForce {};
     };
   };
 
@@ -105,6 +165,7 @@
   # is otherwise unreadable on this host.
   environment.systemPackages = with pkgs; [
     attic-client
-    sqlite
+    sqlite # reading the pre-Postgres server.db (kept for the keypair migration)
+    postgresql # psql: this host's database is now remote, on the database host
   ];
 }
