@@ -103,6 +103,16 @@
     };
   };
 
+  # Per-project dev shells, entered automatically. Every repo under ~/code ships
+  # a flake.nix whose shellHook runs `lefthook install`, so without direnv the
+  # git hooks are never installed and tools like keep-sorted/cog/just aren't on
+  # PATH — commits then fail with "command not found". nix-direnv (enabled by
+  # default here) adds the eval cache and GC roots that make `use flake` usable.
+  programs.direnv = {
+    enable = true;
+    silent = true;
+  };
+
   # Moshi pairing token (plain raw text, NOT KEY=value — read directly by
   # modules/moshi-hook-user.nix's pair script). Owned by amadeus so
   # moshi-hook-setup (User=amadeus) can read it.
