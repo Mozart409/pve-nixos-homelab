@@ -60,4 +60,14 @@
     "d /var/lib/atticd 0750 atticd atticd -"
     "d /var/lib/atticd/storage 0750 atticd atticd -"
   ];
+
+  # `attic` (client) for cache administration — creating caches, minting push
+  # tokens, reading the public signing key. `atticd-atticadm` ships with the
+  # server and mints JWTs, but every cache-level operation goes through the
+  # client against the HTTP API. sqlite3 is here for inspecting server.db, which
+  # is otherwise unreadable on this host.
+  environment.systemPackages = with pkgs; [
+    attic-client
+    sqlite
+  ];
 }
