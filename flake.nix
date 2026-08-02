@@ -476,19 +476,19 @@
           ];
         };
 
-        # cache = {
-        #   deployment = {
-        #     targetHost = targetHost "cache";
-        #     targetUser = "amadeus";
-        #     buildOnTarget = false;
-        #     tags = ["cache" "s3" "nix"];
-        #   };
-        #   imports = [
-        #     disko.nixosModules.disko
-        #     agenix.nixosModules.default
-        #     ./hosts/cache/configuration.nix
-        #   ];
-        # };
+        cache = {
+          deployment = {
+            targetHost = targetHost "cache";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["cache" "s3" "nix"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/cache/configuration.nix
+          ];
+        };
 
         forgejo = {
           deployment = {
