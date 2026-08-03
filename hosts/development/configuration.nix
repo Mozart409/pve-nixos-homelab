@@ -12,6 +12,7 @@
     ../../modules/moshi-hook-user.nix
     ../../modules/coding-harness.nix
     ../../modules/herdr.nix
+    ../../modules/claude-permissions.nix
     ../../modules/claude-settings-verify.nix
     ../../modules/attic-cache.nix
   ];
