@@ -1,10 +1,17 @@
 {
   pkgs,
+  lib,
   config,
   ...
 }: let
   user = "amadeus";
   home = "/home/amadeus";
+
+  # Same list modules/claude-permissions.nix applies, so "what must be present"
+  # and "what gets written" cannot drift apart. Previously this module carried
+  # its own hand-maintained subset.
+  perms = import ./claude-permissions-data.nix;
+  denyArray = lib.concatMapStringsSep " " lib.escapeShellArg perms.deny;
 
   # Guardrail drift detection for ~/.claude/settings.json.
   #
@@ -31,19 +38,7 @@
         # Invalid JSON silently disables every setting in the file, deny included.
         problems+=("settings.json is not valid JSON — all its settings are disabled")
       else
-        required_deny=(
-          "Read(//home/amadeus/.ssh/**)"
-          "Read(//home/amadeus/.claude/.credentials.json)"
-          "Bash(rm -rf /*)"
-          "Bash(sudo rm *)"
-          "Bash(nixos-rebuild*)"
-          "Bash(sudo nixos-rebuild*)"
-          "Bash(nh os*)"
-          "Bash(sudo nh*)"
-          "Bash(home-manager switch*)"
-          "Bash(git push --force*)"
-          "Bash(gh pr merge*)"
-        )
+        required_deny=(${denyArray})
         for rule in "''${required_deny[@]}"; do
           if ! jq -e --arg r "$rule" '.permissions.deny // [] | index($r)' "$SETTINGS" >/dev/null 2>&1; then
             problems+=("deny rule missing: $rule")
@@ -104,11 +99,13 @@ in {
     description = "Verify ~/.claude/settings.json guardrails for ${user}";
     wantedBy = ["default.target"];
 
-    # The whole point: run *after* the two services that rewrite settings.json,
-    # so a clobber is caught on the same boot that causes it rather than on the
-    # next timer tick. After= on a non-existent unit is a no-op, so this stays
-    # valid if either module is not imported.
-    after = ["herdr-setup.service" "moshi-hook-setup.service"];
+    # The whole point: run *after* the services that rewrite settings.json, so a
+    # clobber is caught on the same boot that causes it rather than on the next
+    # timer tick. claude-permissions is last of those, and is what would have
+    # repaired a dropped deny list — so reaching here with problems means the
+    # repair itself did not stick, which is worth a notification. After= on a
+    # non-existent unit is a no-op, so this stays valid if a module is not imported.
+    after = ["herdr-setup.service" "moshi-hook-setup.service" "claude-permissions.service"];
 
     serviceConfig = {
       Type = "oneshot";
