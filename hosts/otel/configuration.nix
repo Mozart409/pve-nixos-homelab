@@ -420,6 +420,18 @@
           }
         ];
       }
+      # Woodpecker CI host exporters
+      {
+        job_name = "woodpecker-node";
+        static_configs = [
+          {
+            targets = ["192.168.2.186:9100"];
+            labels = {
+              instance = "homelab-woodpecker";
+            };
+          }
+        ];
+      }
       # Development host exporters
       {
         job_name = "development-node";
