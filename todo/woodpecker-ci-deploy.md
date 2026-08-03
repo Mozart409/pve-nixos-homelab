@@ -23,7 +23,7 @@ Woodpecker-related change: `webhook.ALLOWED_HOST_LIST`.
 
 `age.secrets.<n>.file` is a path literal, so a missing `.age` file is an eval
 error, not a runtime one. Both files are referenced by
-`hosts/forgejo/woodpecker/default.nix`.
+`hosts/woodpecker/configuration.nix`.
 
 This is a **new host**, so its SSH host key must exist first — nixos-anywhere
 generates a fresh one on every install, and agenix activation fails with
@@ -82,19 +82,20 @@ Copy the generated pair into `woodpecker-server-env.age` as
 registers per-repo, so `ci.homelab.local` is effectively permanent — changing it
 later means re-registering webhooks on every repo.
 
-## 3. Prometheus scrape — not wired up
+## 3. Prometheus — node metrics DONE, application metrics deferred
 
-`hosts/otel/configuration.nix` has no `woodpecker` job. The forgejo host's
-`forgejo-node` job already covers node-exporter metrics, so this is only about
-Woodpecker's *application* metrics (queue depth, running/pending pipelines).
+Already wired: `hosts/otel/configuration.nix` has a `woodpecker-node` job
+scraping `192.168.2.186:9100`, and `hosts/woodpecker/configuration.nix` enables
+the node exporter. Nothing to do for host-level metrics.
 
-Woodpecker's `/metrics` endpoint **does not exist unless**
+Still missing: Woodpecker's *application* metrics (queue depth, running/pending
+pipelines). Its `/metrics` endpoint **does not exist unless**
 `WOODPECKER_PROMETHEUS_AUTH_TOKEN` is set. To enable:
 
 1. Add `WOODPECKER_PROMETHEUS_AUTH_TOKEN` to `woodpecker-server-env.age`.
 2. Add a scrape config on otel with a bearer token — note this needs the token on
    the *otel* host too, so it wants its own `.age` file readable by prometheus,
-   not just the forgejo-side env file:
+   not just the woodpecker-side env file:
 
 ```nix
 {
@@ -112,8 +113,8 @@ Woodpecker's `/metrics` endpoint **does not exist unless**
 ```
 
 Deferred deliberately — it needs a third secret shared across two hosts. The
-service is not unmonitored in the meantime: the dashboard health check (already
-added) covers liveness.
+service is not unmonitored in the meantime: node metrics are scraped, and the
+dashboard health check (already added) covers liveness.
 
 ## 4. Deploy sequence
 
@@ -214,10 +215,6 @@ CI host rather than a degraded git forge — which is the whole point of the spl
 `nix flake check` on this repo is still a heavy job (it evaluates ~16 hosts and
 has been OOM-killed elsewhere); if it becomes a pipeline, watch the first runs
 and raise the VM's memory rather than the per-step cap.
-
-`nix flake check` on this repo is itself a heavy job — it evaluates ~16 hosts and
-has been OOM-killed on larger machines. Do **not** make that the first pipeline
-on a 1.5 GB VM; use a scoped per-host `nix eval` instead.
 
 ## 7. Known limitations
 
