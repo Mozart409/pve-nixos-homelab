@@ -94,6 +94,8 @@
           # Homelab services with step-ca certificates
           ''"ca.homelab.local. A 192.168.2.160"''
           ''"cache.homelab.local. A 192.168.2.175"''
+          # WOODPECKER_HOST -- the name baked into OAuth redirects and webhooks.
+          ''"ci.homelab.local. A 192.168.2.186"''
           ''"containers.homelab.local. A 192.168.2.149"''
           ''"dashboard.homelab.local. A 192.168.2.149"''
           ''"database.homelab.local. A 192.168.2.134"''
@@ -129,6 +131,7 @@
           ''"searxng.homelab.local. A 192.168.2.149"''
           ''"tempo.homelab.local. A 192.168.2.135"''
           ''"unifi.homelab.local. A 192.168.2.142"''
+          ''"woodpecker.homelab.local. A 192.168.2.186"''
           ''"wotan.homelab.local. A 192.168.2.71"''
           ''"zeroclaw.homelab.local. A 192.168.2.183"''
           # keep-sorted end
@@ -173,6 +176,8 @@
           ''"192.168.2.183 zeroclaw.homelab.local"''
           ''"192.168.2.184 development.homelab.local"''
           ''"192.168.2.185 scratchpad.homelab.local"''
+          ''"192.168.2.186 ci.homelab.local"''
+          ''"192.168.2.186 woodpecker.homelab.local"''
           ''"192.168.2.208 homeassistant.local"''
           ''"192.168.2.46 pve-gigabyte.local"''
           ''"192.168.2.71 wotan.homelab.local"''

@@ -513,6 +513,59 @@ More Jellyfin OIDC notes:
 - Plugin/OIDC settings, Known-proxies, and login-page branding live in Jellyfin's
   **mutable state**, not in Nix — they must be redone after a reprovision.
 
+### Woodpecker CI Needs Two Things Nix Cannot Declare
+
+Woodpecker runs on its **own** host (`hosts/woodpecker/`, 192.168.2.186), served
+at `https://ci.homelab.local`. Server and agent share that VM deliberately, so
+gRPC stays on loopback — it is authenticated by the shared agent secret but
+**not encrypted** (`WOODPECKER_GRPC_SECURE` defaults to false), so splitting them
+across hosts would put plaintext agent traffic on the LAN and require opening
+port 9000. Two setup steps live outside the repo:
+
+1. **The Forgejo OAuth2 application.** Forgejo has no declarative API for this.
+   Create it at `/user/settings/applications` (per-user) or
+   `/admin/settings/applications` (instance-wide) with redirect URI **exactly**
+   `https://ci.homelab.local/authorize`, then put the generated pair into
+   `secrets/woodpecker-server-env.age` as `WOODPECKER_FORGEJO_CLIENT` /
+   `WOODPECKER_FORGEJO_SECRET`.
+2. **`WOODPECKER_AGENT_SECRET` must be identical** in
+   `woodpecker-server-env.age` and `woodpecker-agent-env.age`
+   (`openssl rand -hex 32`). A mismatch shows up only as the agent failing to
+   register — the server starts fine and the UI looks healthy but no pipeline
+   ever picks up.
+
+`WOODPECKER_HOST` is baked into the OAuth redirect *and* into every webhook
+Woodpecker registers on a repo, so changing it later means re-registering
+webhooks on every repo. Treat `ci.homelab.local` as permanent.
+
+Gotchas that cost time on the podman-compose prototype and are already handled
+in the Nix config — do not "simplify" them away:
+
+- `services.forgejo.settings.webhook.ALLOWED_HOST_LIST` (on the **forgejo** host)
+  must include `ci.homelab.local`. Forgejo refuses to deliver webhooks to private
+  addresses by default, so without it pushes **silently** never trigger a
+  pipeline. This is the only Woodpecker-related setting outside `hosts/woodpecker/`.
+- The agent is **not** a container — it is a native systemd unit running the
+  `woodpecker-agent` binary. Only the pipeline *step* containers are containers,
+  and the agent creates them by asking podman over its socket. That socket is
+  effectively root on the VM, which is why `WOODPECKER_OPEN = "false"` matters
+  and why this does not live on the git forge.
+- The agent runs as a **static** `woodpecker-agent` user with
+  `DynamicUser`/`PrivateUsers` forced off. The module's default `DynamicUser`
+  implies a user namespace in which the `podman` supplementary group no longer
+  matches the socket owner, and every docker-API call fails with a permission
+  error.
+- `WOODPECKER_AGENT_CONFIG_FILE` points into the agent's `StateDirectory`. Its
+  default (`/etc/woodpecker/agent.conf`) is unwritable under
+  `ProtectSystem=strict`; the failure is non-fatal, so the symptom is instead a
+  **new agent registered on every restart**, piling up dead agents in the UI.
+- `WOODPECKER_BACKEND_DOCKER_VOLUMES` mounts the host CA bundle into every step
+  container. Pipeline clone steps hit `forgejo.homelab.local`, whose step-ca
+  cert is not in the stock image trust store — without it the clone dies with
+  `x509: certificate signed by unknown authority`.
+- Rootless podman + `docker:dind`-style plugins do not work. Use Buildah or
+  Kaniko for image builds.
+
 ## 7. Hermes Agent Access to This Repo (feature-branch dev)
 
 The Hermes agent (driven from Open WebUI) can develop changes to *this* repo. Under
