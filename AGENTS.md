@@ -515,7 +515,7 @@ More Jellyfin OIDC notes:
 
 ### Woodpecker CI Needs Two Things Nix Cannot Declare
 
-Woodpecker runs on its **own** host (`hosts/woodpecker/`, 192.168.2.190), served
+Woodpecker runs on its **own** host (`hosts/woodpecker/`, 192.168.2.182), served
 at `https://ci.homelab.local`. Server and agent share that VM deliberately, so
 gRPC stays on loopback — it is authenticated by the shared agent secret but
 **not encrypted** (`WOODPECKER_GRPC_SECURE` defaults to false), so splitting them

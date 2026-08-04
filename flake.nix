@@ -133,7 +133,7 @@
         tailscale = "homelab-zeroclaw";
       };
       woodpecker = {
-        local = "192.168.2.190";
+        local = "192.168.2.182";
         tailscale = "homelab-woodpecker";
       };
       # Raspberry Pi hosts (update IP after first boot)
