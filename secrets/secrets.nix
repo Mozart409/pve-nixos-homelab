@@ -20,8 +20,9 @@ let
   hostMcp = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGkfmvav5dWx4dAbDHcJSuKG32GSmdVdOK+uQ1xjCtse root@homelab-mcp";
   hostOtel = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGz4mCD5XyFkwVaSzzWHhral8WqMGo01nKZM3gAX2vzP amadeus@homelab-otel";
   hostUnifi = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG1dva0wW3yY7pu0bT2HafVcn08BZMjzTwEh3CGcdfb8 root@homelab-unifi";
+  hostWoodpecker = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIACJjy5GtvoeSP5muZFLj3/rMvIAlm7gfXZ80micVVgm root@homelab-woodpecker";
   hostZeroclaw = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF8hvOMPXx4HOK9/yxL/r8oj1itQIFQDpnk362IwrIfy root@homelab-minimal";
-  users = [amadeus amadeusAge hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet hostHarbor hostCache hostForgejo hostBuildBotMaster hostBuildBotWorker1 hostJellyfin hostZeroclaw hostDevelopment];
+  users = [amadeus amadeusAge hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet hostHarbor hostCache hostForgejo hostBuildBotMaster hostBuildBotWorker1 hostJellyfin hostZeroclaw hostDevelopment hostWoodpecker];
   # keep-sorted end
 in {
   # keep-sorted start
@@ -77,12 +78,8 @@ in {
   "tailscale-auth-key.age".publicKeys = users;
   "terraform-state-db-password.age".publicKeys = [amadeus amadeusAge hostDatabase];
   "uptime-forge-db-password.age".publicKeys = [amadeus amadeusAge hostContainers];
-  # The woodpecker host does not exist yet, so it has no SSH host key to be a
-  # recipient. These are encrypted to the operator only so the .age files exist
-  # (a missing file is an eval error, which would block `just deploy woodpecker`).
-  # After the install: add hostWoodpecker above, put it in `users` too, add it to
-  # both lines below, then `just reencrypt`.
-  "woodpecker-agent-env.age".publicKeys = [amadeus amadeusAge]; # WOODPECKER_AGENT_SECRET only; must match the server's byte-for-byte
-  "woodpecker-server-env.age".publicKeys = [amadeus amadeusAge]; # WOODPECKER_AGENT_SECRET, WOODPECKER_GRPC_SECRET, WOODPECKER_FORGEJO_CLIENT, WOODPECKER_FORGEJO_SECRET
+  "woodpecker-agent-env.age".publicKeys = [amadeus amadeusAge hostWoodpecker]; # WOODPECKER_AGENT_SECRET only; must match the server's byte-for-byte
+  "woodpecker-metrics-token.age".publicKeys = [amadeus amadeusAge hostOtel]; # bare bearer token for prometheus; same value as WOODPECKER_PROMETHEUS_AUTH_TOKEN in woodpecker-server-env.age
+  "woodpecker-server-env.age".publicKeys = [amadeus amadeusAge hostWoodpecker]; # WOODPECKER_AGENT_SECRET, WOODPECKER_GRPC_SECRET, WOODPECKER_FORGEJO_CLIENT, WOODPECKER_FORGEJO_SECRET
   # keep-sorted end
 }
