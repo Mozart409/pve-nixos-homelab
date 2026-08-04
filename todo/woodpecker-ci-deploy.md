@@ -1,6 +1,6 @@
 # Woodpecker CI — remaining work before deploy
 
-Woodpecker 3.16.0 runs on its **own new VM** — `woodpecker`, 192.168.2.186,
+Woodpecker 3.16.0 runs on its **own new VM** — `woodpecker`, 192.168.2.190,
 vm_id 4348 — served at `https://ci.homelab.local`. Config landed on branch
 `feat/woodpecker-ci` (`hosts/woodpecker/configuration.nix`). This file is the
 plan, not a record — nothing below has been done yet, and **the host will not
@@ -31,7 +31,7 @@ generates a fresh one on every install, and agenix activation fails with
 *after* step 4's install, not before:
 
 ```bash
-just get-host-key 192.168.2.186
+just get-host-key 192.168.2.190
 ```
 
 Add the key to `secrets/secrets.nix` as `hostWoodpecker` in the `let` block, and
@@ -85,7 +85,7 @@ later means re-registering webhooks on every repo.
 ## 3. Prometheus — node metrics DONE, application metrics deferred
 
 Already wired: `hosts/otel/configuration.nix` has a `woodpecker-node` job
-scraping `192.168.2.186:9100`, and `hosts/woodpecker/configuration.nix` enables
+scraping `192.168.2.190:9100`, and `hosts/woodpecker/configuration.nix` enables
 the node exporter. Nothing to do for host-level metrics.
 
 Still missing: Woodpecker's *application* metrics (queue depth, running/pending
@@ -133,7 +133,7 @@ just iac-apply
 just colmena-apply-host dns
 
 # 3. Install NixOS. DESTRUCTIVE: disko wipes the disk. Use the DHCP address the
-#    fresh VM came up on; it reboots onto 192.168.2.186.
+#    fresh VM came up on; it reboots onto 192.168.2.190.
 ssh amadeus@<dhcp-ip> lsblk        # sanity-check disk targeting first
 just deploy woodpecker <dhcp-ip>
 
