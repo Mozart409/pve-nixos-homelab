@@ -82,7 +82,20 @@ in {
       # both WOODPECKER_GITEA and WOODPECKER_FORGEJO are true, Gitea silently
       # wins the driver switch.
       WOODPECKER_FORGEJO = "true";
-      WOODPECKER_FORGEJO_URL = "https://forgejo.homelab.local";
+      # The .ts.net name, NOT forgejo.homelab.local, even though every other
+      # service-to-service URL in this repo uses the local name. Forgejo's
+      # ROOT_URL is this .ts.net address, and Forgejo warns ("configured to be
+      # served on ... you are viewing through a different URL") on any other
+      # origin -- which is what the OAuth login bounce hit. Sending users to the
+      # canonical URL avoids it without changing ROOT_URL, which would only move
+      # the same warning onto everyone reaching Forgejo over tailscale.
+      #
+      # The cost: CI-to-forge traffic now depends on tailscale being up on this
+      # host. MagicDNS does resolve here (unlike hermes -- see the AGENTS.md
+      # pitfall), but if tailscaled is down, API calls AND pipeline clone steps
+      # fail. Clone steps run inside podman containers, so they need to reach the
+      # tailnet through the bridge, not just from the host.
+      WOODPECKER_FORGEJO_URL = "https://homelab-forgejo.dropbear-butterfly.ts.net";
 
       # Forgejo sets DISABLE_REGISTRATION = true, so leaving Woodpecker open
       # would make it the weaker link: any forge account could enable pipelines
