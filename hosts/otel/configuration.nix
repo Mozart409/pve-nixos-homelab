@@ -425,7 +425,7 @@
         job_name = "woodpecker-node";
         static_configs = [
           {
-            targets = ["192.168.2.190:9100"];
+            targets = ["192.168.2.182:9100"];
             labels = {
               instance = "homelab-woodpecker";
             };
@@ -548,7 +548,43 @@
           }
         ];
       }
+      # Woodpecker *application* metrics (queue depth, pending/running pipelines)
+      # -- distinct from the woodpecker-node job above, which is host-level.
+      #
+      # Two things to know about this endpoint:
+      #   1. It does not exist at all unless WOODPECKER_PROMETHEUS_AUTH_TOKEN is
+      #      set on the server. No token, no /metrics -- a 404, not a 401.
+      #   2. It is bearer-authenticated, and the token has to be on BOTH hosts:
+      #      on woodpecker inside woodpecker-server-env.age, and here as a bare
+      #      one-line file for prometheus. Hence its own .age rather than reusing
+      #      the server env file, which otel has no business decrypting.
+      #
+      # The server binds 127.0.0.1:8000, so the only route in is its Caddy vhost
+      # over HTTPS (step-ca cert, trusted here via modules/step-ca-trust.nix).
+      {
+        job_name = "woodpecker";
+        scheme = "https";
+        metrics_path = "/metrics";
+        authorization.credentials_file = config.age.secrets.woodpecker-metrics-token.path;
+        static_configs = [
+          {
+            targets = ["ci.homelab.local"];
+            labels = {
+              instance = "homelab-woodpecker";
+            };
+          }
+        ];
+      }
     ];
+  };
+
+  # Bare token, no KEY=value wrapper -- prometheus reads the whole file as the
+  # bearer credential (trailing whitespace trimmed). Must be byte-identical to
+  # WOODPECKER_PROMETHEUS_AUTH_TOKEN in woodpecker-server-env.age.
+  age.secrets.woodpecker-metrics-token = {
+    file = ../../secrets/woodpecker-metrics-token.age;
+    owner = "prometheus";
+    group = "prometheus";
   };
 
   age.secrets.grafana-secret-key = {
