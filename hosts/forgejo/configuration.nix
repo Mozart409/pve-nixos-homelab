@@ -68,6 +68,15 @@
         ENABLE_NOTIFY_MAIL = false;
       };
 
+      # Forgejo refuses to deliver webhooks to private addresses by default, so
+      # without this it silently never calls ci.homelab.local/api/hook (the
+      # woodpecker host, 192.168.2.186) and pushes never trigger a pipeline.
+      # `external` is the stock default and is kept because setting this key
+      # replaces it rather than adding to it.
+      webhook = {
+        ALLOWED_HOST_LIST = "external,ci.homelab.local";
+      };
+
       session = {
         COOKIE_SECURE = true;
         PROVIDER = "file";
