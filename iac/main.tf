@@ -1126,7 +1126,7 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
 
     ip_config {
       ipv4 {
-        address = "192.168.2.186/24"
+        address = "192.168.2.190/24"
         gateway = "192.168.2.1"
       }
     }
