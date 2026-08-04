@@ -132,6 +132,10 @@
         local = "192.168.2.183";
         tailscale = "homelab-zeroclaw";
       };
+      woodpecker = {
+        local = "192.168.2.186";
+        tailscale = "homelab-woodpecker";
+      };
       # Raspberry Pi hosts (update IP after first boot)
       "rpi4-1" = {
         local = "192.168.2.170";
@@ -228,6 +232,7 @@
         buildbot-master = mkHost "buildbot-master";
         buildbot-worker-1 = mkHost "buildbot-worker-1";
         zeroclaw = mkHost "zeroclaw";
+        woodpecker = mkHost "woodpecker";
         # Explicit (not mkHost) so nixvim is baked in even on a nixos-anywhere
         # reinstall; mkHost omits home-manager. Mirrors colmenaHive defaults.
         jellyfin = nixpkgs.lib.nixosSystem {
@@ -501,6 +506,20 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             ./hosts/forgejo/configuration.nix
+          ];
+        };
+
+        woodpecker = {
+          deployment = {
+            targetHost = targetHost "woodpecker";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["ci" "woodpecker"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/woodpecker/configuration.nix
           ];
         };
 

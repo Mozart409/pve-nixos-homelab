@@ -59,6 +59,11 @@
           icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/forgejo.svg";
         }
         {
+          name = "Woodpecker CI";
+          url = "https://ci.homelab.local";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/woodpecker-ci.svg";
+        }
+        {
           name = "Harbor";
           url = "https://homelab-harbor.dropbear-butterfly.ts.net/";
           icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/harbor.svg";
@@ -91,6 +96,10 @@
         {
           name = "Forgejo";
           url = "https://forgejo.homelab.local";
+        }
+        {
+          name = "Woodpecker CI";
+          url = "https://ci.homelab.local";
         }
         {
           name = "Harbor";

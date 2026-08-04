@@ -1074,6 +1074,82 @@ resource "proxmox_virtual_environment_vm" "zeroclaw_vm" {
   on_boot = false
 }
 
+# Woodpecker CI VM (Woodpecker server + agent, podman step containers)
+resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
+  name        = "woodpecker"
+  description = "Woodpecker CI server + agent - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target", "woodpecker", "ci"]
+
+  node_name = "pve-gigabyte"
+  vm_id     = 4348
+
+  bios = "seabios"
+
+  keyboard_layout = "de"
+
+  # CI is bursty and this VM exists so pipelines never contend with the git
+  # forge. 4 cores lets the agent run two concurrent workflows capped at 3 cores
+  # total (WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA) while leaving one for the
+  # server, Caddy and sshd, so the UI stays responsive mid-build.
+  cpu {
+    cores = 4
+    type  = "host"
+  }
+
+  # 2 workflows x 1 GB step limit = 2 GB, plus ~700 MB for server/Caddy/system,
+  # leaving real headroom rather than relying on swap.
+  memory {
+    dedicated = 4096
+    floating  = 1024
+  }
+
+  # Sized generously up front because growing it later is a manual guest-side
+  # operation (growpart + btrfs filesystem resize), not something `tofu apply`
+  # does. Pipeline step images accumulate fast; autoPrune reaps them weekly.
+  disk {
+    datastore_id = "zfs_pool"
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    interface    = "scsi0"
+    size         = 100
+  }
+
+  network_device {
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  initialization {
+    datastore_id = "local-lvm"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.2.186/24"
+        gateway = "192.168.2.1"
+      }
+    }
+
+    user_account {
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
+  }
+
+  serial_device {}
+
+  # Enable QEMU Guest Agent
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
+
+  started = true
+
+  on_boot = true
+}
+
 # Scratchpad VM (Fedora cloud image, ad-hoc testing)
 resource "proxmox_virtual_environment_vm" "scratchpad_vm" {
   name        = "scratchpad"
@@ -1308,6 +1384,7 @@ output "vm_ipv4_addresses" {
     jellyfin    = proxmox_virtual_environment_vm.jellyfin_vm.ipv4_addresses
     zeroclaw    = proxmox_virtual_environment_vm.zeroclaw_vm.ipv4_addresses
     scratchpad  = proxmox_virtual_environment_vm.scratchpad_vm.ipv4_addresses
+    woodpecker  = proxmox_virtual_environment_vm.woodpecker_vm.ipv4_addresses
     # k3s_server_1 = proxmox_virtual_environment_vm.k3s_server_1_vm.ipv4_addresses
     # k3s_agent_1  = proxmox_virtual_environment_vm.k3s_agent_1_vm.ipv4_addresses
   }
