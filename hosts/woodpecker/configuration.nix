@@ -28,7 +28,10 @@
 in {
   imports = [
     ../../modules/common.nix
-    ../../modules/disko-config.nix
+    # NOT the shared disko-config.nix: XFS root instead of btrfs, because this
+    # disk is a zvol on the host's ZFS pool and btrfs would stack a second CoW
+    # (and a second compression) layer on top of it. See the module.
+    ../../modules/disko-xfs.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
@@ -269,7 +272,13 @@ in {
   # gRPC, only by the agent on this same host.
   networking.firewall = {
     enable = true;
-    trustedInterfaces = ["tailscale0"];
+    # `podman+` covers every netavark bridge. Woodpecker creates a fresh network
+    # per pipeline (podman1, podman2, …), and step containers resolve names via
+    # aardvark-dns listening on that bridge's gateway address — which is INPUT to
+    # this host. Without the bridge trusted the firewall drops those queries and
+    # the clone step dies resolving forgejo.homelab.local. Same fix as harbor
+    # (`podman1`) and development (`podman+`).
+    trustedInterfaces = ["tailscale0" "podman+"];
     allowedTCPPorts = [
       22 # SSH
       80 # HTTP (Caddy redirect to HTTPS)

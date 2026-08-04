@@ -77,5 +77,12 @@ in {
   "tailscale-auth-key.age".publicKeys = users;
   "terraform-state-db-password.age".publicKeys = [amadeus amadeusAge hostDatabase];
   "uptime-forge-db-password.age".publicKeys = [amadeus amadeusAge hostContainers];
+  # The woodpecker host does not exist yet, so it has no SSH host key to be a
+  # recipient. These are encrypted to the operator only so the .age files exist
+  # (a missing file is an eval error, which would block `just deploy woodpecker`).
+  # After the install: add hostWoodpecker above, put it in `users` too, add it to
+  # both lines below, then `just reencrypt`.
+  "woodpecker-agent-env.age".publicKeys = [amadeus amadeusAge]; # WOODPECKER_AGENT_SECRET only; must match the server's byte-for-byte
+  "woodpecker-server-env.age".publicKeys = [amadeus amadeusAge]; # WOODPECKER_AGENT_SECRET, WOODPECKER_GRPC_SECRET, WOODPECKER_FORGEJO_CLIENT, WOODPECKER_FORGEJO_SECRET
   # keep-sorted end
 }
