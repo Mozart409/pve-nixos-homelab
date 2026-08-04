@@ -225,6 +225,18 @@
     webExternalUrl = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
     extraFlags = ["--web.route-prefix=/"];
 
+    # The default `true` runs a full `promtool check config` at BUILD time, which
+    # stats every file a scrape job references -- including the woodpecker job's
+    # authorization.credentials_file at /run/agenix/woodpecker-metrics-token.
+    # agenix only decrypts that during activation, so it cannot exist in the
+    # build sandbox and the check fails the whole colmena build:
+    #   FAILED: error checking authorization credentials or bearer token file
+    #   "/run/agenix/woodpecker-metrics-token": no such file or directory
+    # "syntax-only" keeps the YAML/schema validation and drops the file-existence
+    # probe. Trade-off: a typo in a secret path is no longer caught at build time,
+    # it surfaces as prometheus failing to start.
+    checkConfig = "syntax-only";
+
     globalConfig = {
       scrape_interval = "30s";
       scrape_timeout = "10s";
