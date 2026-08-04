@@ -1104,13 +1104,23 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
   }
 
   # Sized generously up front because growing it later is a manual guest-side
-  # operation (growpart + btrfs filesystem resize), not something `tofu apply`
-  # does. Pipeline step images accumulate fast; autoPrune reaps them weekly.
+  # operation (growpart + xfs_growfs, and XFS grows but never shrinks), not
+  # something `tofu apply` does. Pipeline step images accumulate fast; autoPrune
+  # reaps them weekly.
+  #
+  # NEW VMs: copy this disk block. Every new host installs from `.#minimal`,
+  # which now lays down XFS (modules/disko-xfs.nix), and that module enables a
+  # weekly services.fstrim. `discard = "on"` is what makes those TRIMs reach ZFS
+  # -- without it the guest frees blocks, the zvol never learns, and it stays
+  # inflated on a pool that is only two spinning disks. The existing btrfs VMs
+  # below predate this and are deliberately left alone: adding it there would
+  # rewrite every VM resource for a benefit they are not currently claiming.
   disk {
     datastore_id = "zfs_pool"
     file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
     size         = 100
+    discard      = "on"
   }
 
   network_device {
@@ -1126,7 +1136,7 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
 
     ip_config {
       ipv4 {
-        address = "192.168.2.190/24"
+        address = "192.168.2.182/24"
         gateway = "192.168.2.1"
       }
     }
