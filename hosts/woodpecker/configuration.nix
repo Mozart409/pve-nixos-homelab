@@ -36,6 +36,7 @@ in {
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
     ../../modules/podman.nix
+    ../../modules/loki-logs.nix
   ];
 
   networking.hostName = "homelab-woodpecker";
@@ -226,6 +227,27 @@ in {
   services.prometheus.exporters.node = {
     enable = true;
     enabledCollectors = ["systemd" "processes"];
+  };
+
+  # Ship the woodpecker SERVER and AGENT daemon journals to the central Loki.
+  #
+  # Scope limit: per-step pipeline BUILD OUTPUT is not in the journal and never
+  # will be -- Woodpecker stores build logs in its own sqlite DB and streams
+  # them to the UI over gRPC, bypassing journald entirely. That is a Woodpecker
+  # architecture fact, not a config gap. What lands in Loki is the daemon logs:
+  # startup, scheduling, errors, and agent registration.
+  services.loki-logs = {
+    enable = true;
+    units = [
+      {
+        unit = "woodpecker-server.service";
+        job = "woodpecker-server";
+      }
+      {
+        unit = "woodpecker-agent-podman.service";
+        job = "woodpecker-agent";
+      }
+    ];
   };
 
   # Caddy reverse proxy with Tailscale TLS
