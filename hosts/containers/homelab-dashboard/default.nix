@@ -135,6 +135,16 @@
           name = "Axon Gateway";
           url = "https://axon.homelab.local/health";
         }
+        {
+          name = "Attic Cache";
+          # NOT /health — that path is answered by Caddy itself (a `respond "OK"
+          # 200` block in hosts/cache/configuration.nix), so it stays green even
+          # when atticd is dead. nix-cache-info is served by atticd and resolves
+          # the cache by name, so a 200 means the cache actually works. Attic has
+          # no unauthenticated root route and exposes no /metrics, so this is the
+          # only endpoint that proves liveness end to end.
+          url = "https://cache.homelab.local/homelab/nix-cache-info";
+        }
       ];
     };
 
