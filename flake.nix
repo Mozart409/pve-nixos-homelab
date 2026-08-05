@@ -67,76 +67,89 @@
     # Set DEPLOY_NET=tailscale to use Tailscale hosts, defaults to local IPs
     deployNet = builtins.getEnv "DEPLOY_NET";
 
+    # Deploy targets. `local` holds the *.homelab.local name (A records in
+    # hosts/dns/configuration.nix) rather than the raw IP, so re-addressing a
+    # host is a one-line change there. Both paths resolve these names: on the LAN
+    # via unbound on the dns host, and over the tailnet via the tailnet-wide
+    # split-DNS route homelab.local -> 192.168.2.145 (reached through the subnet
+    # route the dns host advertises).
     hostAddrs = {
       database = {
-        local = "192.168.2.134";
+        local = "database.homelab.local";
         tailscale = "homelab-database";
       };
       otel = {
-        local = "192.168.2.135";
+        local = "otel.homelab.local";
         tailscale = "homelab-otel";
       };
+      # Stays an IP on purpose. This host *is* the resolver every other entry
+      # above depends on, so naming it dns.homelab.local would mean you cannot
+      # deploy the fix for a broken unbound without a working unbound.
       dns = {
         local = "192.168.2.145";
         tailscale = "homelab-dns";
       };
       unifi = {
-        local = "192.168.2.142";
+        local = "unifi.homelab.local";
         tailscale = "homelab-unifi";
       };
       containers = {
-        local = "192.168.2.149";
+        local = "containers.homelab.local";
         tailscale = "homelab-containers";
       };
       mcp = {
-        local = "192.168.2.152";
+        local = "mcp.homelab.local";
         tailscale = "homelab-mcp";
       };
       "k3s-server-1" = {
-        local = "192.168.2.165";
-        tailscale = "192.168.2.165";
+        local = "k3s-server-1.homelab.local";
+        tailscale = "k3s-server-1.homelab.local";
       };
       "k3s-agent-1" = {
-        local = "192.168.2.156";
-        tailscale = "192.168.2.156";
+        local = "k3s-agent-1.homelab.local";
+        tailscale = "k3s-agent-1.homelab.local";
       };
       ca = {
-        local = "192.168.2.160";
+        local = "ca.homelab.local";
         tailscale = "homelab-ca";
       };
       fleet = {
-        local = "192.168.2.164";
+        local = "fleet.homelab.local";
         tailscale = "homelab-fleet";
       };
       harbor = {
-        local = "192.168.2.174";
+        local = "harbor.homelab.local";
         tailscale = "homelab-harbor";
       };
       cache = {
-        local = "192.168.2.175";
+        local = "cache.homelab.local";
         tailscale = "homelab-cache";
       };
       development = {
-        local = "192.168.2.184";
+        local = "development.homelab.local";
         tailscale = "homelab-development";
       };
       forgejo = {
-        local = "192.168.2.178";
+        local = "forgejo.homelab.local";
         tailscale = "homelab-forgejo";
       };
       jellyfin = {
-        local = "192.168.2.180";
+        local = "jellyfin.homelab.local";
         tailscale = "homelab-jellyfin";
       };
       zeroclaw = {
-        local = "192.168.2.183";
+        local = "zeroclaw.homelab.local";
         tailscale = "homelab-zeroclaw";
       };
       woodpecker = {
-        local = "192.168.2.182";
+        local = "woodpecker.homelab.local";
         tailscale = "homelab-woodpecker";
       };
-      # Raspberry Pi hosts (update IP after first boot)
+      # Raspberry Pi hosts (update IP after first boot). Left as an IP because
+      # there is no rpi4-1.homelab.local record to point at -- the node is still
+      # commented out of both nixosConfigurations and colmenaHive below, and the
+      # address is a placeholder until it takes a lease. Add the A/PTR pair in
+      # hosts/dns/configuration.nix when the host is actually brought up.
       "rpi4-1" = {
         local = "192.168.2.170";
         tailscale = "homelab-rpi4-1";
@@ -398,7 +411,10 @@
 
         hermes = {
           deployment = {
-            targetHost = "192.168.2.155";
+            # Not routed through hostAddrs/targetHost like the other nodes --
+            # hermes has no hostAddrs entry, so DEPLOY_NET=tailscale does not
+            # switch it over.
+            targetHost = "hermes.homelab.local";
             targetUser = "amadeus";
             buildOnTarget = false;
             tags = ["ai" "hermes"];

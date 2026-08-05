@@ -252,6 +252,21 @@
       enabledCollectors = ["systemd" "processes"];
     };
 
+    # Targets are addressed by their *.homelab.local names (records live in
+    # hosts/dns/configuration.nix) rather than raw IPs, so a re-IP is a one-line
+    # change there instead of an edit in both places.
+    #
+    # Note how prometheus treats those names: it does NOT re-resolve them per
+    # scrape, and it has no DNS cache either. It keeps an HTTP keep-alive
+    # connection per target, and DNS is only consulted when a connection is
+    # actually dialed -- at startup, or after one drops. So a changed A record is
+    # NOT picked up until the connection breaks or prometheus restarts; targets
+    # that need to follow DNS have to use dns_sd_configs, not static_configs.
+    #
+    # Every job below sets `labels.instance` explicitly, which overrides the
+    # instance label prometheus would otherwise derive from the target address.
+    # That is what keeps this addressing change free of series churn -- do not
+    # drop those labels, or every existing series is orphaned.
     scrapeConfigs = [
       {
         job_name = "prometheus";
@@ -282,7 +297,7 @@
         job_name = "database-node";
         static_configs = [
           {
-            targets = ["192.168.2.134:9100"];
+            targets = ["database.homelab.local:9100"];
             labels = {
               instance = "homelab-database";
             };
@@ -293,14 +308,23 @@
         job_name = "database-postgres";
         static_configs = [
           {
-            targets = ["192.168.2.134:9187"];
+            targets = ["database.homelab.local:9187"];
             labels = {
               instance = "homelab-database";
             };
           }
         ];
       }
-      # DNS host exporters
+      # DNS host exporters.
+      #
+      # Deliberately the only job still addressed by IP. Every other target here
+      # is a *.homelab.local name served by unbound on this very host, so if
+      # unbound dies the job that would tell you must not be behind the name it
+      # can no longer resolve. Prometheus re-resolves a target only when it dials
+      # a new connection (see the comment on scrape_interval below), and a dead
+      # DNS host is exactly a case where the connection drops and has to be
+      # re-dialed -- so a name here would go down precisely when it is needed.
+      # See the DNS note above scrapeConfigs for why re-resolution is dial-time.
       {
         job_name = "dns-node";
         static_configs = [
@@ -317,7 +341,7 @@
         job_name = "unifi-node";
         static_configs = [
           {
-            targets = ["192.168.2.142:9100"];
+            targets = ["unifi.homelab.local:9100"];
             labels = {
               instance = "homelab-unifi";
             };
@@ -329,7 +353,7 @@
         job_name = "containers-node";
         static_configs = [
           {
-            targets = ["192.168.2.149:9100"];
+            targets = ["containers.homelab.local:9100"];
             labels = {
               instance = "homelab-containers";
             };
@@ -340,7 +364,7 @@
         job_name = "containers-postgres";
         static_configs = [
           {
-            targets = ["192.168.2.149:9187"];
+            targets = ["containers.homelab.local:9187"];
             labels = {
               instance = "homelab-containers";
               db = "uptime-forge";
@@ -353,7 +377,7 @@
         job_name = "mcp-node";
         static_configs = [
           {
-            targets = ["192.168.2.152:9100"];
+            targets = ["mcp.homelab.local:9100"];
             labels = {
               instance = "homelab-mcp";
             };
@@ -365,7 +389,7 @@
         job_name = "hermes-node";
         static_configs = [
           {
-            targets = ["192.168.2.155:9100"];
+            targets = ["hermes.homelab.local:9100"];
             labels = {
               instance = "homelab-hermes";
             };
@@ -377,7 +401,7 @@
         job_name = "k3s-server-1-node";
         static_configs = [
           {
-            targets = ["192.168.2.165:9100"];
+            targets = ["k3s-server-1.homelab.local:9100"];
             labels = {
               instance = "k3s-server-1";
             };
@@ -389,7 +413,7 @@
         job_name = "k3s-agent-1-node";
         static_configs = [
           {
-            targets = ["192.168.2.156:9100"];
+            targets = ["k3s-agent-1.homelab.local:9100"];
             labels = {
               instance = "k3s-agent-1";
             };
@@ -401,7 +425,7 @@
         job_name = "ca-node";
         static_configs = [
           {
-            targets = ["192.168.2.160:9100"];
+            targets = ["ca.homelab.local:9100"];
             labels = {
               instance = "homelab-ca";
             };
@@ -413,7 +437,7 @@
         job_name = "cache-node";
         static_configs = [
           {
-            targets = ["192.168.2.175:9100"];
+            targets = ["cache.homelab.local:9100"];
             labels = {
               instance = "homelab-cache";
             };
@@ -425,7 +449,7 @@
         job_name = "forgejo-node";
         static_configs = [
           {
-            targets = ["192.168.2.178:9100"];
+            targets = ["forgejo.homelab.local:9100"];
             labels = {
               instance = "homelab-forgejo";
             };
@@ -437,7 +461,7 @@
         job_name = "woodpecker-node";
         static_configs = [
           {
-            targets = ["192.168.2.182:9100"];
+            targets = ["woodpecker.homelab.local:9100"];
             labels = {
               instance = "homelab-woodpecker";
             };
@@ -449,7 +473,7 @@
         job_name = "development-node";
         static_configs = [
           {
-            targets = ["192.168.2.184:9100"];
+            targets = ["development.homelab.local:9100"];
             labels = {
               instance = "homelab-development";
             };
@@ -461,7 +485,7 @@
         job_name = "zeroclaw-node";
         static_configs = [
           {
-            targets = ["192.168.2.183:9100"];
+            targets = ["zeroclaw.homelab.local:9100"];
             labels = {
               instance = "homelab-zeroclaw";
             };
@@ -473,7 +497,7 @@
         job_name = "jellyfin-node";
         static_configs = [
           {
-            targets = ["192.168.2.180:9100"];
+            targets = ["jellyfin.homelab.local:9100"];
             labels = {
               instance = "homelab-jellyfin";
             };
@@ -485,7 +509,7 @@
         job_name = "fleet-node";
         static_configs = [
           {
-            targets = ["192.168.2.164:9100"];
+            targets = ["fleet.homelab.local:9100"];
             labels = {
               instance = "homelab-fleet";
             };
@@ -497,7 +521,7 @@
         job_name = "harbor-node";
         static_configs = [
           {
-            targets = ["192.168.2.174:9100"];
+            targets = ["harbor.homelab.local:9100"];
             labels = {
               instance = "homelab-harbor";
             };
@@ -537,7 +561,7 @@
         job_name = "pve-node";
         static_configs = [
           {
-            targets = ["192.168.2.46:9100"];
+            targets = ["pve-gigabyte.local:9100"];
             labels = {
               instance = "pve-gigabyte";
             };
