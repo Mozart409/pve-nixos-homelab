@@ -41,10 +41,26 @@
     environmentFile = config.age.secrets.garage-rpc-secret.path;
   };
 
+  # Garage is currently UNUSED -- attic keeps its store on local disk and no
+  # S3 clients exist -- and with its layout never assigned it spams a
+  # bootstrap/discovery WARN burst into the journal every ~60s (surfaced by
+  # the loki-logs shipper below: ~1200 lines/15m of "Ring not yet ready").
+  #
+  # Disabled but NOT removed: dropping the boot trigger stops garage from
+  # running, while the unit file, the garage CLI, the user, the state dirs and
+  # this config all stay in place. Changing wantedBy does NOT stop an
+  # already-running unit, so after deploying run once:
+  #   sudo systemctl stop garage
+  # Re-enable by deleting this block (it comes back at the next boot, or
+  # immediately with `systemctl start garage`). While disabled, Caddy's /s3/*
+  # route proxies to a dead port and returns 502 -- acceptable, nothing uses it.
+  systemd.services.garage.wantedBy = lib.mkForce [];
+
   # Ship the garage journal to the central Loki. The fluent-bit shipper itself
   # is enabled in ../attic/default.nix (modules/loki-logs.nix); the units list
   # merges across modules, so garage's entry lives here with the rest of its
-  # config. Logs land in Loki under job="garage".
+  # config. Logs land in Loki under job="garage". Idles to zero while garage
+  # is disabled below, and resumes by itself when garage is re-enabled.
   services.loki-logs.units = [
     {
       unit = "garage.service";
