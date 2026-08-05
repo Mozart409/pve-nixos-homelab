@@ -4,6 +4,10 @@
   pkgs,
   ...
 }: {
+  imports = [
+    ../../../modules/loki-logs.nix
+  ];
+
   # Run atticd as a STATIC user instead of the upstream module's
   # DynamicUser = true.
   #
@@ -141,6 +145,24 @@
       # ATTIC_SERVER_DATABASE_URL="sqlite://:memory:" just for it.
       database = lib.mkForce {};
     };
+  };
+
+  # Ship the atticd journal to the central Loki. modules/loki-logs.nix runs a
+  # fluent-bit shipper that tails journald for the listed units and pushes to
+  # https://loki.homelab.local/loki/api/v1/push; the step-ca TLS chain is
+  # already trusted via ../../modules/step-ca-trust.nix in
+  # hosts/cache/configuration.nix. Logs land in Loki under job="attic".
+  #
+  # Garage's entry (job="garage") lives in ../garage/default.nix — the units
+  # list merges across modules.
+  services.loki-logs = {
+    enable = true;
+    units = [
+      {
+        unit = "atticd.service";
+        job = "attic";
+      }
+    ];
   };
 
   # NB: no systemd.tmpfiles rules for /var/lib/atticd. StateDirectory=atticd

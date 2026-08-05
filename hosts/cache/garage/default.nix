@@ -41,6 +41,17 @@
     environmentFile = config.age.secrets.garage-rpc-secret.path;
   };
 
+  # Ship the garage journal to the central Loki. The fluent-bit shipper itself
+  # is enabled in ../attic/default.nix (modules/loki-logs.nix); the units list
+  # merges across modules, so garage's entry lives here with the rest of its
+  # config. Logs land in Loki under job="garage".
+  services.loki-logs.units = [
+    {
+      unit = "garage.service";
+      job = "garage";
+    }
+  ];
+
   # Ensure garage data directories exist with proper permissions
   systemd.tmpfiles.rules = [
     "d /var/lib/garage 0750 garage garage -"
