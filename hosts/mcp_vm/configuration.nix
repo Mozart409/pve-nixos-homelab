@@ -17,7 +17,7 @@
   #
   # Bump this string whenever a secret's *content* changes; that changes
   # restartTriggers -> the unit definition -> a restart on the next colmena apply.
-  secretNonce = "2026-07-28-pbs-token";
+  secretNonce = "2026-08-06-wpmcp-token";
 
   # Caddy vhost template: step-ca TLS + reverse proxy to a loopback MCP server.
   mkMcpVhost = port: {
