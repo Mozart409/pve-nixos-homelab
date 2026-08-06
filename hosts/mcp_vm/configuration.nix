@@ -113,6 +113,7 @@ in {
         "pg-uptime-mcp.homelab.local" = mkMcpVhost 8081;
         "prom-mcp.homelab.local" = mkMcpVhost 8082;
         "loki-mcp.homelab.local" = mkMcpVhost 8083;
+        "wp-mcp.homelab.local" = mkMcpVhost 8091;
       }
       # One vhost per database on the `database` host.
       // lib.mapAttrs' (db: port: lib.nameValuePair (pgVhostName db) (mkMcpVhost port)) homelabDatabases;
@@ -128,6 +129,9 @@ in {
       };
       pg-mcp-uptime-url = {
         file = ../../secrets/pg-mcp-uptime-url.age;
+      };
+      woodpecker-mcp-token = {
+        file = ../../secrets/woodpecker-mcp-token.age;
       };
     }
     # postgres://mcp:<pw>@database.homelab.local:5432/<db> — same read-only role
@@ -194,6 +198,20 @@ in {
           "127.0.0.1"
         ];
       };
+
+      # Woodpecker CI, which runs on its own host. `ci.homelab.local` is baked
+      # into Woodpecker's OAuth redirect and every webhook it registers, so it
+      # is permanent — see AGENTS.md §6.
+      wpmcp-server = {
+        enable = true;
+        package = mcpPackages.wpmcp-server;
+        host = "https://ci.homelab.local";
+        tokenFile = config.age.secrets.woodpecker-mcp-token.path;
+        # wpmcp's own default is 8085, but that port is already the appdb pgmcp
+        # instance here, so this one takes the next free port instead.
+        bind = "127.0.0.1:8091";
+        allowedHosts = ["wp-mcp.homelab.local" "localhost" "127.0.0.1"];
+      };
     }
     # One pgmcp instance per database on the `database` host. serverType pins the
     # PG_* env prefix — without it the module would derive PGMCP-<DB>-SERVER from
@@ -211,7 +229,7 @@ in {
 
   systemd.services =
     # Secret-consuming servers must wait for agenix to place the credentials.
-    lib.genAttrs (["pbsmcp-server" "pgmcp-server" "hamcp-server"]
+    lib.genAttrs (["pbsmcp-server" "pgmcp-server" "hamcp-server" "wpmcp-server"]
       ++ map pgUnitName (builtins.attrNames homelabDatabases)) (_: {
       wants = ["agenix.target"];
       after = ["agenix.target"];
