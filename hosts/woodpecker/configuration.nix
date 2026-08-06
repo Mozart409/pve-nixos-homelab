@@ -108,7 +108,45 @@ in {
       # cross-host dependency on the database VM. Lives under StateDirectory
       # (/var/lib/woodpecker-server, mode 0700).
       WOODPECKER_DATABASE_DRIVER = "sqlite3";
-      WOODPECKER_DATABASE_DATASOURCE = "/var/lib/woodpecker-server/woodpecker.sqlite";
+
+      # The DSN params are NOT decoration -- a bare path here produced
+      # wall-to-wall "database is locked" and silently killed pipelines
+      # (todo/woodpecker-postgres-and-sizing.md). WAL lets readers run during a
+      # write; _busy_timeout makes a blocked writer WAIT 10s instead of
+      # returning SQLITE_BUSY immediately; _txlock=immediate takes the write
+      # lock at BEGIN rather than mid-transaction, which is what turns an
+      # unrecoverable "database is locked" upgrade failure into a plain wait.
+      #
+      # Driver note: woodpecker 3.16 links mattn/go-sqlite3 (cgo), so these
+      # `_name=value` params are correct. If a future version switches to
+      # modernc.org/sqlite (pure Go), this syntax silently stops working and
+      # the form becomes `?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)`.
+      # Check go.mod before trusting this line across a major bump.
+      WOODPECKER_DATABASE_DATASOURCE = "/var/lib/woodpecker-server/woodpecker.sqlite?_journal_mode=WAL&_busy_timeout=10000&_txlock=immediate";
+
+      # Upstream default is 100. A hundred pooled connections racing one sqlite
+      # file is not concurrency, it is a lock convoy: sqlite serialises writes
+      # anyway, so the only thing the extra 99 buy is contention. Serialise in
+      # Go instead, where the pool queues cleanly. Throughput cost is nil at one
+      # agent; this is the single most direct fix for the lock errors.
+      WOODPECKER_DATABASE_MAX_CONNECTIONS = "1";
+
+      # Keep per-step BUILD OUTPUT out of the database. Upstream default is
+      # "database", which makes every log line a row insert -- by far the
+      # highest-FREQUENCY writer here, and the one that turned lock contention
+      # into dropped pipelines. Note it was never a SIZE problem: the sqlite
+      # file was 1.2 MB when this was written. Frequency is what serialises.
+      #
+      # The store creates this directory itself (os.MkdirAll, 0700) on first
+      # start, and it sits under the same StateDirectory as the DB, so
+      # DynamicUser owns it and no tmpfiles rule is needed.
+      #
+      # One-way for EXISTING logs: pipelines already in the DB keep their rows
+      # but the UI reads only the active store, so their output looks empty
+      # after this switch. New pipelines are unaffected. Acceptable here for the
+      # same reason the DB itself is disposable.
+      WOODPECKER_LOG_STORE = "file";
+      WOODPECKER_LOG_STORE_FILE_PATH = "/var/lib/woodpecker-server/logs";
 
       # Wall-clock kill switch, in MINUTES. Upstream defaults are 60/120. MAX is
       # the real cap: a repo owner can raise a repo's timeout in the UI, but
