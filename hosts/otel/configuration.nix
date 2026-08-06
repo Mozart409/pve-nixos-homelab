@@ -556,12 +556,19 @@
           }
         ];
       }
-      # Proxmox VE hypervisor (bare-metal, not nix-managed) node_exporter
+      # Proxmox VE hypervisor (bare-metal, not nix-managed) node_exporter.
+      #
+      # Use the .homelab.local name, not the bare .local one that was here
+      # before: this scrape silently went to `no such host` on 2026-08-05 and
+      # stayed down, which is exactly when the woodpecker ballooning needed
+      # diagnosing. `.local` is mDNS-reserved, so a resolver that does not hand
+      # it to unbound never sees the local-data record at all. Every other
+      # target here uses .homelab.local for the same reason.
       {
         job_name = "pve-node";
         static_configs = [
           {
-            targets = ["pve-gigabyte.local:9100"];
+            targets = ["pve-gigabyte.homelab.local:9100"];
             labels = {
               instance = "pve-gigabyte";
             };
