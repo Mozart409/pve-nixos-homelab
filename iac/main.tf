@@ -1098,9 +1098,24 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
 
   # 2 workflows x 1 GB step limit = 2 GB, plus ~700 MB for server/Caddy/system,
   # leaving real headroom rather than relying on swap.
+  #
+  # floating == dedicated PINS the memory: the balloon device stays present (so
+  # the PVE UI still gets guest memory stats) but pvestatd has nothing to
+  # reclaim. It used to be 1024, and that arithmetic above was fiction --
+  # node_memory_MemTotal_bytes on this guest swung between 845 MB and 3917 MB
+  # over 2026-08-05 as the balloon chased the host across its 80% reclaim
+  # threshold. Under 1 GB the guest swapped, and its 4 GB of swap lives on
+  # zfs_pool (two spinning disks, ~78 IOPS shared cluster-wide), so fsync
+  # latency exploded, sqlite writers timed out, and the server dropped running
+  # workflows as expired -- pipelines #11-#25 all died that way, reported as
+  # "Canceled" with a green step log. See todo/woodpecker-postgres-and-sizing.md.
+  #
+  # This VM is now a non-donor: the host is committed to ~53 GiB of guests plus
+  # ZFS ARC on 62.6 GiB, so pressure that used to land here lands elsewhere
+  # instead. That oversubscription is tracked in todo/pve-gigabyte-memory-oversubscription.md.
   memory {
     dedicated = 4096
-    floating  = 1024
+    floating  = 4096
   }
 
   # Sized generously up front because growing it later is a manual guest-side
