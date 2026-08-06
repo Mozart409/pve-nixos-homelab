@@ -79,6 +79,7 @@ in {
   "terraform-state-db-password.age".publicKeys = [amadeus amadeusAge hostDatabase];
   "uptime-forge-db-password.age".publicKeys = [amadeus amadeusAge hostContainers];
   "woodpecker-agent-env.age".publicKeys = [amadeus amadeusAge hostWoodpecker]; # WOODPECKER_AGENT_SECRET only; must match the server's byte-for-byte
+  "woodpecker-mcp-token.age".publicKeys = [amadeus amadeusAge hostMcp]; # WP_TOKEN for wpmcp-server; a Woodpecker personal access token
   "woodpecker-metrics-token.age".publicKeys = [amadeus amadeusAge hostOtel]; # bare bearer token for prometheus; same value as WOODPECKER_PROMETHEUS_AUTH_TOKEN in woodpecker-server-env.age
   "woodpecker-server-env.age".publicKeys = [amadeus amadeusAge hostWoodpecker]; # WOODPECKER_AGENT_SECRET, WOODPECKER_GRPC_SECRET, WOODPECKER_FORGEJO_CLIENT, WOODPECKER_FORGEJO_SECRET
   # keep-sorted end

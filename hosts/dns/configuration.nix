@@ -134,6 +134,7 @@
           ''"unifi.homelab.local. A 192.168.2.142"''
           ''"woodpecker.homelab.local. A 192.168.2.182"''
           ''"wotan.homelab.local. A 192.168.2.71"''
+          ''"wp-mcp.homelab.local. A 192.168.2.152"''
           ''"zeroclaw.homelab.local. A 192.168.2.183"''
           # keep-sorted end
         ];
@@ -164,6 +165,7 @@
           ''"192.168.2.152 pg-terraform-mcp.homelab.local"''
           ''"192.168.2.152 pg-uptime-mcp.homelab.local"''
           ''"192.168.2.152 prom-mcp.homelab.local"''
+          ''"192.168.2.152 wp-mcp.homelab.local"''
           ''"192.168.2.155 hermes.homelab.local"''
           ''"192.168.2.156 k3s-agent-1.homelab.local"''
           ''"192.168.2.160 ca.homelab.local"''
