@@ -125,6 +125,7 @@
           ''"pgadmin.homelab.local. A 192.168.2.134"''
           ''"prom-mcp.homelab.local. A 192.168.2.152"''
           ''"prometheus.homelab.local. A 192.168.2.135"''
+          ''"pve-gigabyte.homelab.local. A 192.168.2.46"''
           ''"pve-gigabyte.local. A 192.168.2.46"''
           ''"romm.homelab.local. A 192.168.2.149"''
           ''"scratchpad.homelab.local. A 192.168.2.185"''
@@ -179,6 +180,7 @@
           ''"192.168.2.184 development.homelab.local"''
           ''"192.168.2.185 scratchpad.homelab.local"''
           ''"192.168.2.208 homeassistant.local"''
+          ''"192.168.2.46 pve-gigabyte.homelab.local"''
           ''"192.168.2.46 pve-gigabyte.local"''
           ''"192.168.2.71 wotan.homelab.local"''
           # keep-sorted end
