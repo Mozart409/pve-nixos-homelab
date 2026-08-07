@@ -633,7 +633,9 @@
       22 # SSH
       443 # HTTPS (Caddy)
       5432 # PostgreSQL
-      6432 # PgBouncer
+      # 6432 (pgbouncer) is deliberately absent: services.pgbouncer above binds
+      # listen_addr = 127.0.0.1, so nothing off-box can reach it. The rule only
+      # advertised a port that always refuses.
       9100 # Node exporter
       9187 # Postgres exporter
     ];
