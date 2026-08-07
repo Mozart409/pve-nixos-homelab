@@ -303,10 +303,25 @@
     '';
   };
 
-  # Backup configuration
+  # Backup configuration.
+  #
+  # The database list is DERIVED from ensureDatabases rather than hand-written.
+  # The hand-written list had silently drifted: `attic` (atticd's index --
+  # atticd will not start without it, sea-orm runs migrations against it at
+  # startup) and `appuser` were never dumped at all, from the day they were
+  # added. Deriving it means a future ensureDatabases entry is backed up by
+  # construction instead of by remembering to edit two lists.
+  #
+  # `forgejo` is the one deliberate exclusion, and it is NOT the drift above:
+  # the forgejo database on THIS host is an empty leftover. Forgejo leaves
+  # services.forgejo.database.createDatabase at its default of true (see
+  # hosts/forgejo/configuration.nix), so it provisions and uses a LOCAL
+  # postgres over its unix socket, and dumps that real database itself at
+  # 02:30. Dumping the empty one here spent 78-IOPS disk time on a bare schema
+  # every night.
   services.postgresqlBackup = {
     enable = true;
-    databases = ["appdb" "terraform" "forgejo" "romm" "hofvarpnir"];
+    databases = lib.subtractLists ["forgejo"] config.services.postgresql.ensureDatabases;
     location = "/var/backup/postgresql";
     startAt = "03:00";
     compression = "zstd";
