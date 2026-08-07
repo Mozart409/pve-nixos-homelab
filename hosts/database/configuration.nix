@@ -129,6 +129,54 @@
       log_temp_files = "10MB";
       log_autovacuum_min_duration = "10s";
       # log_checkpoints is already on by default in PG15+.
+
+      # Session hardening. Only settings that target a PATHOLOGY belong at
+      # cluster scope -- anything here applies to pg_dump, the prometheus
+      # exporter and atticd's sea-orm startup migrations alike. Everything that
+      # can ABORT work is scoped per-role instead (see the mcp setter below).
+      #
+      # An abandoned open transaction is the one failure that compounds on this
+      # hardware: it pins the xmin horizon so autovacuum cannot reclaim, bloat
+      # grows, and bloat costs IOPS this pool does not have. This fires only on
+      # a session that is IDLE inside a transaction -- a session actually
+      # running a statement is never touched, so migrations and pg_dump are
+      # unaffected by construction. 2min is far longer than any client here
+      # legitimately idles mid-transaction (pgAdmin's query tool is the usual
+      # producer).
+      idle_in_transaction_session_timeout = "2min";
+
+      # Reap backends whose client is gone. Postgres inherits the kernel's ~2h
+      # dead-peer detection; homelab VMs are rebooted by colmena constantly, so
+      # those backends hold connection slots and locks for hours. 60s idle plus
+      # 6 probes 10s apart bounds it to ~2min. This affects only TCP peers that
+      # have stopped answering -- an idle-but-alive session is untouched, which
+      # is the whole point (see idle_session_timeout below).
+      tcp_keepalives_idle = 60;
+      tcp_keepalives_interval = 10;
+      tcp_keepalives_count = 6;
+
+      # DELIBERATELY NOT SET, do not "complete the set":
+      #
+      # statement_timeout -- any value large enough to be safe for atticd's
+      #   startup migrations, terraform state ops and maintenance is too large
+      #   to protect anything; any value small enough to protect is the value
+      #   that leaves atticd unable to start. Per-role only.
+      #
+      # lock_timeout -- DDL legitimately waits for locks. The blocker is
+      #   already bounded to 2min above, which attacks the cause instead of
+      #   punishing the victim.
+      #
+      # idle_session_timeout -- the terraform `pg` backend holds its state lock
+      #   as a SESSION-level advisory lock and then sits idle for the whole
+      #   plan/apply. Reaping idle sessions would drop that lock mid-apply. It
+      #   would also churn pgbouncer's min_pool_size = 5 idle server
+      #   connections. The problem it is usually reached for -- backends left
+      #   by a client VM that vanished -- is solved by the keepalives above
+      #   with none of that.
+      #
+      # transaction_timeout (PG17+, so it IS available) -- it counts idle time
+      #   and work time against one budget, which is exactly the shape that
+      #   kills a slow migration on an HDD.
     };
 
     # Enable TCP/IP connections
