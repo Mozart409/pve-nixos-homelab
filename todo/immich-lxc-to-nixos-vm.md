@@ -53,7 +53,8 @@ Two things this settles:
 
 | Fact | Value |
 | --- | --- |
-| Last complete snapshot | `ct/104` @ **2026-07-28 01:38:15 UTC** — the only one in the datastore, and it **fails verification** (see below) |
+| Last complete snapshot | **2026-08-08: two in the datastore** (`keep-last=2`). **2026-08-02 01:00 CEST** — 82.0 GB `root.pxar`, 42.0 MB catalog, **no verification record at all**. **2026-07-28 03:38 CEST** — 79.4 GB, 29.7 MB catalog, verification **`ok`** (the single-threaded re-verify from 08-01). So the *verified* net is the older one; the *current* one is unverified. |
+| Library growth rate | **+2.6 GB of pxar and +41 % catalog size in the 5 days** between those two snapshots — the file count is climbing faster than the bytes |
 | `root.pxar.didx` | **79,395,864,927 B ≈ 74 GiB** (OS + library) |
 | `catalog.pcat1.didx` | 29.7 MB — a very large catalog, i.e. a very high file count |
 | Backup target | `pbs-r2` datastore (`r2-store`), selection `104` |
@@ -65,8 +66,8 @@ Two things this settles:
 | vectorchord in pinned nixpkgs | **1.1.1** (`postgresql18Packages.vectorchord`) |
 | default `services.postgresql` package | **18.4** — what the immich VM gets unless pinned |
 | Central Postgres (`homelab-database`) | `pkgs.postgresql_18` |
-| Next free LAN IP | `192.168.2.185` (`.184` is the current highest) |
-| Next free `vm_id` | `4348` |
+| Next free LAN IP | ~~`192.168.2.185`~~ → **`192.168.2.186`**. **Corrected 2026-08-08: `.185` is taken** by `scratchpad_vm` (`vm_id 4347`) — `iac/main.tf` and an A/PTR pair in `hosts/dns/configuration.nix`. Provisioning immich there would collide. |
+| Next free `vm_id` | ~~`4348`~~ → **`4349`**. **Corrected 2026-08-08: `4348` is taken** by `woodpecker_vm` (`iac/main.tf:1084`). In-use guest IDs are 4323, 4325–4328, 4333–4341, 4344–4348. |
 | immich refs in this repo | **none** — greenfield host |
 
 ## Status
@@ -89,6 +90,27 @@ Postgres major, and the vchord version** need to line up.
 
 What is now left is ordinary work: provision the VM (Phase 1), stand up a clean
 immich (Phase 2), move the data (Phase 3), cut over (Phase 4).
+
+**2026-08-08: CT 104's volume moved to `ssd_pool`, and two facts here were
+wrong.** The SSD tier landed ([`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md)
+Phases 0–1 complete), and immich's rootfs was migrated off the HDD mirror. Three
+things follow for this plan:
+
+- **Both "next free" values in the fact table were stale.** `192.168.2.185` is
+  scratchpad's and `vm_id 4348` is woodpecker's. Use **`.186`** and **`4349`**.
+  Re-derive both at provisioning time rather than trusting this table — the
+  homelab gained three guests between this doc being written and being read.
+- **Phase 3.3 gets much cheaper.** The "expect many hours" rsync estimate was
+  driven entirely by reading 74 GiB of small files off a ~78-IOPS HDD mirror.
+  The source now lives on flash. Re-estimate rather than budgeting a night.
+- **Phase 1.1 should target `ssd_pool`, not `zfs_pool`.**
+
+Also inventoried while migrating (partial credit on Phase 0.2): CT 104 is
+`unprivileged: 1`, 4 cores, 6144 MB RAM, `onboot: 1`, `192.168.2.104`, and
+**everything lives on a single rootfs** (`subvol-104-disk-1`, declared
+`size=512G`, actually using 70.4 G / 80.2 G logical) — there is **no separate
+mountpoint** for the library. Still to capture: `mediaLocation`, Postgres
+version and DB name, the immich uid/gid, and whether Redis is local.
 
 **2026-08-01: re-measured against live PBS data.** The case is stronger than
 when this was written — see the re-measured table above. `vm/4341`'s first-ever
@@ -192,22 +214,26 @@ and the migration's fallback position holds. Still not started.
 
 ## Phase 1 — Provision the VM
 
-- [ ] **1.1 `iac/main.tf`** — add `immich_vm`: `vm_id = 4348`, `node_name =
+- [ ] **1.1 `iac/main.tf`** — add `immich_vm`: `vm_id = 4349`, `node_name =
   "pve-gigabyte"`, 4 cores (`type = "host"`), memory `dedicated = 8192`.
   **Set `floating = 0` / omit ballooning** — see the jellyfin balloon incident
   (2026-07-28: host memory pressure squeezed jellyfin 3.83 GiB → 1.85 GiB
-  mid-workload). Single `scsi0` disk on `zfs_pool`, 250 GB. Add to outputs.
+  mid-workload). Single `scsi0` disk on **`ssd_pool`** (changed 2026-08-08 — the
+  SSD tier now exists; do not put this on `zfs_pool`), 250 GB. Add to outputs.
+  Budget check: `ssd_pool` is 888 G and CT 104's ~70 G already lives there.
 - [ ] **1.2 `tofu apply`** in `iac/`.
 - [ ] **1.3 `hosts/immich/configuration.nix`** — import `common.nix`,
-  `tailscale.nix`, `step-ca-trust.nix`. Static IP `192.168.2.185/24`, gateway
+  `tailscale.nix`, `step-ca-trust.nix`. Static IP `192.168.2.186/24`, gateway
   `192.168.2.1`. Node exporter with `["systemd" "processes"]`. Firewall: 22, 443,
   9100, `trustedInterfaces = ["tailscale0"]`.
 - [ ] **1.4 `flake.nix`** — add to `hostAddrs`, `nixosConfigurations` (`mkHost`),
   and `colmenaHive`.
 - [ ] **1.5 `hosts/dns/configuration.nix`** — A + PTR records for
-  `immich.homelab.local` → `192.168.2.185`.
+  `immich.homelab.local` → `192.168.2.186`.
 - [ ] **1.6 `hosts/otel/configuration.nix`** — Prometheus scrape job
-  `immich-node`, target `192.168.2.185:9100`, label `instance = "homelab-immich"`.
+  `immich-node`, target `immich.homelab.local:9100`, label
+  `instance = "homelab-immich"`. (Address by DNS name, not raw IP — `AGENTS.md`
+  §5 step 5.)
 - [ ] **1.7** `git add` the new files, then `just fmt` and
   `nix eval ".#nixosConfigurations.immich.config.system.build.toplevel.drvPath"`.
 - [ ] **1.8 Deploy.** Single disk → the standard flow applies:
@@ -247,10 +273,17 @@ and the migration's fallback position holds. Still not started.
   touching anything else. Per 0.1b, if the majors differ, run the dump with the
   **newer** `pg_dump` (from the VM, over the network) — an older `pg_dump`
   cannot produce a reliable dump for a newer server, but the reverse is fine.
-- [ ] **3.3 rsync the library** to the new VM's `mediaLocation`. 74 GiB off an
-  HDD pool of small files — **expect many hours**, same physics as the backup.
-  Run it in `tmux`/`screen`, use `rsync -aHAX --info=progress2`, and be ready to
-  resume.
+- [ ] **3.3 rsync the library** to the new VM's `mediaLocation`. ~~74 GiB off an
+  HDD pool of small files — **expect many hours**, same physics as the backup.~~
+  **Re-estimate (2026-08-08): the source is on `ssd_pool` now**, so the read side
+  is no longer the ~78-IOPS mirror and this should be far quicker. Still run it
+  in `tmux`/`screen` with `rsync -aHAX --info=progress2` and be ready to resume —
+  but do not budget a night for it. Measure the first few minutes and extrapolate.
+  If both source and target end up on `ssd_pool`, consider whether a `zfs send`
+  of the dataset beats a file-level rsync here too (it did by ~10× for the LXC
+  move — see [`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md)),
+  though rsync into a *running* immich's `mediaLocation` is a different shape of
+  problem than cloning a whole dataset.
 - [ ] **3.4 Fix ownership.** rsync will land files as the source uid. Chown to
   the immich service user on the VM. *(The hofvarpnir migration hit exactly this
   — files arrived as uid 1000 and needed re-chowning to 999.)*
@@ -351,6 +384,9 @@ way:
   Cheaper and lower-risk than this migration; consider doing it first.
   (Superseded by [`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md),
   which chose a separate `ssd_pool` over a `special` vdev — see its Decisions.)
+  **Done 2026-08-07/08:** `ssd_pool` is built (2× Kingston A400 960 GB mirror,
+  888 G) and CT 104's rootfs has been migrated onto it. "Consider doing it
+  first" was the right call and it was taken.
 
 ## Unrelated to speed — resolved, no longer affects this plan
 
