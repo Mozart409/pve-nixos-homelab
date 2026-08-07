@@ -3,7 +3,49 @@
   lib,
   pkgs,
   ...
-}: {
+}: let
+  psql = "${config.services.postgresql.package}/bin/psql";
+
+  # Every role password is set the same way: a oneshot that reads the agenix
+  # secret and ALTERs the role. Only the description, the role and the extra
+  # SQL ever differed across the seven copies this replaces.
+  #
+  # ORDERING GOTCHA -- do not "simplify" after/requires below.
+  # Order on postgresql-SETUP.service, never postgresql.service.
+  # ensureUsers/ensureDatabases run in the setup unit; postgresql.service
+  # reports ready as soon as the server accepts connections, which is well
+  # before any role has been created. Ordering only on postgresql.service
+  # races role creation and fails with `role "<name>" does not exist` -- but
+  # only on the deploy that first introduces the role, so the bug stays
+  # dormant afterwards and a green deploy proves nothing. This failed exactly
+  # that way when the mcp role was added (2026-07-31).
+  # (postgresql-ensure-users.service does not exist in this nixpkgs.)
+  #
+  # Centralising it here means that comment is now enforced in one place
+  # instead of restated seven times and hopefully copied correctly the eighth.
+  mkRolePasswordUnit = {
+    role,
+    description,
+    secret,
+    extraSql ? [],
+  }: {
+    inherit description;
+    after = ["postgresql-setup.service" "agenix.service"];
+    requires = ["postgresql-setup.service"];
+    wantedBy = ["multi-user.target"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = "postgres";
+    };
+    script =
+      ''
+        PASSWORD=$(cat ${secret.path})
+        ${psql} -c "ALTER USER ${role} WITH PASSWORD '$PASSWORD';"
+      ''
+      + lib.concatMapStrings (sql: "${psql} -c \"${sql}\"\n") extraSql;
+  };
+in {
   imports = [
     ../../modules/common.nix
     ../../modules/disko-config.nix
@@ -235,172 +277,86 @@
   };
 
   # Set the password and read-only grants for the pgmcp `mcp` role.
-  systemd.services.postgresql-mcp-password = {
+  systemd.services.postgresql-mcp-password = mkRolePasswordUnit {
+    role = "mcp";
     description = "Set pgmcp PostgreSQL role password and read-only grants";
-    # ORDERING GOTCHA (applies to every password setter in this file):
-    # order on postgresql-SETUP.service, never postgresql.service.
-    # ensureUsers/ensureDatabases run in the setup unit; postgresql.service
-    # reports ready as soon as the server accepts connections, which is well
-    # before any role has been created. Ordering only on postgresql.service
-    # races role creation and fails with `role "<name>" does not exist` — but
-    # only on the deploy that first introduces the role, so the bug stays
-    # dormant afterwards and a green deploy proves nothing. This unit failed
-    # exactly that way when the mcp role was added (2026-07-31).
-    # (postgresql-ensure-users.service does not exist in this nixpkgs.)
-    after = ["postgresql-setup.service" "agenix.service"];
-    requires = ["postgresql-setup.service"];
-    wantedBy = ["multi-user.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "postgres";
-    };
+    secret = config.age.secrets.pgmcp-role-password;
     # pg_read_all_data is a cluster-wide predefined role (PG14+): membership
     # grants SELECT on every table, view and sequence in *every* database,
     # including ones created later, without per-database grants. Pairing it with
     # a read-only default transaction means the role cannot write even if pgmcp
     # ever sent something other than a SELECT.
-    script = ''
-      PASSWORD=$(cat ${config.age.secrets.pgmcp-role-password.path})
-      ${config.services.postgresql.package}/bin/psql -c "ALTER USER mcp WITH PASSWORD '$PASSWORD';"
-      ${config.services.postgresql.package}/bin/psql -c "GRANT pg_read_all_data TO mcp;"
-      ${config.services.postgresql.package}/bin/psql -c "ALTER ROLE mcp SET default_transaction_read_only = on;"
-      # Query bounds, scoped to this role via the same ALTER ROLE ... SET
-      # mechanism as default_transaction_read_only above, precisely so a global
-      # default cannot reach atticd's startup migrations.
-      #
-      # mcp is the only role here executing queries nobody wrote or reviewed --
-      # pgmcp's run_query passes LLM-authored SQL straight through -- and the
-      # only role that cannot be harmed by being told "no".
-      #
-      # 30s: pgmcp calls are LLM tool calls with their own request deadline, so
-      #   a query that outlives 30s produces no answer anyone will read; it only
-      #   burns IOPS the rest of the cluster needs. The catalog tools are
-      #   milliseconds; only run_query can run away.
-      # 5s:  read-only, so it only ever needs ACCESS SHARE. If it cannot get
-      #   that in 5s a writer is doing DDL, and the right answer is to fail now
-      #   rather than queue an LLM behind a migration.
-      # 30s idle-in-transaction: tighter than the 2min cluster default; a
-      #   read-only role has no reason to hold a transaction open at all.
-      #
-      # NOTE: ALTER ROLE ... SET is stored in pg_db_role_setting and does NOT
-      # converge. Deleting these lines from Nix will not remove them from the
-      # live cluster -- backing them out needs an explicit
-      # `ALTER ROLE mcp RESET <setting>;` by hand.
-      ${config.services.postgresql.package}/bin/psql -c "ALTER ROLE mcp SET statement_timeout = '30s';"
-      ${config.services.postgresql.package}/bin/psql -c "ALTER ROLE mcp SET lock_timeout = '5s';"
-      ${config.services.postgresql.package}/bin/psql -c "ALTER ROLE mcp SET idle_in_transaction_session_timeout = '30s';"
-    '';
+    #
+    # The timeouts below are scoped to this role via the same ALTER ROLE ... SET
+    # mechanism, precisely so a global default cannot reach atticd's startup
+    # migrations. mcp is the only role here executing queries nobody wrote or
+    # reviewed -- pgmcp's run_query passes LLM-authored SQL straight through --
+    # and the only role that cannot be harmed by being told "no".
+    #
+    # 30s statement: pgmcp calls are LLM tool calls with their own request
+    #   deadline, so a query that outlives 30s produces no answer anyone will
+    #   read; it only burns IOPS the rest of the cluster needs. The catalog
+    #   tools are milliseconds; only run_query can run away.
+    # 5s lock: read-only, so it only ever needs ACCESS SHARE. If it cannot get
+    #   that in 5s a writer is doing DDL, and the right answer is to fail now
+    #   rather than queue an LLM behind a migration.
+    # 30s idle-in-transaction: tighter than the 2min cluster default; a
+    #   read-only role has no reason to hold a transaction open at all.
+    #
+    # NOTE: ALTER ROLE ... SET is stored in pg_db_role_setting and does NOT
+    # converge. Deleting these lines from Nix will not remove them from the
+    # live cluster -- backing them out needs an explicit
+    # `ALTER ROLE mcp RESET <setting>;` by hand.
+    extraSql = [
+      "GRANT pg_read_all_data TO mcp;"
+      "ALTER ROLE mcp SET default_transaction_read_only = on;"
+      "ALTER ROLE mcp SET statement_timeout = '30s';"
+      "ALTER ROLE mcp SET lock_timeout = '5s';"
+      "ALTER ROLE mcp SET idle_in_transaction_session_timeout = '30s';"
+    ];
   };
 
-  # Set password for the attic user after PostgreSQL creates it.
-  systemd.services.postgresql-attic-password = {
+  # atticd on the cache host. See the ordering gotcha on mkRolePasswordUnit.
+  systemd.services.postgresql-attic-password = mkRolePasswordUnit {
+    role = "attic";
     description = "Set attic PostgreSQL user password";
-    # See the ordering gotcha on postgresql-mcp-password above.
-    after = ["postgresql-setup.service" "agenix.service"];
-    requires = ["postgresql-setup.service"];
-    wantedBy = ["multi-user.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "postgres";
-    };
-    script = ''
-      PASSWORD=$(cat ${config.age.secrets.attic-db-password.path})
-      ${config.services.postgresql.package}/bin/psql -c "ALTER USER attic WITH PASSWORD '$PASSWORD';"
-    '';
+    secret = config.age.secrets.attic-db-password;
   };
 
-  # Set password for terraform user after PostgreSQL creates the user
-  systemd.services.postgresql-terraform-password = {
+  systemd.services.postgresql-terraform-password = mkRolePasswordUnit {
+    role = "terraform";
     description = "Set Terraform PostgreSQL user password";
-    # See the ordering gotcha on postgresql-mcp-password above.
-    after = ["postgresql-setup.service" "agenix.service"];
-    requires = ["postgresql-setup.service"];
-    wantedBy = ["multi-user.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "postgres";
-    };
-    script = ''
-      PASSWORD=$(cat ${config.age.secrets.terraform-state-db-password.path})
-      ${config.services.postgresql.package}/bin/psql -c "ALTER USER terraform WITH PASSWORD '$PASSWORD';"
-    '';
+    secret = config.age.secrets.terraform-state-db-password;
   };
 
-  # Set password for forgejo user after PostgreSQL creates the user
-  systemd.services.postgresql-forgejo-password = {
+  systemd.services.postgresql-forgejo-password = mkRolePasswordUnit {
+    role = "forgejo";
     description = "Set Forgejo PostgreSQL user password";
-    # See the ordering gotcha on postgresql-mcp-password above.
-    after = ["postgresql-setup.service" "agenix.service"];
-    requires = ["postgresql-setup.service"];
-    wantedBy = ["multi-user.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "postgres";
-    };
-    script = ''
-      PASSWORD=$(cat ${config.age.secrets.forgejo-db-password.path})
-      ${config.services.postgresql.package}/bin/psql -c "ALTER USER forgejo WITH PASSWORD '$PASSWORD';"
-    '';
+    secret = config.age.secrets.forgejo-db-password;
   };
 
-  # Set password for romm user after PostgreSQL creates the user.
-  # See the ordering gotcha on postgresql-mcp-password above.
-  systemd.services.postgresql-romm-password = {
+  systemd.services.postgresql-romm-password = mkRolePasswordUnit {
+    role = "romm";
     description = "Set RomM PostgreSQL user password";
-    after = ["postgresql-setup.service" "agenix.service"];
-    requires = ["postgresql-setup.service"];
-    wantedBy = ["multi-user.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "postgres";
-    };
-    script = ''
-      PASSWORD=$(cat ${config.age.secrets.romm-db-password.path})
-      ${config.services.postgresql.package}/bin/psql -c "ALTER USER romm WITH PASSWORD '$PASSWORD';"
-    '';
+    secret = config.age.secrets.romm-db-password;
   };
 
-  # Set password for hofvarpnir user after PostgreSQL creates the user.
-  # See the ordering gotcha on postgresql-mcp-password above.
-  systemd.services.postgresql-hofvarpnir-password = {
+  systemd.services.postgresql-hofvarpnir-password = mkRolePasswordUnit {
+    role = "hofvarpnir";
     description = "Set hofvarpnir PostgreSQL user password";
-    after = ["postgresql-setup.service" "agenix.service"];
-    requires = ["postgresql-setup.service"];
-    wantedBy = ["multi-user.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "postgres";
-    };
-    script = ''
-      PASSWORD=$(cat ${config.age.secrets.hofvarpnir-db-password.path})
-      ${config.services.postgresql.package}/bin/psql -c "ALTER USER hofvarpnir WITH PASSWORD '$PASSWORD';"
-    '';
+    secret = config.age.secrets.hofvarpnir-db-password;
   };
 
   # Set the postgres superuser password from agenix. The `postgres` role is
   # created by initdb, not by ensureUsers, so this one never actually raced —
   # but it orders on postgresql-setup.service anyway for consistency with the
-  # setters above (see the ordering gotcha on postgresql-mcp-password).
-  systemd.services.postgresql-superuser-password = {
+  # setters above. The unit is named ...-superuser-password but ALTERs the role
+  # `postgres`; do not rename the unit to match the role, or systemd sees a new
+  # unit and leaves the old one running.
+  systemd.services.postgresql-superuser-password = mkRolePasswordUnit {
+    role = "postgres";
     description = "Set postgres superuser password";
-    after = ["postgresql-setup.service" "agenix.service"];
-    requires = ["postgresql-setup.service"];
-    wantedBy = ["multi-user.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "postgres";
-    };
-    script = ''
-      PASSWORD=$(cat ${config.age.secrets.postgres-superuser-password.path})
-      ${config.services.postgresql.package}/bin/psql -c "ALTER USER postgres WITH PASSWORD '$PASSWORD';"
-    '';
+    secret = config.age.secrets.postgres-superuser-password;
   };
 
   # Backup configuration.
