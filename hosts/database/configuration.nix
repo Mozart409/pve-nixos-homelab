@@ -265,6 +265,31 @@
       ${config.services.postgresql.package}/bin/psql -c "ALTER USER mcp WITH PASSWORD '$PASSWORD';"
       ${config.services.postgresql.package}/bin/psql -c "GRANT pg_read_all_data TO mcp;"
       ${config.services.postgresql.package}/bin/psql -c "ALTER ROLE mcp SET default_transaction_read_only = on;"
+      # Query bounds, scoped to this role via the same ALTER ROLE ... SET
+      # mechanism as default_transaction_read_only above, precisely so a global
+      # default cannot reach atticd's startup migrations.
+      #
+      # mcp is the only role here executing queries nobody wrote or reviewed --
+      # pgmcp's run_query passes LLM-authored SQL straight through -- and the
+      # only role that cannot be harmed by being told "no".
+      #
+      # 30s: pgmcp calls are LLM tool calls with their own request deadline, so
+      #   a query that outlives 30s produces no answer anyone will read; it only
+      #   burns IOPS the rest of the cluster needs. The catalog tools are
+      #   milliseconds; only run_query can run away.
+      # 5s:  read-only, so it only ever needs ACCESS SHARE. If it cannot get
+      #   that in 5s a writer is doing DDL, and the right answer is to fail now
+      #   rather than queue an LLM behind a migration.
+      # 30s idle-in-transaction: tighter than the 2min cluster default; a
+      #   read-only role has no reason to hold a transaction open at all.
+      #
+      # NOTE: ALTER ROLE ... SET is stored in pg_db_role_setting and does NOT
+      # converge. Deleting these lines from Nix will not remove them from the
+      # live cluster -- backing them out needs an explicit
+      # `ALTER ROLE mcp RESET <setting>;` by hand.
+      ${config.services.postgresql.package}/bin/psql -c "ALTER ROLE mcp SET statement_timeout = '30s';"
+      ${config.services.postgresql.package}/bin/psql -c "ALTER ROLE mcp SET lock_timeout = '5s';"
+      ${config.services.postgresql.package}/bin/psql -c "ALTER ROLE mcp SET idle_in_transaction_session_timeout = '30s';"
     '';
   };
 
