@@ -99,9 +99,36 @@
       work_mem = "4MB";
       max_connections = 100;
 
-      # Enable query logging (optional)
-      log_statement = "all";
-      log_duration = true;
+      # Logging. This host's pool is 2 HDDs at ~78 IOPS cluster-wide (see the
+      # pgadmin TimeoutStartSec note below), and journald fsyncs, so log volume
+      # is a direct tax on the same spindles every query needs. `log_statement =
+      # "all"` + `log_duration = true` wrote TWO journal lines for EVERY
+      # statement -- including the prometheus exporter's pg_stat_* polling every
+      # 15s across 7 databases -- which is almost entirely noise.
+      #
+      # Replaced by: DDL always (the migration audit trail is the part actually
+      # worth keeping -- it is what you reach for when atticd breaks), plus
+      # statement text and duration only above 1s. On this hardware a query
+      # doing a few hundred random reads legitimately takes ~1s, so above that
+      # is pathological rather than merely cold.
+      #
+      # log_duration MUST be false: left on, it re-logs a duration line for
+      # every statement and defeats log_min_duration_statement entirely.
+      log_statement = "ddl";
+      log_duration = false;
+      log_min_duration_statement = "1s";
+
+      # Attribute a slow line to a role/database/application, not just a pid.
+      # The default is "%m [%p] ". %q suppresses the rest for non-session lines.
+      log_line_prefix = "%m [%p] %q%u@%d/%a ";
+
+      # Cheap, high-signal diagnostics for a slow-disk box: who waited on a lock
+      # (>deadlock_timeout, 1s), which sorts/hashes spilled past work_mem (4MB)
+      # onto the HDDs, and when autovacuum ate the disk.
+      log_lock_waits = true;
+      log_temp_files = "10MB";
+      log_autovacuum_min_duration = "10s";
+      # log_checkpoints is already on by default in PG15+.
     };
 
     # Enable TCP/IP connections
