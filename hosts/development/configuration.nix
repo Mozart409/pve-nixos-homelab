@@ -107,6 +107,16 @@
   # every git push to Forgejo would also offer id_colmena and prompt for its
   # passphrase. Keep the Forgejo block first and the negation in place.
   #
+  # `!*.ts.net` exists because `homelab-*` is greedier than it looks: the git
+  # remote here is ssh://forgejo@homelab-forgejo.dropbear-butterfly.ts.net:2222,
+  # which `homelab-*` matches. That handed Forgejo an IdentitiesOnly list
+  # containing just id_colmena and no agent fallback, so `git pull` died with
+  # `Permission denied (publickey)` — and silently, with no passphrase prompt,
+  # because ssh offers the *public* key first and never needs to decrypt one the
+  # server has already rejected. Colmena's Tailscale targets are the bare names
+  # (`homelab-forgejo`, from hostAddrs in flake.nix), which `!*.ts.net` leaves
+  # matching, so deploys over DEPLOY_NET=tailscale still get the key.
+  #
   # `StrictHostKeyChecking accept-new` because this host starts with an empty
   # known_hosts: without it the first colmena run dies with "Host key
   # verification failed" on every target, before the passphrase prompt is ever
@@ -122,7 +132,7 @@
       IdentitiesOnly yes
       StrictHostKeyChecking accept-new
 
-    Host *.homelab.local homelab-* 192.168.2.* !forgejo.homelab.local
+    Host *.homelab.local homelab-* 192.168.2.* !forgejo.homelab.local !*.ts.net
       User amadeus
       IdentityFile ~/.ssh/id_colmena
       IdentitiesOnly yes
