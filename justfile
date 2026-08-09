@@ -13,6 +13,11 @@ clear:
 shell:
   nix develop . --command zsh
 
+# Sync main against both git remotes: fetch, fast-forward/merge, then push
+# origin (Forgejo, canonical) first and github second. See scripts/sync-remotes.sh.
+sync-remotes:
+  @./scripts/sync-remotes.sh
+
 check: clear
   nix flake check --all-systems
 
