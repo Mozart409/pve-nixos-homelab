@@ -106,6 +106,14 @@
   # matching blocks rather than first-one-wins, so without `!forgejo.homelab.local`
   # every git push to Forgejo would also offer id_colmena and prompt for its
   # passphrase. Keep the Forgejo block first and the negation in place.
+  #
+  # `StrictHostKeyChecking accept-new` because this host starts with an empty
+  # known_hosts: without it the first colmena run dies with "Host key
+  # verification failed" on every target, before the passphrase prompt is ever
+  # reached. accept-new is trust-on-first-use — it still refuses a host key that
+  # *changes* later, which is the case that matters. Note a reinstalled host
+  # gets a new key and will then be refused until its known_hosts line is
+  # dropped; that is the same re-provisioning footgun that breaks agenix.
   programs.ssh.extraConfig = ''
     Host forgejo.homelab.local
       Port 2222
@@ -119,6 +127,7 @@
       IdentityFile ~/.ssh/id_colmena
       IdentitiesOnly yes
       IdentityAgent none
+      StrictHostKeyChecking accept-new
   '';
 
   # Commit identity, so a reinstall doesn't leave git prompting for one.
