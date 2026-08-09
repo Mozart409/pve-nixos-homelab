@@ -177,6 +177,16 @@
     "Bash(deploy *)"
     "Bash(nixops *)"
 
+    # The same deploys reached through the task runner. `Bash(just:*)` in the
+    # allow list is matched against the literal command line, not against what
+    # the recipe expands to, so `just ca` walks straight past the
+    # `Bash(colmena apply*)` deny above. Every wrapper needs its own entry.
+    # Builds stay allowed — `just cb` / `just colmena-build` touch nothing.
+    "Bash(just ca*)"
+    "Bash(just colmena-apply*)"
+    "Bash(just colmena-reboot*)"
+    "Bash(just deploy*)"
+
     # Irreversible git/forge actions. Narrows the Bash(git push:*) allow above:
     # a force-push can destroy history that exists nowhere else, and merging is
     # the one step in the PR flow that should stay human.
