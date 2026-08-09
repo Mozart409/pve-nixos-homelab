@@ -53,6 +53,10 @@ deploy host ip:
   echo "Deploying {{host}} to {{ip}}..."
   nixos-anywhere --flake .#{{host}} amadeus@{{ip}}
 
+# Shorthands for the two whole-fleet recipes.
+alias ca := colmena-apply
+alias cb := colmena-build
+
 colmena-apply: clear
   @echo "Deploying to all hosts..."
   colmena apply
