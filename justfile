@@ -58,8 +58,9 @@ deploy host ip:
   echo "Deploying {{host}} to {{ip}}..."
   nixos-anywhere --flake .#{{host}} amadeus@{{ip}}
 
-# Shorthands for the two whole-fleet recipes.
+# Shorthands. `cah <host>` takes the same argument as colmena-apply-host.
 alias ca := colmena-apply
+alias cah := colmena-apply-host
 alias cb := colmena-build
 
 colmena-apply: clear
