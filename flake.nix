@@ -44,6 +44,9 @@
       url = "github:ogulcancelik/herdr/v0.7.5";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # nixos-unstable (26.11) dropped x86_64-darwin; this pins the last
+    # darwin-capable channel for the Intel Mac devShell only.
+    nixpkgs-darwin.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
   };
 
   outputs = {
@@ -61,6 +64,7 @@
     mozart409-nixvim,
     nixos-hardware,
     herdr,
+    nixpkgs-darwin,
   }: let
     system = "x86_64-linux";
 
@@ -599,18 +603,41 @@
         # END
       };
     }
-    // flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "aarch64-darwin"] (system: let
-      pkgs = import nixpkgs {
-        inherit system;
-        config.allowUnfree = true;
-      };
+    // flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin"] (system: let
+      # nixos-unstable (26.11) dropped x86_64-darwin, so the Intel Mac devShell
+      # imports nixpkgs-darwin (26.05, the last darwin-capable channel) instead.
+      darwinLegacy = system == "x86_64-darwin";
+      pkgs =
+        import (
+          if darwinLegacy
+          then nixpkgs-darwin
+          else nixpkgs
+        ) {
+          inherit system;
+          config.allowUnfree = true;
+        };
+      # These track nixos-unstable, which no longer evaluates for x86_64-darwin;
+      # on that system fall back to the 26.05-darwin channel packages (agenix
+      # was removed from nixpkgs, so build it from the pinned source).
+      agenixPkg =
+        if darwinLegacy
+        then pkgs.callPackage "${agenix}/pkgs/agenix.nix" {}
+        else agenix.packages.${system}.default;
+      colmenaPkg =
+        if darwinLegacy
+        then pkgs.colmena
+        else colmena.packages.${system}.colmena;
+      nixosAnywherePkg =
+        if darwinLegacy
+        then pkgs.nixos-anywhere
+        else nixos-anywhere.packages.${system}.default;
     in {
       devShells.default = pkgs.mkShell {
         buildInputs = with pkgs;
           [
             # keep-sorted start
 
-            agenix.packages.${system}.default
+            agenixPkg
             alejandra
             bacon
             # rust
@@ -618,7 +645,7 @@
             cargo-workspaces
             claude-code
             cocogitto
-            colmena.packages.${system}.colmena
+            colmenaPkg
             dive
             # fmt
             dprint
@@ -628,7 +655,7 @@
             kics
             lazydocker
             lefthook
-            nixos-anywhere.packages.${system}.default
+            nixosAnywherePkg
             #ai
             opencode
             opentofu
@@ -645,7 +672,9 @@
             # keep-sorted end
           ]
           # Linux-only in nixpkgs (no darwin client package anymore)
-          ++ pkgs.lib.optionals pkgs.stdenv.isLinux [pkgs.podman];
+          ++ pkgs.lib.optionals pkgs.stdenv.isLinux [pkgs.podman]
+          # darwin-only in nixpkgs
+          ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [pkgs.git];
         shellHook = ''
           lefthook install
         '';
