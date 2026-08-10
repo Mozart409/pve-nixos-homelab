@@ -6,6 +6,17 @@
 }: let
   psql = "${config.services.postgresql.package}/bin/psql";
 
+  # The exemption every service role that runs schema migrations needs from the
+  # cluster-wide defaults in services.postgresql.settings. `0` disables the
+  # bound for that role only; the global value still applies to everyone else.
+  # Kept as one binding so the exemption list is a single reviewable fact
+  # rather than the same three lines repeated per role.
+  migrationRoleTimeouts = {
+    statement_timeout = "0";
+    lock_timeout = "0";
+    transaction_timeout = "0";
+  };
+
   # Every role password is set the same way: a oneshot that reads the agenix
   # secret and ALTERs the role. Only the description, the role and the extra
   # SQL ever differed across the seven copies this replaces.
@@ -23,10 +34,17 @@
   #
   # Centralising it here means that comment is now enforced in one place
   # instead of restated seven times and hopefully copied correctly the eighth.
+  #
+  # `timeouts` is an attrset of GUC name -> raw SQL literal, applied with
+  # ALTER ROLE ... SET. Values are literals, not Nix strings: a quoted duration
+  # like "'30s'", or "0" to disable that bound for this role only. It exists so
+  # the generous cluster-wide defaults in services.postgresql.settings can be
+  # overridden per role in the one place that already knows about each role.
   mkRolePasswordUnit = {
     role,
     description,
     secret,
+    timeouts ? {},
     extraSql ? [],
   }: {
     inherit description;
@@ -43,7 +61,10 @@
         PASSWORD=$(cat ${secret.path})
         ${psql} -c "ALTER USER ${role} WITH PASSWORD '$PASSWORD';"
       ''
-      + lib.concatMapStrings (sql: "${psql} -c \"${sql}\"\n") extraSql;
+      + lib.concatMapStrings (sql: "${psql} -c \"${sql}\"\n") (
+        extraSql
+        ++ lib.mapAttrsToList (guc: value: "ALTER ROLE ${role} SET ${guc} = ${value};") timeouts
+      );
   };
 in {
   imports = [
@@ -197,28 +218,45 @@ in {
       tcp_keepalives_interval = 10;
       tcp_keepalives_count = 6;
 
-      # DELIBERATELY NOT SET, do not "complete the set":
+      # The remaining bounds are set cluster-wide as GENEROUS defaults, so that
+      # anything nobody thought about -- a human in pgAdmin's query tool, an
+      # ad-hoc psql, a service added later that nobody tuned -- is bounded by
+      # default rather than able to pin this pool indefinitely.
       #
-      # statement_timeout -- any value large enough to be safe for atticd's
-      #   startup migrations, terraform state ops and maintenance is too large
-      #   to protect anything; any value small enough to protect is the value
-      #   that leaves atticd unable to start. Per-role only.
+      # They are deliberately far looser than the per-role values, because a
+      # global default here also applies to pg_dump, the prometheus exporter
+      # and atticd's sea-orm startup migrations. The roles whose work
+      # legitimately outruns these are exempted individually, next to their
+      # password setters below -- see `timeouts` on each mkRolePasswordUnit
+      # call. Exempting by role rather than loosening the default keeps the
+      # exception list explicit and reviewable.
       #
-      # lock_timeout -- DDL legitimately waits for locks. The blocker is
-      #   already bounded to 2min above, which attacks the cause instead of
-      #   punishing the victim.
-      #
-      # idle_session_timeout -- the terraform `pg` backend holds its state lock
-      #   as a SESSION-level advisory lock and then sits idle for the whole
-      #   plan/apply. Reaping idle sessions would drop that lock mid-apply. It
-      #   would also churn pgbouncer's min_pool_size = 5 idle server
-      #   connections. The problem it is usually reached for -- backends left
-      #   by a client VM that vanished -- is solved by the keepalives above
-      #   with none of that.
-      #
-      # transaction_timeout (PG17+, so it IS available) -- it counts idle time
-      #   and work time against one budget, which is exactly the shape that
-      #   kills a slow migration on an HDD.
+      # If a service starts failing after a deploy with "canceling statement
+      # due to statement timeout", the fix is an exemption on ITS role, not
+      # raising these.
+
+      # 5min: no interactive query and no steady-state service query on this
+      # box legitimately runs five minutes. The things that do -- migrations,
+      # backups, terraform state ops -- are all exempted by role.
+      statement_timeout = "5min";
+
+      # 1min: a lock wait past a minute means a real blocker is sitting in
+      # front of you, and failing fast beats queueing behind it. Migration
+      # roles that legitimately take ACCESS EXCLUSIVE are exempted.
+      lock_timeout = "1min";
+
+      # 15min: outer bound on a whole multi-statement transaction. Set above
+      # statement_timeout on purpose, so it only ever catches a runaway that
+      # individual statements slipped past, never a single slow query.
+      transaction_timeout = "15min";
+
+      # 8h: reaps sessions whose client is gone but whose TCP connection never
+      # broke cleanly. Deliberately long -- the terraform `pg` backend holds
+      # its state lock as a SESSION-level advisory lock and idles for the whole
+      # plan/apply, so this must never fire mid-apply; terraform is exempted
+      # outright as well, belt and braces. Dead TCP peers are handled far
+      # faster by the keepalives above; this only catches the rest.
+      idle_session_timeout = "8h";
     };
 
     # Enable TCP/IP connections
@@ -310,41 +348,70 @@ in {
     extraSql = [
       "GRANT pg_read_all_data TO mcp;"
       "ALTER ROLE mcp SET default_transaction_read_only = on;"
-      "ALTER ROLE mcp SET statement_timeout = '30s';"
-      "ALTER ROLE mcp SET lock_timeout = '5s';"
-      "ALTER ROLE mcp SET idle_in_transaction_session_timeout = '30s';"
     ];
+    # Tighter than the cluster defaults in every direction. This is the only
+    # role that gets bounds STRICTER than global rather than looser.
+    timeouts = {
+      statement_timeout = "'30s'";
+      lock_timeout = "'5s'";
+      idle_in_transaction_session_timeout = "'30s'";
+      transaction_timeout = "'1min'";
+      idle_session_timeout = "'10min'";
+    };
   };
 
   # atticd on the cache host. See the ordering gotcha on mkRolePasswordUnit.
+  #
+  # migrationRoleTimeouts (below) exempts a role from the three cluster
+  # defaults that can abort work mid-flight. Every service role here runs its
+  # own schema migrations on connect or at startup -- sea-orm for atticd, xorm
+  # for forgejo, alembic for romm/hofvarpnir -- and a migration on a 78-IOPS
+  # HDD pool legitimately outruns statement_timeout, takes ACCESS EXCLUSIVE
+  # locks that outrun lock_timeout, and wraps the whole thing in one
+  # transaction that outruns transaction_timeout. Bounding any of those turns
+  # a slow deploy into a service that will not start.
+  #
+  # idle_in_transaction_session_timeout is deliberately NOT exempted: it is the
+  # one pathology that compounds (a pinned xmin horizon blocks autovacuum, and
+  # the resulting bloat costs IOPS this pool does not have), and no correct
+  # client idles two minutes inside an open transaction.
   systemd.services.postgresql-attic-password = mkRolePasswordUnit {
     role = "attic";
     description = "Set attic PostgreSQL user password";
     secret = config.age.secrets.attic-db-password;
+    timeouts = migrationRoleTimeouts;
   };
 
+  # terraform additionally needs idle_session_timeout off: the `pg` backend
+  # takes its state lock as a SESSION-level advisory lock and then sits idle
+  # for the whole plan/apply while it talks to the Proxmox API. Reaping the
+  # session would drop the lock mid-apply.
   systemd.services.postgresql-terraform-password = mkRolePasswordUnit {
     role = "terraform";
     description = "Set Terraform PostgreSQL user password";
     secret = config.age.secrets.terraform-state-db-password;
+    timeouts = migrationRoleTimeouts // {idle_session_timeout = "0";};
   };
 
   systemd.services.postgresql-forgejo-password = mkRolePasswordUnit {
     role = "forgejo";
     description = "Set Forgejo PostgreSQL user password";
     secret = config.age.secrets.forgejo-db-password;
+    timeouts = migrationRoleTimeouts;
   };
 
   systemd.services.postgresql-romm-password = mkRolePasswordUnit {
     role = "romm";
     description = "Set RomM PostgreSQL user password";
     secret = config.age.secrets.romm-db-password;
+    timeouts = migrationRoleTimeouts;
   };
 
   systemd.services.postgresql-hofvarpnir-password = mkRolePasswordUnit {
     role = "hofvarpnir";
     description = "Set hofvarpnir PostgreSQL user password";
     secret = config.age.secrets.hofvarpnir-db-password;
+    timeouts = migrationRoleTimeouts;
   };
 
   # Set the postgres superuser password from agenix. The `postgres` role is
@@ -353,10 +420,25 @@ in {
   # setters above. The unit is named ...-superuser-password but ALTERs the role
   # `postgres`; do not rename the unit to match the role, or systemd sees a new
   # unit and leaves the old one running.
+  #
+  # postgres is exempted from EVERY abort-y bound, including
+  # idle_in_transaction_session_timeout. It is what runs the nightly pg_dump of
+  # six databases (the postgresqlBackup-* units are User=postgres), the
+  # prometheus exporter (runAsLocalSuperUser), pgbouncer-userlist, and any
+  # manual maintenance. pg_dump holds one long transaction and can idle inside
+  # it between fetches, and on this pool a dump legitimately runs for minutes;
+  # a global bound reaching it means silent backup failure, which is the worst
+  # possible thing to discover late.
   systemd.services.postgresql-superuser-password = mkRolePasswordUnit {
     role = "postgres";
     description = "Set postgres superuser password";
     secret = config.age.secrets.postgres-superuser-password;
+    timeouts =
+      migrationRoleTimeouts
+      // {
+        idle_session_timeout = "0";
+        idle_in_transaction_session_timeout = "0";
+      };
   };
 
   # Backup configuration.
