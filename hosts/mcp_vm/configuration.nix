@@ -43,9 +43,12 @@
   #
   # `buildbot` is deliberately absent: its master/worker VMs are gone and the
   # database/role were dropped from the database host.
+  #
+  # `appuser` (was 8086) is absent for the same reason: a scratch database with
+  # no writer, whose only reader was this pgmcp instance. Database, role and
+  # instance were all dropped. 8086 is free to reuse.
   homelabDatabases = {
     appdb = 8085;
-    appuser = 8086;
     terraform = 8087;
     forgejo = 8088;
     romm = 8089;
