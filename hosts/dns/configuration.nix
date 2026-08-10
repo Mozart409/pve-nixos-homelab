@@ -41,6 +41,13 @@
           "127.0.0.0/8 allow"
           "192.168.2.0/24 allow"
           "::1/128 allow"
+          # Tailnet clients query this node's own LAN IP (192.168.2.145) via the
+          # subnet router. Traffic terminating on the router itself is NOT
+          # SNATed, so unbound sees the client's raw Tailscale CGNAT source
+          # address rather than a 192.168.2.x one. Allow the tailnet ranges so
+          # split-DNS lookups from remote clients aren't silently dropped.
+          "100.64.0.0/10 allow"
+          "fd7a:115c:a1e0::/48 allow"
         ];
 
         # Performance and caching settings
