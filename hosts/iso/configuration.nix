@@ -34,6 +34,11 @@
   #   sshKeys = ["ssh-ed25519 AAAA... someone@somewhere"];
   # };
 
+  # The installer profile turns ZFS on by default, which drags the kernel
+  # modules into the image for nothing -- this ISO installs onto Proxmox zvols
+  # and the guest never touches ZFS itself. Same mkForce the Pi images use.
+  boot.supportedFilesystems.zfs = lib.mkForce false;
+
   isoImage = {
     edition = "homelab";
     volumeID = "NIXOS_HOMELAB";
