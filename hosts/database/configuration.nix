@@ -274,14 +274,14 @@ in {
     '';
 
     # Initial databases (names must match usernames when using ensureDBOwnership)
-    ensureDatabases = ["appdb" "appuser" "terraform" "forgejo" "romm" "hofvarpnir" "attic"];
+    # `appuser` is deliberately absent: it was a scratch database with no
+    # writer, reachable only through its own pgmcp instance, and both were
+    # dropped. Removing it here does NOT drop the live database or role --
+    # ensureDatabases only ever creates. See the note in hosts/mcp_vm.
+    ensureDatabases = ["appdb" "terraform" "forgejo" "romm" "hofvarpnir" "attic"];
 
     # Initial users
     ensureUsers = [
-      {
-        name = "appuser";
-        ensureDBOwnership = true;
-      }
       {
         name = "terraform";
         ensureDBOwnership = true;
@@ -446,9 +446,11 @@ in {
   # The database list is DERIVED from ensureDatabases rather than hand-written.
   # The hand-written list had silently drifted: `attic` (atticd's index --
   # atticd will not start without it, sea-orm runs migrations against it at
-  # startup) and `appuser` were never dumped at all, from the day they were
-  # added. Deriving it means a future ensureDatabases entry is backed up by
-  # construction instead of by remembering to edit two lists.
+  # startup) was never dumped at all, from the day it was added. Deriving it
+  # means a future ensureDatabases entry is backed up by construction instead
+  # of by remembering to edit two lists -- and a REMOVED one stops being dumped
+  # by construction too, which is how `appuser` left without leaving a stale
+  # backup unit behind.
   #
   # `forgejo` is the one deliberate exclusion, and it is NOT the drift above:
   # the forgejo database on THIS host is an empty leftover. Forgejo leaves

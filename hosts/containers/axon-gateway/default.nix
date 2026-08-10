@@ -60,12 +60,6 @@
     enabled = true
 
     [[backends]]
-    name = "pgappuser"
-    url = "https://pg-appuser-mcp.homelab.local/mcp"
-    transport = "http"
-    enabled = true
-
-    [[backends]]
     name = "pgterraform"
     url = "https://pg-terraform-mcp.homelab.local/mcp"
     transport = "http"
