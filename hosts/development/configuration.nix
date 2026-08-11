@@ -134,7 +134,12 @@
 
     Host *.homelab.local homelab-* 192.168.2.* !forgejo.homelab.local !*.ts.net
       User amadeus
-      IdentityFile ~/.ssh/id_colmena
+      # TEMPORARY (revert me): passphraseless deploy key so colmena can push
+      # non-interactively. This DEFEATS the consent gate documented above — any
+      # agent session as amadeus can now deploy the fleet. Swap back to
+      # `~/.ssh/id_colmena` and delete `~/.ssh/id_colmena_deploy` once the whole
+      # fleet has been re-deployed with the current authorized_keys.
+      IdentityFile ~/.ssh/id_colmena_deploy
       IdentitiesOnly yes
       IdentityAgent none
       StrictHostKeyChecking accept-new
