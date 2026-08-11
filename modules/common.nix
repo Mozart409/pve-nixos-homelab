@@ -6,6 +6,7 @@
 }: {
   imports = [
     ./nix-gc.nix
+    ./homelab-users.nix
   ];
 
   # Timezone configuration
@@ -110,12 +111,12 @@
     openFirewall = true;
   };
 
-  # Common user configuration
-  users.users.amadeus = {
-    isNormalUser = true;
-    shell = pkgs.zsh;
-    extraGroups = ["wheel" "networkmanager"];
-    openssh.authorizedKeys.keys = [
+  # Common user configuration. Adding another person is one attribute here (or
+  # in a host config) -- see modules/homelab-users.nix.
+  homelab.users.amadeus = {
+    isAdmin = true;
+    extraGroups = ["networkmanager"];
+    sshKeys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMPJIxb+FNkiFtPB/9eUenHa1RCWLBI0ia7KN/nFIdGH iPhone"
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/HCRJuzlIbgcWk68ehApZl6kN+7PnKIgYSLRZ5IjzQ amadeus@Amadeuss-MacBook-Pro.local"
