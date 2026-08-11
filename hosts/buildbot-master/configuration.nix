@@ -186,7 +186,7 @@ in {
     };
 
     # Local network hostname with step-ca certificate
-    virtualHosts."buildbot-master.homelab.local" = {
+    virtualHosts."buildbot-master.homelab.local buildbot-master.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory

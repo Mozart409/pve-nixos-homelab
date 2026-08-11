@@ -310,7 +310,7 @@ in {
     # Local network hostname with step-ca certificate. This is WOODPECKER_HOST,
     # so it is effectively permanent -- it is baked into the OAuth redirect and
     # every registered webhook.
-    virtualHosts."ci.homelab.local" = {
+    virtualHosts."ci.homelab.local ci.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
@@ -327,7 +327,7 @@ in {
     };
 
     # Redirect plain HTTP to HTTPS for the local hostname.
-    virtualHosts."http://ci.homelab.local" = {
+    virtualHosts."http://ci.homelab.local http://ci.homelab.internal" = {
       extraConfig = ''
         redir https://{host}{uri} permanent
       '';
