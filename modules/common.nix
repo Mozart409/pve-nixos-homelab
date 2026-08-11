@@ -141,6 +141,7 @@
     fd
     file
     fzf
+    ghostty.terminfo
     git
     gnused
     gzip
