@@ -210,6 +210,15 @@
         unifi = mkHost "unifi";
         containers = mkHost "containers";
         minimal = mkHost "minimal";
+        # Bootable installer ISO. Explicit (not mkHost) because mkHost injects
+        # disko, which a live medium has no use for. Build with:
+        # just iso-build
+        iso = nixpkgs.lib.nixosSystem {
+          modules = [
+            {nixpkgs.hostPlatform = system;}
+            ./hosts/iso/configuration.nix
+          ];
+        };
         mcp = nixpkgs.lib.nixosSystem {
           specialArgs = {inherit homelab-dashboard homelab-mcp;};
           modules = [

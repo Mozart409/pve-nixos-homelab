@@ -133,6 +133,12 @@ rpi-flash device: clear
   @read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
   sudo dd if=result/sd-image/*.img of={{device}} bs=4096 conv=fsync status=progress
 
+# Build a bootable minimal installer ISO. Output lands at result/iso/*.iso.
+# Not a deployable host -- just an image you can dd to a USB stick and boot.
+iso-build: clear
+  @echo "Building minimal installer ISO..."
+  nix build '.#nixosConfigurations.iso.config.system.build.isoImage' --show-trace
+
 # --- Attic binary cache (hosts/cache) -------------------------------------
 
 # ONE-TIME bootstrap: mint an admin token from the atticd signing secret, create
