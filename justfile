@@ -13,6 +13,11 @@ clear:
 shell:
   nix develop . --command zsh
 
+# Sync main against both git remotes: fetch, fast-forward/merge, then push
+# origin (Forgejo, canonical) first and github second. See scripts/sync-remotes.sh.
+sync-remotes:
+  @./scripts/sync-remotes.sh
+
 check: clear
   nix flake check --all-systems
 
@@ -52,6 +57,11 @@ deploy host ip:
   fi
   echo "Deploying {{host}} to {{ip}}..."
   nixos-anywhere --flake .#{{host}} amadeus@{{ip}}
+
+# Shorthands. `cah <host>` takes the same argument as colmena-apply-host.
+alias ca := colmena-apply
+alias cah := colmena-apply-host
+alias cb := colmena-build
 
 colmena-apply: clear
   @echo "Deploying to all hosts..."

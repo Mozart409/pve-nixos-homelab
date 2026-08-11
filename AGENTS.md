@@ -171,8 +171,16 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
     ```
 
     If `github/main..main` is non-empty, end the task with an explicit nudge,
-    e.g. *"GitHub is 3 commits behind Forgejo — run `git push github main` to
+    e.g. *"GitHub is 3 commits behind Forgejo — run `just sync-remotes` to
     sync it."* Report the count and let the user run it.
+
+    For syncing by hand, `just sync-remotes` (`scripts/sync-remotes.sh`) is the
+    supported path: it fetches both remotes, fast-forwards `main` onto whatever
+    is newest (merging in any commits that exist only on `github`, e.g. pushed
+    from another machine), then pushes `origin` first and `github` second —
+    sequential pushes, never a multi-URL remote. It aborts instead of guessing
+    on diverged history with `origin`, merge conflicts, or a dirty tree. This
+    is for the user; agents still push to Forgejo only.
 
     **Never add GitHub as a second push URL on `origin`.** It looks like free
     mirroring and instead produces split-brain, because git does not push to
