@@ -26,7 +26,7 @@
         longitude = 11.5755;
         location = "Munich";
       };
-      hofvarpnir.url = "https://hofvarpnir.homelab.local";
+      hofvarpnir.url = "https://hofvarpnir.homelab.internal";
       quick_links = [
         {
           name = "UniFi";

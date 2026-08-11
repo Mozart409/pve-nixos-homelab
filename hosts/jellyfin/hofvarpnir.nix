@@ -12,8 +12,9 @@
   # Deployed as an OCI container (rootful podman, see modules/podman.nix), same
   # pattern as axon-gateway / romm. Postgres lives on homelab-database; media
   # lives under /media/hofvarpnir (bind-mounted at the container's downloads dir).
-  # Public access is via hofvarpnir.homelab.local (Caddy vhost + step-ca TLS in
-  # ./configuration.nix). The old tsbridge name keeps hitting the LXC until cutover.
+  # Public access is via hofvarpnir.homelab.internal (canonical) and
+  # hofvarpnir.homelab.local (Caddy vhost + step-ca TLS in ./configuration.nix).
+  # The old tsbridge name keeps hitting the LXC until cutover.
 
   virtualisation.oci-containers.containers.hofvarpnir = {
     # Pin to the released tag for reproducibility — never :latest. Matches the tag
@@ -59,7 +60,7 @@
       RATE_LIMIT_DELAY_SECS = "600";
       RUST_LOG = "info,hofvarpnir=info,sqlx=warn";
       DEFAULT_OUTPUT_DIR = "/var/lib/hofvarpnir/downloads";
-      API_BASE_URL = "https://hofvarpnir.homelab.local";
+      API_BASE_URL = "https://hofvarpnir.homelab.internal";
 
       # --- Observability ----------------------------------------------------
       # Rewritten from the LXC's homelab-otel.*.ts.net (MagicDNS does NOT resolve
@@ -88,13 +89,13 @@
       # all present. redirect_uri() ignores API_BASE_URL and uses ONLY
       # OIDC_REDIRECT_BASE_URL, so it must be set — the callback the app builds
       # (and the URL to register in Pocket ID) is:
-      #   https://hofvarpnir.homelab.local/auth/oidc/callback
+      #   https://hofvarpnir.homelab.internal/auth/oidc/callback
       # First OIDC login links to the existing user whose email matches the
       # Pocket ID email claim (get_user_by_email), preserving that account.
       OIDC_ISSUER = "https://pocketid.dropbear-butterfly.ts.net";
       OIDC_SCOPES = "openid,profile,email";
       OIDC_AUTO_PROVISION = "true";
-      OIDC_REDIRECT_BASE_URL = "https://hofvarpnir.homelab.local";
+      OIDC_REDIRECT_BASE_URL = "https://hofvarpnir.homelab.internal";
     };
 
     # Secrets injected as root before podman launches:
