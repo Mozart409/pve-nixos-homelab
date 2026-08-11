@@ -165,7 +165,7 @@
       '';
     };
 
-    virtualHosts."fleet.homelab.local" = {
+    virtualHosts."fleet.homelab.local fleet.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory

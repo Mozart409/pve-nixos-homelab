@@ -79,7 +79,7 @@
     };
 
     # Local network hostname with step-ca certificate
-    virtualHosts."containers.homelab.local" = {
+    virtualHosts."containers.homelab.local containers.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
@@ -99,7 +99,7 @@
     };
 
     # AlbyHub on its own hostname (SPA expects to be served at root)
-    virtualHosts."albyhub.homelab.local" = {
+    virtualHosts."albyhub.homelab.local albyhub.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
@@ -112,7 +112,7 @@
     # SearXNG on its own hostname so off-host clients (e.g. hermes-agent's
     # web_search backend) can reach it. SearXNG binds 127.0.0.1:8089, so Caddy
     # — running on this host — is the only thing that proxies to it.
-    virtualHosts."searxng.homelab.local" = {
+    virtualHosts."searxng.homelab.local searxng.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
@@ -125,7 +125,7 @@
     # axon-gateway MCP gateway. The container binds 127.0.0.1:8091, so Caddy is
     # the only thing that proxies to it. Agents connect at
     # https://axon.homelab.local/mcp (step-ca TLS, trusted on any homelab host).
-    virtualHosts."axon.homelab.local" = {
+    virtualHosts."axon.homelab.local axon.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
@@ -137,7 +137,7 @@
 
     # homelab-dashboard. Binds 127.0.0.1:8084 (see ./homelab-dashboard), so
     # Caddy is the only thing that proxies to it. Served at its own hostname.
-    virtualHosts."dashboard.homelab.local" = {
+    virtualHosts."dashboard.homelab.local dashboard.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
@@ -151,7 +151,7 @@
     # thing that proxies to it. RomM is a root-served SPA (no URL subpath
     # support), so it gets its own hostname. The Pocket ID OIDC callback is
     # https://romm.homelab.local/api/oauth/openid.
-    virtualHosts."romm.homelab.local" = {
+    virtualHosts."romm.homelab.local romm.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory

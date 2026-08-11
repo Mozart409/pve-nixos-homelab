@@ -635,7 +635,7 @@ in {
     };
 
     # Local network hostname with step-ca certificate
-    virtualHosts."database.homelab.local" = {
+    virtualHosts."database.homelab.local database.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
@@ -648,7 +648,7 @@ in {
     };
 
     # pgAdmin 4 (native service on 127.0.0.1:5050) served with a step-ca cert.
-    virtualHosts."pgadmin.homelab.local" = {
+    virtualHosts."pgadmin.homelab.local pgadmin.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory

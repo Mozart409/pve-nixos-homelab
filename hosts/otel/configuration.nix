@@ -786,7 +786,7 @@
     };
 
     # Local network hostname with step-ca certificate
-    virtualHosts."otel.homelab.local" = {
+    virtualHosts."otel.homelab.local otel.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
@@ -820,7 +820,7 @@
     };
 
     # Dedicated per-service hostnames (step-ca certs), each served at root
-    virtualHosts."loki.homelab.local" = {
+    virtualHosts."loki.homelab.local loki.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
@@ -830,7 +830,7 @@
       '';
     };
 
-    virtualHosts."tempo.homelab.local" = {
+    virtualHosts."tempo.homelab.local tempo.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
@@ -840,7 +840,7 @@
       '';
     };
 
-    virtualHosts."prometheus.homelab.local" = {
+    virtualHosts."prometheus.homelab.local prometheus.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory

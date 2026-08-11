@@ -93,54 +93,104 @@
         local-zone = [
           "local. static"
           "homelab.local. static"
+          # Parallel private zone. Apple clients force *.local to mDNS/Bonjour and
+          # never send it to a unicast resolver, so homelab.local is unreachable
+          # from macOS/iOS over Tailscale split DNS. homelab.internal (ICANN-
+          # reserved private TLD) resolves normally. Both zones are served.
+          "homelab.internal. static"
         ];
         local-data = [
           # keep-sorted start
+          # homelab.internal mirror of every homelab.local A record (parallel
+          # zone for Apple clients — see the local-zone note). keep-sorted
+          # interleaves these with the .local entries on commit.
+          ''"albyhub.homelab.internal. A 192.168.2.149"''
           ''"albyhub.homelab.local. A 192.168.2.149"''
+          ''"axon.homelab.internal. A 192.168.2.149"''
           ''"axon.homelab.local. A 192.168.2.149"''
+          ''"ca.homelab.internal. A 192.168.2.160"''
           # Homelab services with step-ca certificates
           ''"ca.homelab.local. A 192.168.2.160"''
+          ''"cache.homelab.internal. A 192.168.2.175"''
           ''"cache.homelab.local. A 192.168.2.175"''
+          ''"ci.homelab.internal. A 192.168.2.182"''
           # WOODPECKER_HOST -- the name baked into OAuth redirects and webhooks.
           ''"ci.homelab.local. A 192.168.2.182"''
+          ''"containers.homelab.internal. A 192.168.2.149"''
           ''"containers.homelab.local. A 192.168.2.149"''
+          ''"dashboard.homelab.internal. A 192.168.2.149"''
           ''"dashboard.homelab.local. A 192.168.2.149"''
+          ''"database.homelab.internal. A 192.168.2.134"''
           ''"database.homelab.local. A 192.168.2.134"''
+          ''"development.homelab.internal. A 192.168.2.184"''
           ''"development.homelab.local. A 192.168.2.184"''
+          ''"dns.homelab.internal. A 192.168.2.145"''
           ''"dns.homelab.local. A 192.168.2.145"''
+          ''"fleet.homelab.internal. A 192.168.2.164"''
           ''"fleet.homelab.local. A 192.168.2.164"''
+          ''"forgejo.homelab.internal. A 192.168.2.178"''
           ''"forgejo.homelab.local. A 192.168.2.178"''
+          ''"harbor.homelab.internal. A 192.168.2.174"''
           ''"harbor.homelab.local. A 192.168.2.174"''
+          ''"hermes.homelab.internal. A 192.168.2.155"''
           ''"hermes.homelab.local. A 192.168.2.155"''
+          ''"hofvarpnir.homelab.internal. A 192.168.2.180"''
           ''"hofvarpnir.homelab.local. A 192.168.2.180"''
           ''"homeassistant.local. A 192.168.2.208"''
+          ''"jellyfin.homelab.internal. A 192.168.2.180"''
           ''"jellyfin.homelab.local. A 192.168.2.180"''
+          ''"k3s-agent-1.homelab.internal. A 192.168.2.156"''
           ''"k3s-agent-1.homelab.local. A 192.168.2.156"''
+          ''"k3s-server-1.homelab.internal. A 192.168.2.165"''
           ''"k3s-server-1.homelab.local. A 192.168.2.165"''
+          ''"loki-mcp.homelab.internal. A 192.168.2.152"''
           ''"loki-mcp.homelab.local. A 192.168.2.152"''
+          ''"loki.homelab.internal. A 192.168.2.135"''
           ''"loki.homelab.local. A 192.168.2.135"''
+          ''"mcp.homelab.internal. A 192.168.2.152"''
           ''"mcp.homelab.local. A 192.168.2.152"''
+          ''"otel.homelab.internal. A 192.168.2.135"''
           ''"otel.homelab.local. A 192.168.2.135"''
+          ''"pbs-mcp.homelab.internal. A 192.168.2.152"''
           ''"pbs-mcp.homelab.local. A 192.168.2.152"''
+          ''"pg-appdb-mcp.homelab.internal. A 192.168.2.152"''
           ''"pg-appdb-mcp.homelab.local. A 192.168.2.152"''
+          ''"pg-forgejo-mcp.homelab.internal. A 192.168.2.152"''
           ''"pg-forgejo-mcp.homelab.local. A 192.168.2.152"''
+          ''"pg-hofvarpnir-mcp.homelab.internal. A 192.168.2.152"''
           ''"pg-hofvarpnir-mcp.homelab.local. A 192.168.2.152"''
+          ''"pg-romm-mcp.homelab.internal. A 192.168.2.152"''
           ''"pg-romm-mcp.homelab.local. A 192.168.2.152"''
+          ''"pg-terraform-mcp.homelab.internal. A 192.168.2.152"''
           ''"pg-terraform-mcp.homelab.local. A 192.168.2.152"''
+          ''"pg-uptime-mcp.homelab.internal. A 192.168.2.152"''
           ''"pg-uptime-mcp.homelab.local. A 192.168.2.152"''
+          ''"pgadmin.homelab.internal. A 192.168.2.134"''
           ''"pgadmin.homelab.local. A 192.168.2.134"''
+          ''"prom-mcp.homelab.internal. A 192.168.2.152"''
           ''"prom-mcp.homelab.local. A 192.168.2.152"''
+          ''"prometheus.homelab.internal. A 192.168.2.135"''
           ''"prometheus.homelab.local. A 192.168.2.135"''
+          ''"pve-gigabyte.homelab.internal. A 192.168.2.46"''
           ''"pve-gigabyte.homelab.local. A 192.168.2.46"''
           ''"pve-gigabyte.local. A 192.168.2.46"''
+          ''"romm.homelab.internal. A 192.168.2.149"''
           ''"romm.homelab.local. A 192.168.2.149"''
+          ''"scratchpad.homelab.internal. A 192.168.2.185"''
           ''"scratchpad.homelab.local. A 192.168.2.185"''
+          ''"searxng.homelab.internal. A 192.168.2.149"''
           ''"searxng.homelab.local. A 192.168.2.149"''
+          ''"tempo.homelab.internal. A 192.168.2.135"''
           ''"tempo.homelab.local. A 192.168.2.135"''
+          ''"unifi.homelab.internal. A 192.168.2.142"''
           ''"unifi.homelab.local. A 192.168.2.142"''
+          ''"woodpecker.homelab.internal. A 192.168.2.182"''
           ''"woodpecker.homelab.local. A 192.168.2.182"''
+          ''"wotan.homelab.internal. A 192.168.2.71"''
           ''"wotan.homelab.local. A 192.168.2.71"''
+          ''"wp-mcp.homelab.internal. A 192.168.2.152"''
           ''"wp-mcp.homelab.local. A 192.168.2.152"''
+          ''"zeroclaw.homelab.internal. A 192.168.2.183"''
           ''"zeroclaw.homelab.local. A 192.168.2.183"''
           # keep-sorted end
         ];
@@ -243,7 +293,7 @@
     };
 
     # Local network hostname with step-ca certificate
-    virtualHosts."dns.homelab.local" = {
+    virtualHosts."dns.homelab.local dns.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory

@@ -69,7 +69,7 @@
       '';
     };
 
-    virtualHosts."zeroclaw.homelab.local" = {
+    virtualHosts."zeroclaw.homelab.local zeroclaw.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory

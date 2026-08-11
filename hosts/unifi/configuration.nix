@@ -70,7 +70,7 @@
     };
 
     # Local network hostname with step-ca certificate
-    virtualHosts."unifi.homelab.local" = {
+    virtualHosts."unifi.homelab.local unifi.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
