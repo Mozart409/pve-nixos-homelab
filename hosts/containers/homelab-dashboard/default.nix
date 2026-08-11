@@ -60,7 +60,7 @@
         }
         {
           name = "Woodpecker CI";
-          url = "https://ci.homelab.local";
+          url = "https://ci.homelab.internal";
           icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/woodpecker-ci.svg";
         }
         {
@@ -70,7 +70,7 @@
         }
         {
           name = "Jellyfin";
-          url = "https://jellyfin.homelab.local/web/#/home";
+          url = "https://jellyfin.homelab.internal/web/#/home";
           icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/jellyfin.svg";
         }
         {
@@ -80,7 +80,7 @@
         }
         {
           name = "Hofvarpnir";
-          url = "https://hofvarpnir.homelab.local/dashboard";
+          url = "https://hofvarpnir.homelab.internal/dashboard";
           icon = "https://raw.githubusercontent.com/Mozart409/hofvarpnir/refs/heads/main/crates/hof-web/assets/logo.png";
         }
       ];

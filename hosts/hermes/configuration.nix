@@ -952,7 +952,7 @@ in {
     };
 
     # Local network hostname with step-ca certificate
-    virtualHosts."hermes.homelab.local" = {
+    virtualHosts."hermes.homelab.local hermes.homelab.internal" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory

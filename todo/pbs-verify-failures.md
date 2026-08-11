@@ -46,7 +46,7 @@ most important clue.
 | PBS version | **Installed `4.1.1-1`, Candidate `4.2.4-1`** (`apt policy`, 2026-08-01). Last dpkg upgrade **2026-01-12**. Installed and running agree — there is **no** restart problem; PBS is simply **seven months and four releases out of date** (4.2.1/4.2.2/4.2.3/4.2.4 all missed). Beware: `proxmox-backup-manager version` prints `<pkg> <AVAILABLE> running version: <RUNNING>`, which reads like an unloaded upgrade and has now misled two investigations. |
 | Backend detail | `type=s3,client=cloudflare-r2,bucket=pve-backups`, path `/mnt/datastore/r2-cache` |
 | `.bad` chunks on disk | **0** — but chunks live in R2, not the local cache, and PBS's `.bad` renaming was built for the filesystem backend, so this is suggestive, not conclusive |
-| Verify job | `v-b4b3326e-0c8d`, schedule `sat 01:15` |
+| Verify job | `v-b4b3326e-0c8d`, schedule `sat 01:15` → **`sat 06:15` since 2026-08-09** (see [Follow-up](#follow-up-2026-08-09--verify-was-colliding-with-the-backup-chain)) |
 | Notifications | Every failing run logs `queued notification (id=…)`. None have been seen. |
 
 ## Status — RESOLVED 2026-08-01
@@ -114,8 +114,51 @@ Diagnosis that cracked it: `timeout 30 tcpdump -i any -n -A 'host <ha-ip> and po
 while pressing Test — the raw request body is visible immediately. Reach for that
 before assuming a dispatcher bug; both PBS's logs and HA's were silent.
 
+### Follow-up 2026-08-09 — verify was colliding with the backup chain
+
+The `read-threads=1` fix traded speed for correctness, which was the right trade
+— but it made the verify job long enough to overlap the nightly backups, and
+nobody re-checked the schedule afterwards. At `sat 01:15` a ~4h48m run covers
+**03:00–03:50**, which is exactly the nightly chain (`ct/102` → `vm/4323` →
+`vm/4327` → `vm/4341`). Both contend for the same R2 connection *and* the same
+2-HDD `zfs_pool` underneath the local cache.
+
+It showed up plainly in the task history:
+
+| | 2026-08-08 (verify running) | 2026-08-09 (uncontended) |
+| --- | --- | --- |
+| `vm/4327` | 18m 39s ← 9-day max | 8m 21s |
+| `vm/4341` | 11m 47s ← 9-day max | 3m 31s |
+| `vm/4323` | 13m 20s | 5m 58s |
+| `ct/102` | 5m 04s | 10m 07s |
+| **chain total** | **~49 min** | **~28 min** |
+
+The verify paid for it too: **4h 48m** scheduled, versus **59 min** for the
+manual uncontended full pass on 08-01 over the same data.
+
+**Moved to `sat 06:15`** — clear of the 03:00 chain and the 05:15 GC. Note the
+day of week is irrelevant: the backup chain runs at 03:00 *every* day, so this
+is a time-of-day fix. Expect the 2026-08-15 run to land near an hour; if it is
+still ~5 h, the contention theory is wrong and something else is throttling R2.
+
+Everything else in the job dialog was already correct and should stay:
+`read-threads=1` (the fix itself — do not retest casually), `verify-threads=4`,
+Skip Verified **on**, Re-Verify After **30 days**. 30 is right because retention
+is `keep-daily=7` + `keep-weekly=4`, so nothing lives much past ~28 days and each
+snapshot gets its one verification while new. Skip Verified must still be turned
+**off** for any manual re-test after a failure — that is the hollow green above,
+and it is a `Run Now` concern, not a steady-state one.
+
 ### Still open
 
+- [ ] **Do one real restore.** Carried up from
+      [below](#do-this-now-regardless-of-hypothesis) because it is now the only
+      item here that protects against data loss. Nothing in this document proves
+      a backup is *restorable* — verification proves chunks are readable, and
+      this datastore has already lied in both directions (false failures at 16
+      threads, a hollow `TASK OK` in 1 second with Skip Verified). Restore
+      `ct/102` (pocketid, ~1.9 GB, the cheapest) to a scratch guest and confirm
+      it boots.
 - [ ] **A second, HA-independent target.** `ha-push` is the only channel and it
       dies exactly when the homelab does — as it did today. PBS's native **SMTP**
       endpoint needs only an A record and credentials, so it dodges both the MX
@@ -335,14 +378,17 @@ broken.
 
 ## Do this now, regardless of hypothesis
 
-- [ ] **Raise retention off `keep-last=1`.** A one-deep retention on a store with
+- [x] **Raise retention off `keep-last=1`.** ✅ Done 2026-08-01 — nightly job is
+      now `keep-daily=7` + `keep-weekly=4`, immich job `keep-last=4`. A one-deep retention on a store with
       a known verification problem means every night destroys the previous
       (possibly good) copy and the only surviving snapshot may be the bad one.
       This is a two-minute change in the PVE backup job and it buys a fallback.
-- [ ] **Do one real restore.** Nothing in this document proves a backup is
-      restorable. Restore `ct/102` (pocketid, 1.9 GB — the cheapest) to a scratch
-      guest and confirm it boots. Verification passing is not the same as a
-      restore working, and right now neither has been demonstrated.
+- [ ] **Do one real restore.** Still open — tracked in
+      [Still open](#still-open) above. Nothing in this document proves a backup
+      is restorable. Restore `ct/102` (pocketid, 1.9 GB — the cheapest) to a
+      scratch guest and confirm it boots. Verification passing is not the same
+      as a restore working, and as of 2026-08-09 verification has been
+      demonstrated but a restore has not.
 
 ## Verification
 
