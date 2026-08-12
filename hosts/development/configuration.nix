@@ -152,6 +152,24 @@
       IdentitiesOnly yes
       IdentityAgent none
       StrictHostKeyChecking accept-new
+
+    # Colmena deploys of the separate ventara fleet (nixos-ventara-ai repo),
+    # driven from here with `DEPLOY_NET=tailscale just deploy-vm01`. That makes
+    # colmena's target the bare MagicDNS name `ventara-vm01` (the `local`
+    # 10.0.10.x address lives behind vidar-01's NAT and is unreachable from
+    # here without a ProxyJump). MagicDNS resolves it from this host
+    # (ventara-vm01 -> 100.x on the shared tailnet), so no HostName pin is
+    # needed. The name matches NONE of the homelab patterns above (it is not
+    # `homelab-*`/`*.homelab.local`/`192.168.2.*`), so without this block ssh
+    # falls back to the broken managed agent and prompts to unlock the key.
+    # Same deploy key + `IdentityAgent none` as the homelab block; ventara's
+    # modules/common.nix authorizes this key's pubkey (amadeus@development-colmena).
+    Host ventara-vm01 ventara-vm01.dropbear-butterfly.ts.net
+      User amadeus
+      IdentityFile ~/.ssh/id_colmena_deploy
+      IdentitiesOnly yes
+      IdentityAgent none
+      StrictHostKeyChecking accept-new
   '';
 
   # Commit identity, so a reinstall doesn't leave git prompting for one.
