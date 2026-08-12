@@ -98,10 +98,18 @@
 
   # Mosh (mobile shell) for roaming/high-latency phone access. It bootstraps over
   # SSH, then switches to its own UDP protocol. openFirewall = true opens the
-  # mosh UDP range (60000-61000) on every interface; Tailscale access (how the
-  # phone connects) would also work without it, since every host trusts the
-  # tailscale0 interface. Connect via the host's Tailscale name/IP and pick
-  # "mosh" in the client (Blink Shell / Termius on iOS).
+  # mosh UDP range (60000-61000) on every interface. Connect via the host's
+  # Tailscale name/IP and pick "mosh" in the client (Blink Shell / Termius on iOS).
+  #
+  # Opening the host firewall is NOT sufficient on its own, and neither is
+  # trusting tailscale0: the tailnet ACL is a separate layer that drops traffic
+  # before it ever reaches this firewall. The grants in the tailscale-acls repo
+  # were TCP-only for a long time, so tcp:22 let the SSH bootstrap succeed and
+  # mosh-server start and report a port, while every subsequent datagram was
+  # dropped by Tailscale and the client died with "Timed out waiting for server"
+  # — a failure that reads exactly like a host firewall problem but is not one.
+  # Any host reachable by mosh needs udp:60000-61000 granted to the connecting
+  # user in policy.hujson as well as the openFirewall below.
   #
   # This also covers `moshi-hook host setup` (Easy Pair SSH/Mosh) on hosts
   # running the Moshi daemon — the key it wants to add is already the "iPhone"
