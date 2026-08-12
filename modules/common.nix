@@ -7,6 +7,7 @@
   imports = [
     ./nix-gc.nix
     ./homelab-users.nix
+    ./just-completions.nix
   ];
 
   # Timezone configuration
