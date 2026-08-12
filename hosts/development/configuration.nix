@@ -103,9 +103,18 @@
   # the consent gate, so do not "fix" it with `ssh-add`.
   #
   # Ordering and negation both matter. `IdentityFile` *accumulates* across
-  # matching blocks rather than first-one-wins, so without `!forgejo.homelab.local`
-  # every git push to Forgejo would also offer id_colmena and prompt for its
-  # passphrase. Keep the Forgejo block first and the negation in place.
+  # matching blocks rather than first-one-wins, so without the `!forgejo.*`
+  # negations every git push to Forgejo would also offer id_colmena and prompt
+  # for its passphrase. Keep the Forgejo block first and both negations in place.
+  #
+  # Every pattern is listed for BOTH zones because hosts/dns/configuration.nix
+  # serves homelab.internal as a full parallel mirror of every homelab.local A
+  # record, and .internal is the canonical name (it is an ICANN-reserved suffix,
+  # so macOS/iOS resolve it over Tailscale split DNS where .local does not).
+  # A block matching only .local means `ssh <host>.homelab.internal` matches
+  # nothing here and silently falls through to ssh's defaults — no pinned
+  # identity, no `IdentityAgent none`, so the consent gate above does not apply
+  # and the agent socket is back in play. Add new patterns in pairs.
   #
   # `!*.ts.net` exists because `homelab-*` is greedier than it looks: the git
   # remote here is ssh://forgejo@homelab-forgejo.dropbear-butterfly.ts.net:2222,
@@ -125,14 +134,14 @@
   # gets a new key and will then be refused until its known_hosts line is
   # dropped; that is the same re-provisioning footgun that breaks agenix.
   programs.ssh.extraConfig = ''
-    Host forgejo.homelab.local
+    Host forgejo.homelab.local forgejo.homelab.internal
       Port 2222
       User forgejo
       IdentityFile ~/.ssh/id_ed25519
       IdentitiesOnly yes
       StrictHostKeyChecking accept-new
 
-    Host *.homelab.local homelab-* 192.168.2.* !forgejo.homelab.local !*.ts.net
+    Host *.homelab.local *.homelab.internal homelab-* 192.168.2.* !forgejo.homelab.local !forgejo.homelab.internal !*.ts.net
       User amadeus
       # TEMPORARY (revert me): passphraseless deploy key so colmena can push
       # non-interactively. This DEFEATS the consent gate documented above — any
