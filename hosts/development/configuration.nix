@@ -15,6 +15,7 @@
     ../../modules/claude-permissions.nix
     ../../modules/claude-settings-verify.nix
     ../../modules/attic-cache.nix
+    ../../modules/forgejo-cli.nix
   ];
 
   networking.hostName = "homelab-development";
