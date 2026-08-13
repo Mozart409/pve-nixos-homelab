@@ -54,17 +54,29 @@
 
   # opencode permission guardrails. /tmp and opencode's own config dir are
   # reachable as external directories; the everyday git verbs (read/add/commit/
-  # push) run without prompting. Insertion order matters: opencode evaluates the
-  # LAST matching bash rule, so the two denials must come after the broad
-  # `git push*` allow. `git push github*` is denied because the GitHub remote is
-  # a human-only mirror (AGENTS.md §6) and `--force` because it can destroy
-  # history on a shared branch. Everything unlisted keeps its default (ask).
+  # push) run without prompting. The github/force-push denials must still hold.
+  #
+  # Rule order is NOT author order: the jq merge in this module re-sorts object
+  # keys alphabetically, and opencode evaluates the LAST matching rule. So the
+  # patterns below are designed for ASCII sort order — the push allows sort
+  # BEFORE the deny patterns ("git push *" < "git push --force*" because '*'
+  # 0x2A < '-' 0x2D), which makes flag-FIRST force/github pushes hit the deny
+  # last. A trailing flag (`git push origin --force`) still slips through the
+  # broad allow — the deny list is a guardrail, not a boundary (AGENTS.md §8);
+  # Forgejo's main-branch protection is the real gate. `git push github*` is
+  # denied because the GitHub remote is a human-only mirror (AGENTS.md §6).
+  # Everything unlisted keeps its default (ask).
   opencodePermissions = {
     external_directory = {
       "/home/amadeus/.config/opencode/**" = "allow";
       "/tmp/**" = "allow";
     };
     bash = {
+      "git push" = "allow";
+      "git push *" = "allow";
+      "git push --force*" = "deny";
+      "git push -f*" = "deny";
+      "git push github*" = "deny";
       "git status*" = "allow";
       "git diff*" = "allow";
       "git log*" = "allow";
@@ -72,9 +84,6 @@
       "git fetch*" = "allow";
       "git add*" = "allow";
       "git commit*" = "allow";
-      "git push*" = "allow";
-      "git push github*" = "deny";
-      "git push --force*" = "deny";
     };
   };
 
