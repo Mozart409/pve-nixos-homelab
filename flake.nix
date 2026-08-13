@@ -641,6 +641,72 @@
         then pkgs.nixos-anywhere
         else nixos-anywhere.packages.${system}.default;
     in {
+      # Woodpecker CI image pulled by .woodpecker/static.yml and .woodpecker/iac.yml.
+      # Linux-only (dockerTools needs a Linux build); build and push to Harbor with
+      # `just ci-image-push` after creating a public `ci` project. The nix pipeline
+      # (.woodpecker/nix.yml) uses `nixos/nix` instead, not this image.
+      packages = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+        ci-image = let
+          # kics (nixpkgs) ships WITHOUT its query library, and kics bails
+          # out ("unable to find queries") instead of downloading them. Vendor
+          # the queries from the matching release tag into the image so scans
+          # work offline; the pipeline passes -q /opt/kics-queries.
+          kicsQueries = pkgs.fetchFromGitHub {
+            owner = "Checkmarx";
+            repo = "kics";
+            # v2.1.19, pinned by commit SHA (not tag). The hash is the
+            # UNPACKED-tree hash (what fetchFromGitHub/fetchzip verifies), NOT
+            # the raw tarball bytes -- GitHub regenerates tarballs with fresh
+            # gzip metadata, so nix-prefetch-url's file hash drifts on every
+            # download. Get it with `nix-prefetch-git --rev <sha>`.
+            rev = "4f798f77f478efb722548dbd50812be00a6dbf6c";
+            sha256 = "0qs3hmj08q5dzm01ys71r30n4phk8ivf81x5vxkc6h3pmsm7n03j";
+          };
+        in
+          pkgs.dockerTools.buildImage {
+            name = "pve-nixos-homelab-ci";
+            tag = "latest";
+            copyToRoot = pkgs.buildEnv {
+              name = "ci-tools";
+              paths = with pkgs; [
+                alejandra
+                bash
+                cacert
+                cocogitto
+                coreutils
+                curl
+                git
+                gnugrep
+                gnused
+                kics
+                keep-sorted
+                opentofu
+                dockerTools.binSh
+                dockerTools.fakeNss
+                dockerTools.usrBinEnv
+                (pkgs.runCommand "kics-queries" {} ''
+                  mkdir -p $out/opt/kics-queries
+                  cp -r ${kicsQueries}/assets/queries/. $out/opt/kics-queries/
+                '')
+              ];
+              # Link /bin so every tool lands on PATH, /etc so cacert's bundle
+              # lands at /etc/ssl/certs (tofu/kics hit public registries), and
+              # /opt for the vendored kics queries. The woodpecker agent
+              # additionally bind-mounts the host step-ca bundle over
+              # /etc/ssl/certs/ca-certificates.crt for LAN hosts.
+              pathsToLink = ["/bin" "/etc" "/usr" "/opt"];
+            };
+            config = {
+              Cmd = ["/bin/sh" "-c" "true"];
+              Env = [
+                "PATH=/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin"
+                "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
+                "HOME=/root"
+                "USER=root"
+              ];
+            };
+          };
+      };
       devShells.default = pkgs.mkShell {
         buildInputs = with pkgs;
           [

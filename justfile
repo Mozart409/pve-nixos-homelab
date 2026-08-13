@@ -193,3 +193,23 @@ attic-info:
 attic-push path="/run/current-system" jobs="5":
   attic push -j {{jobs}} homelab {{path}}
 
+# --- Woodpecker CI image (pulled by .woodpecker/static.yml + .woodpecker/iac.yml) ---
+
+# Build the CI image. Prints the store path of the image tarball (dockerTools
+# output); load it with podman for local testing or use ci-image-push.
+ci-image-build: clear
+  nix build '.#ci-image' --print-out-paths
+
+# Load the freshly built CI image into podman and push it to Harbor so the
+# Woodpecker agent can pull it. ONE-TIME prereqs: a public `ci` project in
+# Harbor, a `podman login harbor.homelab.local`, and the Forgejo webhook on.
+# Re-run whenever the toolset in flake.nix's ci-image changes.
+ci-image-push: clear
+  #!/usr/bin/env bash
+  set -euo pipefail
+  out=$(nix build '.#ci-image' --print-out-paths)
+  podman load -i "$out"
+  podman tag pve-nixos-homelab-ci:latest harbor.homelab.local/ci/pve-nixos-homelab:latest
+  podman push harbor.homelab.local/ci/pve-nixos-homelab:latest
+  echo "==> pushed harbor.homelab.local/ci/pve-nixos-homelab:latest"
+
