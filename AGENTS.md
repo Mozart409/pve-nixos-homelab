@@ -754,6 +754,7 @@ rule is **skipped by Claude Code with a warning** — it approves nothing. The
 only valid `allow` forms are a server-level `mcp__<server>__*` wildcard or an
 exact `mcp__<server>__<tool>` name. Rules live in `modules/claude-permissions-data.nix`
 next to the Bash entries: the whole `axon-gateway` server (Home Assistant,
-Loki, Prometheus, PBS, Postgres) plus the `internal-dashboard` link tools.
-Add any new server/tool by name there, not with `mcp__*`. (Server/tool names
-keep hyphens — only characters outside `[a-zA-Z0-9_-]` become underscores.)
+Loki, Prometheus, PBS, Postgres) and the whole `internal-dashboard` server
+(link tools). Add any new server/tool by name there, not with `mcp__*`.
+(Server/tool names keep hyphens — only characters outside `[a-zA-Z0-9_-]`
+become underscores.)
