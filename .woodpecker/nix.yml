@@ -45,6 +45,9 @@ steps:
         trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= homelab:aswnRAo2zbP13gGnUTCINX78X/lURQgPAfrgNpHpQpY=
         connect-timeout = 5
         fallback = true
+        # The step container has no nix-daemon, so the nix-command/flakes
+        # experimental features must be enabled explicitly for `nix build`.
+        experimental-features = nix-command flakes
       # The agent bind-mounts the host CA bundle over this path, so step-ca
       # certs (cache.homelab.local, forgejo.homelab.local) are trusted. The
       # homelab-mcp flake input is fetched over git+https (public repo), which
