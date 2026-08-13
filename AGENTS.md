@@ -750,6 +750,14 @@ is the guardrail *and* nothing blocks.
 - The deny list is what makes deploys human-gated: `nixos-rebuild`, `nh os`,
   `colmena apply`, `just deploy*`, `gh pr merge`, and force-push are all blocked
   regardless of mode.
+- **Subagents need narrow `Bash(<cmd>:*)` rules, not a broad `Bash`.** Delegated
+  agents (Explore/Plan/General-purpose) check their tool calls against the same
+  allow list, but only narrow rules flow to them: a bare `Bash` / `Bash(*)`
+  allow is unreliable for subagents and is stripped entirely in auto mode. The
+  interpreter/utility rules under the "Subagents" group in
+  `claude-permissions-data.nix` therefore hold in both dontAsk (unattended) and
+  auto (interactive) sessions. They are session-wide, so the main agent gains
+  them too — the deny list still governs.
 
 ### MCP tools are allow-listed per server, never with `mcp__*`
 
