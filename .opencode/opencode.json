@@ -1,0 +1,21 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "external_directory": {
+      "/home/amadeus/.config/opencode/**": "allow",
+      "/tmp/**": "allow"
+    },
+    "bash": {
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git show*": "allow",
+      "git fetch*": "allow",
+      "git add*": "allow",
+      "git commit*": "allow",
+      "git push*": "allow",
+      "git push github*": "deny",
+      "git push --force*": "deny"
+    }
+  }
+}
