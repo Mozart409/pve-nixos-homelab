@@ -100,6 +100,32 @@
     "Bash(which:*)"
     "Bash(yq:*)"
 
+    # Subagents. Explore/Plan/General-purpose — spawned through the Agent tool —
+    # check their tool calls against this same allow list, but only *narrow*
+    # `Bash(<cmd>:*)` rules flow to them: a bare `Bash` / `Bash(*)` allow is
+    # unreliable for subagents and is stripped entirely when auto mode is active
+    # (the classifier evaluates shell commands then). These cover what a delegated
+    # agent runs that is not already granted above and hold in both dontAsk
+    # (unattended) and auto (interactive) sessions. They are session-wide, so the
+    # main agent gains them too; the deny list still governs.
+    "Bash(awk:*)"
+    "Bash(bash:*)"
+    "Bash(cut:*)"
+    "Bash(diff:*)"
+    "Bash(env:*)"
+    "Bash(node:*)"
+    "Bash(npm:*)"
+    "Bash(npx:*)"
+    "Bash(python3:*)"
+    "Bash(sed:*)"
+    "Bash(sh:*)"
+    "Bash(sleep:*)"
+    "Bash(sort:*)"
+    "Bash(stat:*)"
+    "Bash(tr:*)"
+    "Bash(uniq:*)"
+    "Bash(xargs:*)"
+
     # The workspace itself. Secret files under it are carved back out by the
     # deny list below.
     "Read(//home/amadeus/code/**)"

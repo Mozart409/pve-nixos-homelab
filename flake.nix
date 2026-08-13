@@ -25,8 +25,20 @@
       url = "git+https://forgejo.homelab.local/amadeus/homelab-mcp-servers.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # PINNED — do not float this input back to the branch head without testing.
+    # hermes-agent 0.20.1 (rev d0021673, pulled in by `chore(deps): upgrade
+    # flake`) ships a `hermes_cli/plugins.py` that imports a module missing from
+    # the built env, so the gateway crash-loops on startup:
+    #   File ".../hermes_cli/plugins.py", line 62, in <module>
+    #       from registration_lifecycle import replacement_coordinator
+    #   ModuleNotFoundError: No module named 'registration_lifecycle'
+    # It dies in `_install_plugin_message_injector`, i.e. the plugin-manager
+    # path, so `plugins.enabled = ["moshi-hooks"]` is enough to trip it. Nothing
+    # about the moshi/config.yaml layer is at fault — hermes-config-check passes
+    # and `model` resolves. 98105f31 is the last rev that starts. Unpin once
+    # upstream ships the missing module.
     hermes-agent = {
-      url = "github:NousResearch/hermes-agent";
+      url = "github:NousResearch/hermes-agent/98105f31f46d3de58a8f69a2a439cee3f7a5e389";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     homelab-dashboard = {
