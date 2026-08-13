@@ -12,19 +12,68 @@
   # moshi-hook detects it as a multiplexer, and herdr's own opencode integration
   # reports agent state back into the workspace UI.
   #
-  # Ported verbatim from the hand-built reference host, whose ~/.config/herdr/
-  # config.toml this reproduces. Nix owns this file outright (rewritten on every
-  # activation) rather than merging: it is small, fully hand-authored, and has no
-  # runtime-written keys. NB that means `herdr config set …` is NOT durable —
-  # change it here instead. Runtime state herdr *does* own (plugins.json, the
-  # downloaded plugins under plugins/github/, session.json, logs) lives in
-  # sibling files and is untouched.
+  # Nix owns config.toml outright (rewritten on every activation) rather than
+  # merging: it is small, fully hand-authored, and has no runtime-written keys.
+  # NB that means `herdr config set …` is NOT durable — change it here instead.
+  # Runtime state herdr *does* own (plugins.json, the downloaded plugins under
+  # plugins/github/, session.json, logs) lives in sibling files and is untouched.
+  # Plugin *installs* are bootstrapped here but stay herdr-owned afterwards: the
+  # setup script only installs a plugin when `herdr plugin list` shows it missing.
   configToml = pkgs.writeText "herdr-config.toml" ''
     onboarding = false
+
+    [keys]
+    # Stock tmux-style prefix defaults, plus the docs' vetted prefix-free
+    # `ctrl+alt` family as aliases. The ctrl+alt family is the only chord set
+    # every major terminal and desktop leave free (unlike ctrl+alt+arrows =
+    # GNOME workspaces/Ghostty/Konsole, or ctrl+alt+t = "launch terminal"), so
+    # these survive the outer terminal and land in herdr. Each action keeps the
+    # prefix binding as the primary and the direct chord as a second binding.
+    focus_pane_left = ["prefix+h", "ctrl+alt+h"]
+    focus_pane_down = ["prefix+j", "ctrl+alt+j"]
+    focus_pane_up = ["prefix+k", "ctrl+alt+k"]
+    focus_pane_right = ["prefix+l", "ctrl+alt+l"]
+    previous_tab = ["prefix+p", "ctrl+alt+["]
+    next_tab = ["prefix+n", "ctrl+alt+]"]
+    new_tab = ["prefix+c", "ctrl+alt+c"]
+    split_vertical = ["prefix+v", "ctrl+alt+d"]
+    split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
+    zoom = ["prefix+z", "ctrl+alt+z"]
+    switch_tab = "prefix+1..9"
+
+    # prefix+t opens a session-modal scratch terminal without touching the tab
+    # layout (docs recipe). Exit the shell to close the popup and restore the view.
+    [[keys.command]]
+    key = "prefix+t"
+    type = "popup"
+    command = "exec \"${SHELL:-sh}\""
+    description = "open scratch terminal"
+    width = "80%"
+    height = "80%"
+
+    [session]
+    # Resume Claude Code / opencode panes into their native conversation
+    # sessions after a server restart. Only panes with a session ref from an
+    # official integration resume; the rest restore as plain shells.
+    resume_agents_on_restore = true
+
+    [worktrees]
+    # Root for `New worktree` sidebar checkouts: <dir>/<repo>/<branch-slug>.
+    # Matches this repo's git-worktree workflow.
+    directory = "~/.herdr/worktrees"
 
     [ui]
     show_agent_labels_on_pane_borders = true
     agent_panel_sort = "priority"
+
+    # Create tabs immediately with generated names instead of prompting — this
+    # host is agent-driven and a name prompt stalls an unattended session.
+    prompt_new_tab_name = false
+
+    [ui.sidebar.agents]
+    # Richer agent rows: show the agent's live terminal title (Claude Code /
+    # opencode paint progress there) under the state icon + workspace + tab.
+    rows = [["state_icon", "workspace", "tab"], ["agent", "terminal_title_stripped"]]
 
     [ui.toast]
     delivery = "herdr"
@@ -34,33 +83,103 @@
     auto_switch = false
   '';
 
-  setup = pkgs.writeShellScript "herdr-setup-${user}" ''
-    set -eu
-    install -Dm0644 ${configToml} "${home}/.config/herdr/config.toml"
+  # Plugins provisioned by herdr-setup. `herdr plugin install <owner/repo> --yes`
+  # clones from GitHub, runs the manifest build step (spreader builds with cargo),
+  # and registers the plugin globally in plugins.json. Each install is guarded by
+  # `herdr plugin list` so it runs once and is skipped on later activations; a
+  # failed install exits non-zero so the unit retries (Restart=on-failure) instead
+  # of silently leaving the host half-provisioned.
+  plugins = [
+    {
+      id = "herdr-spreader";
+      source = "yuk1ty/herdr-spreader";
+      description = "declarative workspace/tab/pane layouts (tmuxinator-style)";
+    }
+    {
+      id = "rjyo.window-title-sync";
+      source = "rjyo/herdr-window-title-sync";
+      description = "sync outer terminal title to focused workspace/tab/agent";
+    }
+    {
+      id = "worktrunk";
+      source = "devashish2203/herdr-worktrunk";
+      description = "git worktree switch/create/remove via the worktrunk CLI";
+    }
+  ];
 
-    # opencode: writes ~/.config/opencode/plugins/herdr-agent-state.js (a
-    # standalone plugin file, auto-loaded from that dir).
-    ${herdrPkg}/bin/herdr integration install opencode
+  pluginInstallScript =
+    builtins.concatStringsSep ""
+    (map (p: ''
+        if ${herdrPkg}/bin/herdr plugin list 2>/dev/null | grep -q "${p.id}"; then
+          echo "herdr-setup: plugin ${p.id} already installed"
+        else
+          echo "herdr-setup: installing plugin ${p.id} (${p.source}) — ${p.description}"
+          ${herdrPkg}/bin/herdr plugin install ${p.source} --yes
+        fi
+      '')
+      plugins);
 
-    # `herdr integration install claude` hard-fails with "claude directory not
-    # found … install claude code first" when ~/.claude is absent, which it is on
-    # a freshly provisioned host until Claude Code is first launched. Create it
-    # so the integration installs declaratively instead of needing a manual run.
-    mkdir -p "${home}/.claude"
-
-    # claude: writes ~/.claude/hooks/herdr-agent-state.sh AND registers hook
-    # entries in ~/.claude/settings.json — a .sh in hooks/ is inert on its own,
-    # Claude Code only fires hooks listed in settings.json.
-    #
-    # That is the same file `moshi-hook install` writes. Both tools do targeted
-    # add/remove of *their own* entries (herdr's strings: "ensured claude
-    # settings at", "removed herdr claude hook entries from"), so they coexist —
-    # but only if neither rewrites the file wholesale, so ordering is pinned
-    # below and both hook sets must be re-verified after deploy.
-    ${herdrPkg}/bin/herdr integration install claude
+  # herdr-spreader starter layout (tmuxinator-for-herdr). Written to the plugin's
+  # config dir only when absent, so user edits survive activations. Apply it with:
+  #   herdr plugin action invoke herdr-spreader.apply
+  spreaderLayout = pkgs.writeText "herdr-spreader-config.yaml" ''
+    workspaces:
+      - name: dev
+        root: ~
+        focus: true
+        tabs:
+          - label: shell
+            panes:
+              - command: zsh
+          - label: git
+            panes:
+              - command: git status
   '';
+
+  setup = pkgs.writeShellScript "herdr-setup-${user}" (
+    ''
+      set -eu
+      install -Dm0644 ${configToml} "${home}/.config/herdr/config.toml"
+
+      # opencode: writes ~/.config/opencode/plugins/herdr-agent-state.js (a
+      # standalone plugin file, auto-loaded from that dir).
+      ${herdrPkg}/bin/herdr integration install opencode
+
+      # `herdr integration install claude` hard-fails with "claude directory not
+      # found … install claude code first" when ~/.claude is absent, which it is on
+      # a freshly provisioned host until Claude Code is first launched. Create it
+      # so the integration installs declaratively instead of needing a manual run.
+      mkdir -p "${home}/.claude"
+
+      # claude: writes ~/.claude/hooks/herdr-agent-state.sh AND registers hook
+      # entries in ~/.claude/settings.json — a .sh in hooks/ is inert on its own,
+      # Claude Code only fires hooks listed in settings.json.
+      #
+      # That is the same file `moshi-hook install` writes. Both tools do targeted
+      # add/remove of *their own* entries (herdr's strings: "ensured claude
+      # settings at", "removed herdr claude hook entries from"), so they coexist —
+      # but only if neither rewrites the file wholesale, so ordering is pinned
+      # below and both hook sets must be re-verified after deploy.
+      ${herdrPkg}/bin/herdr integration install claude
+    ''
+    + pluginInstallScript
+    + ''
+      # Seed herdr-spreader's starter layout only when absent.
+      spreader_config_dir="${home}/.config/herdr/plugins/config/herdr-spreader"
+      mkdir -p "$spreader_config_dir"
+      if [ ! -e "$spreader_config_dir/config.yaml" ]; then
+        install -m0644 ${spreaderLayout} "$spreader_config_dir/config.yaml"
+      fi
+    ''
+  );
 in {
-  environment.systemPackages = [herdrPkg];
+  environment.systemPackages = [
+    herdrPkg
+    # Plugin build/runtime deps for the bootstrapped plugins:
+    pkgs.cargo # herdr-spreader builds at install time
+    pkgs.bun # window-title-sync event hooks run `bun sync-title.js`
+    pkgs.worktrunk # worktrunk plugin shells out to the `wt` CLI
+  ];
 
   # Start the user manager at boot so this runs without a login session.
   # types.bool merges equal definitions, so modules/moshi-hook-user.nix setting
@@ -72,17 +191,24 @@ in {
   # same systemd manager, and herdr resolves its own socket via XDG_RUNTIME_DIR
   # the same way moshi-hook does.
   systemd.user.services.herdr-setup = {
-    description = "herdr config + agent integrations for ${user}";
+    description = "herdr config + agent integrations + plugins for ${user}";
     wantedBy = ["default.target"];
     # Both this and moshi-hook-setup write ~/.claude/settings.json. Each only
     # touches its own hook entries, but pin the order so the result is
     # reproducible rather than a boot-time race. After= on a unit that does not
     # exist is a no-op, so this stays valid if moshi-hook-user.nix is not imported.
     after = ["moshi-hook-setup.service"];
+    # Plugin installs clone from GitHub and may build (spreader runs cargo), so
+    # a transient failure (network, registry) retries instead of leaving the host
+    # half-provisioned. Config/integrations are idempotent, so retries are cheap.
+    startLimitBurst = 5;
+    startLimitIntervalSec = 600;
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
       ExecStart = setup;
+      Restart = "on-failure";
+      RestartSec = 30;
     };
   };
 }
