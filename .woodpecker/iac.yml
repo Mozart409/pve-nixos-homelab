@@ -1,0 +1,37 @@
+# OpenTofu / IaC checks for iac/. Runs only when the iac directory (or this
+# file) changes. Uses the same CI image as static.yml.
+when:
+  - event: [push, pull_request]
+    path:
+      include:
+        - iac/**
+        - .woodpecker/iac.yml
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      partial: false
+
+steps:
+  - name: validate
+    image: harbor.homelab.local/ci/pve-nixos-homelab:latest
+    pull: true
+    commands:
+      - tofu fmt -check -recursive iac
+      # -backend=false skips the pg backend block: CI has no Postgres state,
+      # and validate does not need it.
+      - cd iac && tofu init -backend=false
+      - cd iac && tofu validate
+
+  - name: kics
+    image: harbor.homelab.local/ci/pve-nixos-homelab:latest
+    pull: true
+    # Runs in a fresh container sharing the workspace, so the validate step's
+    # .terraform/ dir is present -- exclude it and the provider lock file (the
+    # lock is HCL kics would otherwise scan). --exclude-paths is a REPEATED
+    # flag: a comma-joined value is treated as one literal path and makes kics
+    # bail out with a usage dump. -q points at the queries vendored into the CI
+    # image (kics does not download them on its own).
+    commands:
+      - kics scan -p iac -q /opt/kics-queries --exclude-paths iac/.terraform --exclude-paths iac/.terraform.lock.hcl --fail-on high --no-progress

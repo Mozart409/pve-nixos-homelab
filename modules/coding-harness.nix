@@ -52,9 +52,36 @@
     mcpServers = claudeMcpServers;
   });
 
+  # opencode permission guardrails. /tmp and opencode's own config dir are
+  # reachable as external directories; the everyday git verbs (read/add/commit/
+  # push) run without prompting. Insertion order matters: opencode evaluates the
+  # LAST matching bash rule, so the two denials must come after the broad
+  # `git push*` allow. `git push github*` is denied because the GitHub remote is
+  # a human-only mirror (AGENTS.md §6) and `--force` because it can destroy
+  # history on a shared branch. Everything unlisted keeps its default (ask).
+  opencodePermissions = {
+    external_directory = {
+      "/home/amadeus/.config/opencode/**" = "allow";
+      "/tmp/**" = "allow";
+    };
+    bash = {
+      "git status*" = "allow";
+      "git diff*" = "allow";
+      "git log*" = "allow";
+      "git show*" = "allow";
+      "git fetch*" = "allow";
+      "git add*" = "allow";
+      "git commit*" = "allow";
+      "git push*" = "allow";
+      "git push github*" = "deny";
+      "git push --force*" = "deny";
+    };
+  };
+
   opencodeConfigFragment = pkgs.writeText "opencode-config.json" (builtins.toJSON ({
       "$schema" = "https://opencode.ai/config.json";
       mcp = opencodeMcpServers;
+      permission = opencodePermissions;
     }
     // lib.optionalAttrs (opencodePlugins != []) {plugin = opencodePlugins;}));
 
