@@ -1,0 +1,53 @@
+# Formatting + commit-message gate. Mirrors the lefthook pre-commit/commit-msg
+# hooks (lefthook.yml), but stricter: alejandra and keep-sorted check every
+# tracked file, not just the staged ones.
+#
+# Uses the homelab-built CI image (harbor.homelab.local/ci/pve-nixos-homelab:
+# latest, defined in flake.nix as packages.ci-image). Push it with
+# `just ci-image-push` before enabling pipelines on this repo.
+when:
+  - event: [push, pull_request]
+
+# Full clone: the commit-message step needs CI_COMMIT_BEFORE reachable in the
+# checkout to diff the pushed range.
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      partial: false
+
+steps:
+  - name: format
+    image: harbor.homelab.local/ci/pve-nixos-homelab:latest
+    pull: true
+    commands:
+      - alejandra -c .
+      - keep-sorted --mode lint $(git ls-files '*.nix')
+
+  - name: commit-message
+    image: harbor.homelab.local/ci/pve-nixos-homelab:latest
+    pull: true
+    commands:
+      - |
+        set -e
+        # Check only the commits this push/PR introduced, NOT the whole history:
+        # older commits predate conventional-commit enforcement and would fail
+        # cog check (see todo/woodpecker-ci-pipelines.md).
+        before="${CI_COMMIT_BEFORE:-}"
+        sha="${CI_COMMIT_SHA:-HEAD}"
+        if [ -z "$before" ] || [ "$before" = "$sha" ] || printf '%s' "$before" | grep -Eq '^0+$'; then
+          echo "no base commit to diff against (before='$before'); skipping"
+          exit 0
+        fi
+        if ! git cat-file -e "$before" 2>/dev/null; then
+          echo "base '$before' not present in this clone; falling back to HEAD~1"
+          before="$(git rev-parse HEAD~1 2>/dev/null || true)"
+        fi
+        if [ -z "$before" ] || [ "$before" = "$sha" ]; then
+          echo "no range to check; skipping"
+          exit 0
+        fi
+        echo "checking commit messages: $before..$sha"
+        # --ignore-merge-commits so a merge-commit PR merge (auto-generated
+        # "Merge pull request #N" message) does not fail the gate.
+        cog check --ignore-merge-commits "$before..$sha"
