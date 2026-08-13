@@ -688,3 +688,61 @@ open the PR, and deploy with `colmena`.
   fails (read-only), while other `~/.hermes/` writes succeed.
 - An agent-pushed `feat/*` branch should appear on Forgejo; a push to `main` is
   rejected by branch protection.
+
+## 8. Claude Code Permissions on `development`
+
+Claude Code runs **unattended** on this host, so its permission config is a
+guardrail, not a prompt. Do not go looking for it in `~/.claude/settings.json`
+— that file is mutable and partly machine-written.
+
+### Source of truth
+
+**`modules/claude-permissions-data.nix`** — plain data (`allow`, `deny`,
+`defaultMode`), imported by exactly two consumers so the two lists cannot drift:
+
+| Module | Role |
+| --- | --- |
+| `modules/claude-permissions.nix` | **Writer.** `claude-permissions-apply` jq-merges the three keys into `~/.claude/settings.json` at boot (`claude-permissions.service`). |
+| `modules/claude-settings-verify.nix` | **Checker.** Re-reads the same data and confirms it survived; notifies `notify.iphone_von_amadeus` via the axon gateway on drift. Runs after every boot plus a daily timer. |
+
+Both are imported by `hosts/development/configuration.nix`.
+
+**Editing `~/.claude/settings.json` by hand does not stick.** The merge is
+right-biased and wholesale for `permissions.{allow,deny,defaultMode}` — the next
+boot overwrites them, and the daily verify sends a push notification in the
+meantime. Keys outside those three (hooks, model, theme) are left alone and
+*are* hand-maintained. Change permissions in the data module and redeploy.
+
+### Why `defaultMode = "dontAsk"`
+
+`dontAsk` **auto-denies** anything not pre-approved instead of prompting. That is
+the point: with nobody watching, a prompt is an indefinite hang.
+
+| Mode | Unlisted action | Honors `deny` | Unattended |
+| --- | --- | --- | --- |
+| `dontAsk` | denied | yes | ✅ fails closed |
+| `auto` | classifier decides, still prompts on risky calls | yes | ❌ hangs |
+| `acceptEdits` | prompts for anything beyond file edits | yes | ❌ hangs |
+| `bypassPermissions` | allowed | yes | ⚠️ fails open |
+
+`auto` is the mode the UI labels "Auto" (Shift+Tab cycle); it reduces prompts via
+a safety classifier but does not eliminate them, and its availability depends on
+account/model eligibility, so it can silently drop out of the cycle. It is **not**
+a substitute here. `bypassPermissions` still honors `deny`, but discards the allow
+list as the thing defining scope. `dontAsk` is the only mode where the deny list
+is the guardrail *and* nothing blocks.
+
+### Consequences worth knowing
+
+- **Denials are silent.** A command outside `allow` fails mid-task with no
+  prompt — it looks like a broken tool, not a permission problem. The allow list
+  is load-bearing; add to it in `claude-permissions-data.nix` rather than
+  working around a refusal.
+- **`AskUserQuestion` is denied.** Agents cannot ask clarifying questions in this
+  mode. They must assume and proceed, then state the assumption.
+- **Precedence is `deny` > `ask` > `allow`**, which is how `Bash(git push:*)` is
+  granted while `Bash(git push --force*)` stays blocked. Deny rules apply in
+  every mode, `bypassPermissions` included.
+- The deny list is what makes deploys human-gated: `nixos-rebuild`, `nh os`,
+  `colmena apply`, `just deploy*`, `gh pr merge`, and force-push are all blocked
+  regardless of mode.
