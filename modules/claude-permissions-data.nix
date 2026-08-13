@@ -61,6 +61,23 @@
     "Bash(sqlx:*)"
     "Bash(sqruff:*)"
 
+    # MCP servers. Only the tools that are actually used are allowed — dontAsk
+    # denies every unlisted MCP call silently, so without a rule a needed tool
+    # looks broken rather than permission-blocked. Both server-level wildcards
+    # (mcp__<server>__*) and exact tool names are valid allow forms; a bare
+    # `mcp__*` allow is skipped by Claude Code with a warning and approves
+    # nothing, so every server is named explicitly.
+    #
+    # axon-gateway (modules/coding-harness.nix) is the central gateway exposing
+    # Home Assistant, Loki, Prometheus, PBS and Postgres tools — all of them.
+    # internal-dashboard is added per-host and surfaces only the link tools
+    # listed here.
+    "mcp__axon-gateway__*"
+    "mcp__internal-dashboard__list_links"
+    "mcp__internal-dashboard__search_links"
+    "mcp__internal-dashboard__add_link"
+    "mcp__internal-dashboard__delete_link"
+
     # Shell basics. A compound command is refused unless EVERY segment is
     # allowed, so cd and friends must be listed even though they change
     # nothing on their own.
