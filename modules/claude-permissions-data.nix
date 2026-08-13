@@ -70,13 +70,9 @@
     #
     # axon-gateway (modules/coding-harness.nix) is the central gateway exposing
     # Home Assistant, Loki, Prometheus, PBS and Postgres tools — all of them.
-    # internal-dashboard is added per-host and surfaces only the link tools
-    # listed here.
+    # internal-dashboard is added per-host and exposes its full tool set too.
     "mcp__axon-gateway__*"
-    "mcp__internal-dashboard__list_links"
-    "mcp__internal-dashboard__search_links"
-    "mcp__internal-dashboard__add_link"
-    "mcp__internal-dashboard__delete_link"
+    "mcp__internal-dashboard__*"
 
     # Shell basics. A compound command is refused unless EVERY segment is
     # allowed, so cd and friends must be listed even though they change
