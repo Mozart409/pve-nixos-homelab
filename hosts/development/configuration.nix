@@ -280,6 +280,11 @@
     fi
   '';
 
+  environment.shellAliases = {
+    op = "opencode";
+    cl = "claude";
+  };
+
   # Development tools for experiments
   environment.systemPackages = with pkgs; [
     # keep-sorted start
