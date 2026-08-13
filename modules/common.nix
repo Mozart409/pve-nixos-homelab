@@ -65,9 +65,34 @@
       pup = "podman-compose up -d";
       pwn = "podman-compose down";
       n = "nvim .";
-      t = "tmux";
       zkdir = "cd ~/code/zettelkasten/";
     };
+    interactiveShellInit = ''
+      # `t <name>`: attach-or-create a tmux session named <name> (defaults to the
+      # current directory name). From inside tmux it switches to the session,
+      # creating it if needed. Pairs with the tmux config in modules/tmux.nix.
+      t() {
+        local name="''${1:-''${PWD##*/}}"
+        if [[ -n "''${TMUX:-}" ]]; then
+          tmux switch-client -t "$name" 2>/dev/null || tmux new-session -s "$name"
+        elif tmux has-session -t "$name" 2>/dev/null; then
+          tmux attach-session -t "$name"
+        else
+          tmux new-session -s "$name"
+        fi
+      }
+
+      # `tk`: kill the tmux session the shell is currently in, closing every
+      # window in it (neovim, lazygit, ...). Only ever touches the current session.
+      # Outside tmux, `tk <name>` kills that named session.
+      tk() {
+        if [[ -n "''${TMUX:-}" ]]; then
+          tmux kill-session
+        elif [[ -n "''${1:-}" ]]; then
+          tmux kill-session -t "$1" 2>/dev/null
+        fi
+      }
+    '';
     ohMyZsh = {
       enable = true;
       # theme = "fino";
