@@ -50,12 +50,7 @@ as `packages.ci-image`). `nix.yml` runs in `nixos/nix:2.35.2` from Docker Hub.
    (`harbor.homelab.local`), `podman login harbor.homelab.local`, then
    `just ci-image-push`. Until the image exists, `static.yml`/`iac.yml`
    fail with an image-pull error — expected during bring-up.
-2. **Forgejo deploy key.** Create the secret `forgejo_ci_ssh_key` in the
-   Woodpecker repo settings (Settings → Secrets), value = an ed25519 private
-   key. Add its public half to a Forgejo deploy key (or `ci` user) with
-   **read** access to `amadeus/homelab-mcp-servers`. Only used when the
-   evaluated host imports the `homelab-mcp` git+ssh input (`mcp`, `hermes`).
-3. **Repo webhook.** The `ci.homelab.local` webhook must be registered on
+2. **Repo webhook.** The `ci.homelab.local` webhook must be registered on
    `amadeus/pve-nixos-homelab` (Forgejo repo → Settings → Webhooks). The
    `forgejo.homelab.local`/`ci.homelab.local` ALLOWED_HOST_LIST entry on the
    forgejo host already exists (AGENTS.md §6) — do not remove it.
@@ -77,11 +72,13 @@ gzip metadata, so the raw file hash drifts on every download.
 
 ## Known gaps
 
+- The `homelab-mcp` flake input is fetched over `git+https`
+  (`https://forgejo.homelab.local/amadeus/homelab-mcp-servers.git`, public
+  repo) instead of the old `git+ssh` ts.net URL, so CI needs no SSH key or
+  secret and no MagicDNS dependency. Requires `GIT_SSL_CAINFO` for nix's
+  libgit2 to trust the step-ca cert (set in `nix.yml`).
 - Pipelines use a full clone (`partial: false`) so `CI_COMMIT_BEFORE` is
   reachable for the diff/cog range. The repo is small; fine.
 - The `nixos/nix:2.35.2` pull is anonymous from Docker Hub. If Docker Hub
   ever rate-limits the woodpecker host, mirror it into Harbor and change the
   image reference here.
-- `nix.yml` does not exercise the git+ssh `homelab-mcp` input unless `mcp`
-  or `hermes` is actually changed. If the CI key is missing and one of those
-  hosts is edited, the eval fails with an SSH error — add the secret.

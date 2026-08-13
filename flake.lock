@@ -460,11 +460,11 @@
         "rev": "f562ea969eeba2912280153c3fb774add789d68b",
         "revCount": 117,
         "type": "git",
-        "url": "ssh://forgejo@homelab-forgejo.dropbear-butterfly.ts.net:2222/amadeus/homelab-mcp-servers.git"
+        "url": "https://forgejo.homelab.local/amadeus/homelab-mcp-servers.git"
       },
       "original": {
         "type": "git",
-        "url": "ssh://forgejo@homelab-forgejo.dropbear-butterfly.ts.net:2222/amadeus/homelab-mcp-servers.git"
+        "url": "https://forgejo.homelab.local/amadeus/homelab-mcp-servers.git"
       }
     },
     "mozart409-nixvim": {

@@ -33,8 +33,7 @@ clone:
 steps:
   - name: nix-check
     # Pinned nix version (not `latest`) so the flake-parser behavior in CI is
-    # reproducible. The image ships gitMinimal + openssh, enough for the
-    # git+ssh flake input setup below.
+    # reproducible. The image ships gitMinimal + openssh.
     image: nixos/nix:2.35.2
     pull: true
     environment:
@@ -47,29 +46,18 @@ steps:
         connect-timeout = 5
         fallback = true
       # The agent bind-mounts the host CA bundle over this path, so step-ca
-      # certs (cache.homelab.local, forgejo.homelab.local) are trusted.
+      # certs (cache.homelab.local, forgejo.homelab.local) are trusted. The
+      # homelab-mcp flake input is fetched over git+https (public repo), which
+      # nix's libgit2 needs GIT_SSL_CAINFO to trust.
       NIX_SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       GIT_SSL_CAINFO: /etc/ssl/certs/ca-certificates.crt
-      # git+ssh flake input (homelab-mcp) host key: accept on first contact.
-      GIT_SSH_COMMAND: ssh -o StrictHostKeyChecking=accept-new
-      # Only needed when the evaluated host imports homelab-mcp (mcp, hermes).
-      FORGEJO_CI_SSH_KEY:
-        from_secret: forgejo_ci_ssh_key
     commands:
       - |
         set -e
 
-        # 1. SSH key for the git+ssh flake input (homelab-mcp). Harmless when
-        #    unused; required only if a changed host imports it.
-        mkdir -p "$HOME/.ssh"
-        if [ -n "${FORGEJO_CI_SSH_KEY:-}" ]; then
-          printf '%s\n' "$FORGEJO_CI_SSH_KEY" > "$HOME/.ssh/id_ed25519"
-          chmod 600 "$HOME/.ssh/id_ed25519"
-        fi
-
-        # 2. Hosts touched by this push. hosts/<dir> maps to the flake attr
-        #    name; mcp_vm is the dir for the `mcp` host; rpi* dirs have no
-        #    simple mapping so they are skipped (rpi4/rpi5 are aarch64).
+        # Hosts touched by this push. hosts/<dir> maps to the flake attr
+        # name; mcp_vm is the dir for the `mcp` host; rpi* dirs have no
+        # simple mapping so they are skipped (rpi4/rpi5 are aarch64).
         before="${CI_COMMIT_BEFORE:-}"
         sha="${CI_COMMIT_SHA:-HEAD}"
         hosts=""

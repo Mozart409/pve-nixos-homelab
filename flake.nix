@@ -17,10 +17,12 @@
       url = "github:zhaofengli/colmena";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # MCP-server monorepo (pbs/pg/prom/loki/ha). Lives on the homelab Forgejo;
-    # referenced via the local checkout until pushing from agents is unblocked.
+    # MCP-server monorepo (pbs/pg/prom/loki/ha). Lives on the homelab Forgejo.
+    # Fetched over HTTPS (repo is public + step-ca trusted everywhere) so no SSH
+    # key is needed by CI or build hosts; the old git+ssh ts.net URL needed a
+    # shared forgejo key and MagicDNS, which is unreliable between homelab VMs.
     homelab-mcp = {
-      url = "git+ssh://forgejo@homelab-forgejo.dropbear-butterfly.ts.net:2222/amadeus/homelab-mcp-servers.git";
+      url = "git+https://forgejo.homelab.local/amadeus/homelab-mcp-servers.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     hermes-agent = {
