@@ -25,6 +25,11 @@
   #
   # Deliberately checks for the presence of required rules rather than hashing
   # the file, so ordinary edits do not produce false alarms.
+  #
+  # Supersedes the hand-written ~/.claude/verify-settings.sh, which ran from a
+  # SessionStart hook and carried its own copy of the deny list — the second
+  # hand-maintained list this repo set out to eliminate. That script and its hook
+  # entry are retired; every check it made now lives here.
   verify = pkgs.writeShellApplication {
     name = "claude-settings-verify";
     runtimeInputs = [pkgs.jq pkgs.curl pkgs.hostname];
@@ -47,6 +52,18 @@
 
         mode=$(jq -r '.permissions.defaultMode // "unset"' "$SETTINGS")
         [ "$mode" = "dontAsk" ] || problems+=("defaultMode is '$mode', expected 'dontAsk'")
+
+        # Redundant while the mode above holds — dontAsk denies AskUserQuestion
+        # outright, so nothing ever waits on this timeout. It matters in exactly
+        # the case this module exists to catch: the mode has already drifted, and
+        # an unattended session would otherwise block forever on a question
+        # nobody is there to answer. Backstop for that window, not for normal
+        # operation.
+        timeout=$(jq -r '.askUserQuestionTimeout // "unset"' "$SETTINGS")
+        case "$timeout" in
+          60s | 5m | 10m) ;;
+          *) problems+=("askUserQuestionTimeout is '$timeout' — unattended sessions can block forever") ;;
+        esac
 
         # Confirms neither integration's setup service ate the other's entries.
         grep -q "moshi-hook" "$SETTINGS" || problems+=("moshi-hook hook entries gone")
