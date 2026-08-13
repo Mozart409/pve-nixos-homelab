@@ -1,0 +1,85 @@
+# NixOS config check. Evaluates + dry-runs the toplevel build for the hosts a
+# push actually touched, pulling from the homelab attic cache. This is the
+# AGENTS.md §7 scoped gate: full `nix flake check` evaluates all ~16 hosts and
+# gets OOM-killed (exit 137) on the nix-daemon.
+#
+# Every nix command here uses the attic cache via NIX_CONFIG (substituters).
+# The agent's WOODPECKER_BACKEND_DOCKER_VOLUMES mounts the host step-ca bundle
+# at /etc/ssl/certs/ca-certificates.crt, which NIX_SSL_CERT_FILE points at so
+# cache.homelab.local TLS is trusted inside the step container.
+#
+# Note: this checks nixosConfigurations (mkHost), which omits the
+# home-manager/nixvim layer. The only gate that exercises that layer is
+# `just colmena-build` -- which CI deliberately does NOT run (it builds every
+# node and is the human pre-deploy gate, AGENTS.md §3).
+when:
+  - event: [push, pull_request]
+    path:
+      include:
+        - flake.nix
+        - flake.lock
+        - hosts/**
+        - modules/**
+        - secrets/**
+        - justfile
+        - .woodpecker/nix.yml
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      partial: false
+
+steps:
+  - name: nix-check
+    # Pinned nix version (not `latest`) so the flake-parser behavior in CI is
+    # reproducible. The image ships gitMinimal + openssh.
+    image: nixos/nix:2.35.2
+    pull: true
+    environment:
+      HOME: /root
+      # Attic cache + cache.nixos.org. Root inside the step container, so the
+      # substituters are trusted without a nix.conf override.
+      NIX_CONFIG: |-
+        substituters = https://cache.homelab.local/homelab https://cache.nixos.org/
+        trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= homelab:aswnRAo2zbP13gGnUTCINX78X/lURQgPAfrgNpHpQpY=
+        connect-timeout = 5
+        fallback = true
+        # The step container has no nix-daemon, so the nix-command/flakes
+        # experimental features must be enabled explicitly for `nix build`.
+        experimental-features = nix-command flakes
+      # The agent bind-mounts the host CA bundle over this path, so step-ca
+      # certs (cache.homelab.local, forgejo.homelab.local) are trusted. The
+      # homelab-mcp flake input is fetched over git+https (public repo), which
+      # nix's libgit2 needs GIT_SSL_CAINFO to trust.
+      NIX_SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      GIT_SSL_CAINFO: /etc/ssl/certs/ca-certificates.crt
+    commands:
+      - |
+        set -e
+
+        # Hosts touched by this push. hosts/<dir> maps to the flake attr
+        # name; mcp_vm is the dir for the `mcp` host; rpi* dirs have no
+        # simple mapping so they are skipped (rpi4/rpi5 are aarch64).
+        before="${CI_COMMIT_BEFORE:-}"
+        sha="${CI_COMMIT_SHA:-HEAD}"
+        hosts=""
+        if [ -n "$before" ] && [ "$before" != "$sha" ] && git cat-file -e "$before" 2>/dev/null; then
+          hosts="$(
+            git diff --name-only "$before" "$sha" 2>/dev/null \
+              | sed -nE 's#^hosts/([^/]+)/.*#\1#p' \
+              | sort -u \
+              | grep -v '^rpi' \
+              | sed 's/^mcp_vm$/mcp/'
+          )"
+        fi
+        if [ -z "$hosts" ]; then
+          echo "==> no host config changed; defaulting to dns + woodpecker"
+          hosts="dns woodpecker"
+        fi
+        echo "==> checking hosts: $hosts"
+
+        for h in $hosts; do
+          echo "==> $h"
+          nix build --dry-run --no-link ".#nixosConfigurations.$h.config.system.build.toplevel"
+        done
