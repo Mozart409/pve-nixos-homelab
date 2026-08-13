@@ -201,9 +201,11 @@ ci-image-build: clear
   nix build '.#ci-image' --print-out-paths
 
 # Load the freshly built CI image into podman and push it to Harbor so the
-# Woodpecker agent can pull it. ONE-TIME prereqs: a public `ci` project in
-# Harbor, a `podman login harbor.homelab.local`, and the Forgejo webhook on.
-# Re-run whenever the toolset in flake.nix's ci-image changes.
+# Woodpecker agent can pull it. The public `ci` project is provisioned
+# declaratively by harbor-bootstrap.service (hosts/containers/harbor); the
+# remaining ONE-TIME prereqs are a `podman login harbor.homelab.local` and
+# the Forgejo webhook on. Re-run whenever the toolset in flake.nix's
+# ci-image changes.
 ci-image-push: clear
   #!/usr/bin/env bash
   set -euo pipefail

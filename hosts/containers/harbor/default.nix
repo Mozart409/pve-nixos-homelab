@@ -50,7 +50,8 @@
     chmod 600 /run/harbor/db.env
   '';
 
-  # Bootstrap script to create projects and retention policies
+  # Bootstrap script to create the oyabu + ci projects and their retention
+  # policies
   harborBootstrap = pkgs.writeShellScript "harbor-bootstrap" ''
     set -euo pipefail
 
@@ -71,74 +72,79 @@
       sleep 5
     done
 
-    # Check if project already exists
-    PROJECT_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
-      "$HARBOR_URL/api/v2.0/projects?name=oyabu" | ${pkgs.jq}/bin/jq 'length')
+    # Projects Woodpecker CI pulls from (harbor.homelab.local/ci/*) and the
+    # app registry (harbor.homelab.local/oyabu/*) -- both public, both
+    # bootstrapped the same way so a rebuilt Harbor host never silently
+    # breaks CI image pulls with "project ci not found".
+    for PROJECT_NAME in oyabu ci; do
+      PROJECT_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
+        "$HARBOR_URL/api/v2.0/projects?name=$PROJECT_NAME" | ${pkgs.jq}/bin/jq 'length')
 
-    if [ "$PROJECT_EXISTS" -eq 0 ]; then
-      echo "Creating project 'oyabu'..."
-      ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
-        -H "Content-Type: application/json" \
-        "$HARBOR_URL/api/v2.0/projects" \
-        -d '{"project_name": "oyabu", "public": true, "storage_limit": 10737418240}'
-      echo "Project created"
-    else
-      echo "Project 'oyabu' already exists"
-    fi
+      if [ "$PROJECT_EXISTS" -eq 0 ]; then
+        echo "Creating project '$PROJECT_NAME'..."
+        ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
+          -H "Content-Type: application/json" \
+          "$HARBOR_URL/api/v2.0/projects" \
+          -d '{"project_name": "'"$PROJECT_NAME"'", "public": true, "storage_limit": 10737418240}'
+        echo "Project created"
+      else
+        echo "Project '$PROJECT_NAME' already exists"
+      fi
 
-    # Get project ID
-    PROJECT_ID=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
-      "$HARBOR_URL/api/v2.0/projects?name=oyabu" | ${pkgs.jq}/bin/jq -r '.[0].project_id')
+      # Get project ID
+      PROJECT_ID=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
+        "$HARBOR_URL/api/v2.0/projects?name=$PROJECT_NAME" | ${pkgs.jq}/bin/jq -r '.[0].project_id')
 
-    # Check if retention policy exists
-    RETENTION_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
-      "$HARBOR_URL/api/v2.0/retentions" 2>/dev/null | ${pkgs.jq}/bin/jq --arg pid "$PROJECT_ID" \
-      '[.[] | select(.scope.ref == ($pid | tonumber))] | length' 2>/dev/null || echo "0")
+      # Check if retention policy exists
+      RETENTION_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
+        "$HARBOR_URL/api/v2.0/retentions" 2>/dev/null | ${pkgs.jq}/bin/jq --arg pid "$PROJECT_ID" \
+        '[.[] | select(.scope.ref == ($pid | tonumber))] | length' 2>/dev/null || echo "0")
 
-    if [ "$RETENTION_EXISTS" -eq 0 ]; then
-      echo "Creating retention policy..."
-      ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
-        -H "Content-Type: application/json" \
-        "$HARBOR_URL/api/v2.0/retentions" \
-        -d '{
-          "algorithm": "or",
-          "scope": {
-            "level": "project",
-            "ref": '"$PROJECT_ID"'
-          },
-          "trigger": {
-            "kind": "Schedule",
-            "settings": {
-              "cron": "0 0 0 * * *"
-            }
-          },
-          "rules": [
-            {
-              "disabled": false,
-              "action": "retain",
-              "scope_selectors": {
-                "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
-              },
-              "tag_selectors": [{"kind": "doublestar", "decoration": "matches", "pattern": "**"}],
-              "params": {"latestPushedK": 2},
-              "template": "latestPushedK"
+      if [ "$RETENTION_EXISTS" -eq 0 ]; then
+        echo "Creating retention policy for '$PROJECT_NAME'..."
+        ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
+          -H "Content-Type: application/json" \
+          "$HARBOR_URL/api/v2.0/retentions" \
+          -d '{
+            "algorithm": "or",
+            "scope": {
+              "level": "project",
+              "ref": '"$PROJECT_ID"'
             },
-            {
-              "disabled": false,
-              "action": "retain",
-              "scope_selectors": {
-                "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
+            "trigger": {
+              "kind": "Schedule",
+              "settings": {
+                "cron": "0 0 0 * * *"
+              }
+            },
+            "rules": [
+              {
+                "disabled": false,
+                "action": "retain",
+                "scope_selectors": {
+                  "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
+                },
+                "tag_selectors": [{"kind": "doublestar", "decoration": "matches", "pattern": "**"}],
+                "params": {"latestPushedK": 2},
+                "template": "latestPushedK"
               },
-              "tag_selectors": [{"kind": "doublestar", "decoration": "untagged", "pattern": ""}],
-              "params": {"nDaysSinceLastPush": 2},
-              "template": "nDaysSinceLastPush"
-            }
-          ]
-        }'
-      echo "Retention policy created: keep last 2 tags, delete untagged after 2 days"
-    else
-      echo "Retention policy already exists"
-    fi
+              {
+                "disabled": false,
+                "action": "retain",
+                "scope_selectors": {
+                  "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
+                },
+                "tag_selectors": [{"kind": "doublestar", "decoration": "untagged", "pattern": ""}],
+                "params": {"nDaysSinceLastPush": 2},
+                "template": "nDaysSinceLastPush"
+              }
+            ]
+          }'
+        echo "Retention policy created for '$PROJECT_NAME': keep last 2 tags, delete untagged after 2 days"
+      else
+        echo "Retention policy already exists for '$PROJECT_NAME'"
+      fi
+    done
 
     # Configure OIDC authentication
     OIDC_CLIENT_ID=$(cat ${config.age.secrets.harbor-oidc-client-id.path})
