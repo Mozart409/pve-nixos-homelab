@@ -8,6 +8,7 @@
     ./nix-gc.nix
     ./homelab-users.nix
     ./just-completions.nix
+    ./nh.nix
   ];
 
   # Timezone configuration
