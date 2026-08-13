@@ -8,7 +8,7 @@ fmt:
   alejandra .
 
 clear:
-  clear
+  clear 2>/dev/null || true
 
 shell:
   nix develop . --command zsh
