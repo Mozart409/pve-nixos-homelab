@@ -81,7 +81,11 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
 
 ### General Development
 - **Dev Environment**:
-  - Use `nix develop` (or the automatic direnv integration if available) to enter the development shell.
+  - This repo uses **direnv** (`.envrc` = `use flake`). With the direnv shell
+    active (the default in this checkout), all dev tools are already on PATH —
+    run `just`, `alejandra`, `nix`, `tofu`, `cog`, `colmena`, … **directly,
+    without `nix develop -c` wrapping**. Only reach for `nix develop` on a
+    machine where direnv is not loaded.
   - The shell provides: `just`, `kics`, `tofu-ls`, `opentofu`, `rust-analyzer`, etc.
 - **Secrets**:
   - **NEVER** commit secrets to the repository.

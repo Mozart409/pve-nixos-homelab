@@ -177,6 +177,7 @@ in {
     herdrPkg
     # Plugin build/runtime deps for the bootstrapped plugins:
     pkgs.cargo # herdr-spreader builds at install time
+    pkgs.gcc # cargo links with `cc` — without it the build dies with "linker `cc` not found"
     pkgs.bun # window-title-sync event hooks run `bun sync-title.js`
     pkgs.worktrunk # worktrunk plugin shells out to the `wt` CLI
   ];

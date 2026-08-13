@@ -167,10 +167,11 @@
       then hostAddrs.${name}.tailscale
       else hostAddrs.${name}.local;
 
-    # Home-manager + Mozart409 nixvim for the amadeus user. Applied to every colmena
-    # node via `colmenaHive.defaults`, and baked into individual nixosConfigurations
-    # (used by nixos-anywhere / `just deploy`) so a reinstall keeps nixvim instead of
-    # silently dropping it — mkHost does NOT include home-manager.
+    # Home-manager + Mozart409 nixvim + tmux for the amadeus user. Applied to every
+    # colmena node via `colmenaHive.defaults`, and baked into individual
+    # nixosConfigurations (used by nixos-anywhere / `just deploy`) so a reinstall
+    # keeps nixvim/tmux instead of silently dropping them — mkHost does NOT include
+    # home-manager.
     homeManagerNixvim = {
       imports = [
         home-manager.nixosModules.home-manager
@@ -178,7 +179,10 @@
           home-manager.useGlobalPkgs = true;
           home-manager.useUserPackages = true;
           home-manager.users.amadeus = {
-            imports = [mozart409-nixvim.homeModules.default];
+            imports = [
+              mozart409-nixvim.homeModules.default
+              ./modules/tmux.nix
+            ];
             home.stateVersion = "25.05";
           };
         }
