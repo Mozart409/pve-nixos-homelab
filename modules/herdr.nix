@@ -88,14 +88,25 @@
   # and registers the plugin globally in plugins.json. Each install is guarded by
   # `herdr plugin list` so it runs once and is skipped on later activations.
   #
-  # A failed install is NON-FATAL by design. These installs reach out to GitHub
-  # and run third-party manifest build steps, so they are the least reliable part
-  # of this module — and because herdr-setup is a *user* unit that NixOS restarts
-  # during activation, letting one abort the script fails the unit, which fails
-  # `colmena apply` for the whole host. That is a bad trade: a flaky third-party
-  # plugin should never block a system deploy. So each install is attempted
-  # independently, failures are collected in `failed`, and the script logs a loud
-  # WARNING and still exits 0.
+  # A failed install is NON-FATAL by design, and one failure mode is STRUCTURAL:
+  # `herdr plugin install` needs a **running herdr server** (it registers the
+  # plugin with it over the XDG_RUNTIME_DIR socket), and at boot there is none.
+  # It fails with a bare `Error: Os { code: 2, kind: NotFound, message: "No such
+  # file or directory" }` — that is the missing socket, NOT a missing binary or a
+  # bad plugin, so do not go hunting for a PATH problem. `herdr integration
+  # install` above only writes files, which is why it succeeds in the same run.
+  #
+  # Consequence: a genuinely new plugin cannot be installed headlessly. Install
+  # it once from a terminal with herdr running, and every later activation takes
+  # the "already installed" branch. The three below were bootstrapped that way.
+  #
+  # These installs also reach out to GitHub and run third-party manifest build
+  # steps, so they are the least reliable part of this module — and because
+  # herdr-setup is a *user* unit that NixOS restarts during activation, letting
+  # one abort the script fails the unit, which fails `colmena apply` for the
+  # whole host. That is a bad trade: a flaky third-party plugin should never
+  # block a system deploy. So each install is attempted independently, failures
+  # are collected in `failed`, and the script logs a loud WARNING and exits 0.
   #
   # The cost is that a persistently broken plugin is *quiet* — the deploy goes
   # green with the plugin missing. `herdr plugin list` is the check, and the
@@ -235,6 +246,30 @@ in {
     pkgs.worktrunk # worktrunk plugin shells out to the `wt` CLI
     pkgs.jq # automatic-rename's engine + shell hooks parse `herdr ... --json`
   ];
+
+  # herdr-automatic-rename's real-time half. The plugin's manifest hooks only
+  # fire on herdr *events* (tab/pane create, close, focus), and herdr has no
+  # "foreground command changed" event — so without this the tab name lags until
+  # you touch something. This hook renames the instant a command starts.
+  #
+  # Lives here rather than in modules/common.nix's zsh block so it lands only on
+  # hosts that actually import herdr; interactiveShellInit is a `lines` option,
+  # so the two definitions merge instead of conflicting.
+  #
+  # `(N)` is zsh's nullglob qualifier, and it is load-bearing: the plugin's
+  # install can fail (it needs a running herdr server — see the plugins comment
+  # above), and without `(N)` an unmatched glob makes zsh error on *every*
+  # interactive shell start. With it, the loop body is simply skipped.
+  programs.zsh.interactiveShellInit = ''
+    # herdr-automatic-rename: rename the tab as each command starts. Self-locates
+    # the engine under whichever versioned dir herdr installed it to, and is a
+    # no-op outside a herdr pane.
+    for _f in $HOME/.config/herdr/plugins/github/herdr-automatic-rename-*/shell/hook.zsh(N); do
+      source "$_f"
+      break
+    done
+    unset _f
+  '';
 
   # Start the user manager at boot so this runs without a login session.
   # types.bool merges equal definitions, so modules/moshi-hook-user.nix setting
