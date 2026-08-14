@@ -12,6 +12,13 @@
   # its own hand-maintained subset.
   perms = import ./claude-permissions-data.nix;
   denyArray = lib.concatMapStringsSep " " lib.escapeShellArg perms.deny;
+  # The web-scope allow rules come from the same list that drives the WebSearch
+  # restriction hook, so a whitelist change that forgets the allow rules is
+  # caught here rather than silently narrowing the boundary.
+  allowArray =
+    lib.concatMapStringsSep " "
+    (lib.escapeShellArg)
+    (["WebSearch"] ++ map (d: "WebFetch(domain:${d})") perms.webSearchDomains);
 
   # Guardrail drift detection for ~/.claude/settings.json.
   #
@@ -50,6 +57,13 @@
           fi
         done
 
+        required_allow=(${allowArray})
+        for rule in "''${required_allow[@]}"; do
+          if ! jq -e --arg r "$rule" '.permissions.allow // [] | index($r)' "$SETTINGS" >/dev/null 2>&1; then
+            problems+=("allow rule missing: $rule")
+          fi
+        done
+
         mode=$(jq -r '.permissions.defaultMode // "unset"' "$SETTINGS")
         [ "$mode" = "dontAsk" ] || problems+=("defaultMode is '$mode', expected 'dontAsk'")
 
@@ -68,6 +82,11 @@
         # Confirms neither integration's setup service ate the other's entries.
         grep -q "moshi-hook" "$SETTINGS" || problems+=("moshi-hook hook entries gone")
         grep -q "herdr-agent-state" "$SETTINGS" || problems+=("herdr hook entries gone")
+        # Confirms the WebSearch restriction hook survived (it owns the
+        # "no arbitrary websearch" boundary — WebSearch permission rules cannot
+        # express a domain scope, so without this hook the bare `WebSearch`
+        # allow rule above would permit any query against any site).
+        grep -q "claude-websearch-hook" "$SETTINGS" || problems+=("WebSearch restriction hook gone")
       fi
 
       if [ ''${#problems[@]} -eq 0 ]; then
