@@ -91,6 +91,29 @@
   # of silently leaving the host half-provisioned.
   plugins = [
     {
+      # tmux `automatic-rename` for herdr: each tab is renamed to its foreground
+      # process (`nvim`, `claude`) or the shell name at a bare prompt. A tab you
+      # rename by hand opts out until `herdr plugin action invoke
+      # herdr-automatic-rename.reset`. Pure bash + jq (jq comes from
+      # modules/common.nix), so unlike spreader it has no build step.
+      #
+      # `prompt_new_tab_name = false` above is exactly what this plugin wants —
+      # a name typed at that prompt counts as a hand rename and opts the tab out.
+      #
+      # Ships a second, independent feature: an `[N]` 1-9 jump-key prefix on
+      # workspaces/tabs (`AUTO_INDEX`, on by default). Agent rows never get one
+      # on herdr >= 0.7.5, which restricted agent names to
+      # `^[a-z][a-z0-9_-]{0,31}$` — a bracketed number cannot match. That is also
+      # moot under `agent_panel_sort = "priority"` above, which the plugin cannot
+      # number either. Both are agent-row-only; tab naming is unaffected.
+      #
+      # Defaults need no config; to tune it, drop a config.sh at
+      # ~/.config/herdr-automatic-rename/ (e.g. AUTO_INDEX=0 for bare names).
+      id = "herdr-automatic-rename";
+      source = "qu8n/herdr-automatic-rename";
+      description = "rename each tab to its foreground process (tmux automatic-rename)";
+    }
+    {
       id = "herdr-spreader";
       source = "yuk1ty/herdr-spreader";
       description = "declarative workspace/tab/pane layouts (tmuxinator-style)";
@@ -180,6 +203,7 @@ in {
     pkgs.gcc # cargo links with `cc` — without it the build dies with "linker `cc` not found"
     pkgs.bun # window-title-sync event hooks run `bun sync-title.js`
     pkgs.worktrunk # worktrunk plugin shells out to the `wt` CLI
+    pkgs.jq # automatic-rename's engine + shell hooks parse `herdr ... --json`
   ];
 
   # Start the user manager at boot so this runs without a login session.
