@@ -33,14 +33,24 @@ steps:
         # Check only the commits this push/PR introduced, NOT the whole history:
         # older commits predate conventional-commit enforcement and would fail
         # cog check (see todo/woodpecker-ci-pipelines.md).
-        before="${CI_COMMIT_BEFORE:-}"
+        # CI_PREV_COMMIT_SHA, not CI_COMMIT_BEFORE: the latter is a Drone name
+        # that Woodpecker does not set, so this rendered as before="" and the
+        # guard below short-circuited to `exit 0` every time -- cog check was
+        # unreachable. The HEAD~1 fallback further down never fired either,
+        # because the empty-string check came first.
+        before="${CI_PREV_COMMIT_SHA:-}"
         sha="${CI_COMMIT_SHA:-HEAD}"
         if [ -z "$before" ] || [ "$before" = "$sha" ] || printf '%s' "$before" | grep -Eq '^0+$'; then
           echo "no base commit to diff against (before='$before'); skipping"
           exit 0
         fi
-        if ! git cat-file -e "$before" 2>/dev/null; then
-          echo "base '$before' not present in this clone; falling back to HEAD~1"
+        # CI_PREV_COMMIT_SHA is the previous PIPELINE's commit, which may sit on
+        # an unrelated branch. Requiring it to be an ancestor of $sha (not just
+        # present in the clone) keeps the range to commits this push actually
+        # introduced -- otherwise `before..sha` fans out across branches and
+        # drags in pre-conventional history that cog check would reject.
+        if ! git merge-base --is-ancestor "$before" "$sha" 2>/dev/null; then
+          echo "base '$before' is not an ancestor of '$sha'; falling back to HEAD~1"
           before="$(git rev-parse HEAD~1 2>/dev/null || true)"
         fi
         if [ -z "$before" ] || [ "$before" = "$sha" ]; then
