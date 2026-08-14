@@ -715,11 +715,27 @@
               # /etc/ssl/certs/ca-certificates.crt for LAN hosts.
               pathsToLink = ["/bin" "/etc" "/usr" "/opt"];
             };
+            # buildEnv only materializes the linked paths, so the image has no
+            # /tmp and no /root. tofu init unpacks provider zips through
+            # os.CreateTemp and kics writes scan scratch files -- both die with
+            # "no such file or directory" without /tmp -- and HOME below points
+            # at /root.
+            extraCommands = ''
+              mkdir -p tmp root
+              chmod 1777 tmp
+            '';
             config = {
               Cmd = ["/bin/sh" "-c" "true"];
               Env = [
                 "PATH=/bin:/usr/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/sbin"
-                "SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt"
+                # ca-certificates.crt, NOT cacert's ca-bundle.crt: the woodpecker
+                # agent bind-mounts the host step-ca bundle over exactly that
+                # path (hosts/woodpecker/configuration.nix). Pointing at the
+                # other file in the same directory silently bypasses the mount
+                # and leaves Go tools with the public roots only, so any
+                # *.homelab.local TLS fails with "certificate signed by unknown
+                # authority".
+                "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"
                 "HOME=/root"
                 "USER=root"
               ];
