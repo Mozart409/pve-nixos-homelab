@@ -21,8 +21,12 @@ steps:
       - tofu fmt -check -recursive iac
       # -backend=false skips the pg backend block: CI has no Postgres state,
       # and validate does not need it.
-      - cd iac && tofu init -backend=false
-      - cd iac && tofu validate
+      #
+      # One command, not two `cd iac && ...` lines: Woodpecker concatenates a
+      # step's commands into a SINGLE /bin/sh script, so the working directory
+      # carries over. A second `cd iac` would resolve against iac/ and look for
+      # iac/iac, fail, and short-circuit `tofu validate` away.
+      - cd iac && tofu init -backend=false && tofu validate
 
   - name: kics
     image: harbor.homelab.local/ci/pve-nixos-homelab:latest
