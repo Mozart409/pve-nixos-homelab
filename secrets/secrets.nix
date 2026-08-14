@@ -32,7 +32,7 @@ in {
   "attic-db-url.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostCache]; # env-file: ATTIC_SERVER_DATABASE_URL=postgresql://...
   "attic-push-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostDevelopment]; # plain JWT, not KEY=value
   "attic-server-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostCache];
-  "axon-gateway-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostContainers hostHermes hostDevelopment hostZeroclaw];
+  "axon-gateway-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostContainers hostHermes hostDevelopment hostOtel hostZeroclaw];
   "buildbot-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostBuildBotMaster];
   "buildbot-webhook-secret.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostBuildBotMaster];
   "buildbot-worker-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostBuildBotMaster hostBuildBotWorker1];
