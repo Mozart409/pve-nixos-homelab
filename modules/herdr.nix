@@ -175,18 +175,68 @@
   # herdr-spreader starter layout (tmuxinator-for-herdr). Written to the plugin's
   # config dir only when absent, so user edits survive activations. Apply it with:
   #   herdr plugin action invoke herdr-spreader.apply
+  #
+  # One workspace per repo checkout, each with the same four tabs in a fixed
+  # order so prefix+1..4 means the same thing everywhere: 1 claude, 2 opencode,
+  # 3 lazygit, 4 a bare shell. The two agent tabs are what
+  # `resume_agents_on_restore` above reattaches after a restart. `homelab` (this
+  # repo) is the focused workspace, since it is the one that deploys the others.
+  #
+  # Written out per workspace rather than generated from a Nix list: it is eight
+  # duplicated lines against a config that has to be read as YAML when debugging,
+  # and this way the file on disk matches the file in the repo line for line.
+  #
+  # NB the repo is `nixos-ventara-ai`; `ventara` is just the workspace label.
+  # Roots must exist — spreader cannot cd into a missing directory, and that tab
+  # comes up in the home dir (or not at all) instead.
   spreaderLayout = pkgs.writeText "herdr-spreader-config.yaml" ''
     workspaces:
-      - name: dev
-        root: ~
+      - name: homelab
+        root: ~/code/pve-nixos-homelab
         focus: true
         tabs:
+          - label: claude
+            panes:
+              - command: claude
+          - label: opencode
+            panes:
+              - command: opencode
+          - label: lazygit
+            panes:
+              - command: lazygit
           - label: shell
             panes:
               - command: zsh
-          - label: git
+      - name: ventara
+        root: ~/code/nixos-ventara-ai
+        tabs:
+          - label: claude
             panes:
-              - command: git status
+              - command: claude
+          - label: opencode
+            panes:
+              - command: opencode
+          - label: lazygit
+            panes:
+              - command: lazygit
+          - label: shell
+            panes:
+              - command: zsh
+      - name: obsidian-kb
+        root: ~/code/obsidian-kb
+        tabs:
+          - label: claude
+            panes:
+              - command: claude
+          - label: opencode
+            panes:
+              - command: opencode
+          - label: lazygit
+            panes:
+              - command: lazygit
+          - label: shell
+            panes:
+              - command: zsh
   '';
 
   setup = pkgs.writeShellScript "herdr-setup-${user}" (
