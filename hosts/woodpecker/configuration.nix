@@ -198,15 +198,37 @@ in {
       # agent unit's -- a MemoryMax= on woodpecker-agent-podman would cap the
       # agent process and nothing it spawns. Values are raw BYTES (the flags are
       # Int64), not "1g" strings.
-      WOODPECKER_MAX_WORKFLOWS = "2";
-      WOODPECKER_BACKEND_DOCKER_LIMIT_MEM = toString (1024 * 1024 * 1024);
+      # 1, not 2. A workflow is not one container: a repo with a service (say a
+      # postgres alongside its checks step) gets LIMIT_MEM for each of them, so
+      # two workflows reserved four caps' worth on a guest that only ever had
+      # room for the sum of one. Concurrency here was always notional anyway --
+      # CPU_QUOTA below hands three of four cores to a single step.
+      WOODPECKER_MAX_WORKFLOWS = "1";
+      # 4 GB, not 1. 1 GB could not run a Rust step at all: internal-dashboard
+      # unpacks the rust/llvm toolchain through `nix develop` and then links
+      # `cargo test --all-targets`, and the cgroup SIGKILLed it mid-download
+      # every single time -- which is why those logs always ended on a `copying
+      # path` line with no error after it. A killed step also stops extending
+      # its queue lease, so the server expired the workflow, exactly the
+      # signature that was blamed on ballooning for #11-#25.
+      #
+      # This is a cap, not a reservation: a service container idles far below it
+      # (postgres with 128 MB shared_buffers sits near 300 MB), so one workflow
+      # peaks around 4.5 GB against the guest's 8 GB, not 8.
+      WOODPECKER_BACKEND_DOCKER_LIMIT_MEM = toString (4 * 1024 * 1024 * 1024);
       # Docker semantics: mem-swap is the mem+swap TOTAL, so setting it equal to
-      # LIMIT_MEM disables swap growth rather than allowing another 1 GB.
-      WOODPECKER_BACKEND_DOCKER_LIMIT_MEM_SWAP = toString (1024 * 1024 * 1024);
-      WOODPECKER_BACKEND_DOCKER_LIMIT_SHM_SIZE = toString (64 * 1024 * 1024);
+      # LIMIT_MEM disables swap growth rather than allowing another 4 GB. Kept
+      # equal deliberately -- this guest's swap lives on the zfs_pool spindles,
+      # and letting a step swap there is what turned #11-#25 into fsync timeouts
+      # instead of a clean, immediate OOM.
+      WOODPECKER_BACKEND_DOCKER_LIMIT_MEM_SWAP = toString (4 * 1024 * 1024 * 1024);
+      # 64 MB is below what postgres wants for 128 MB of shared_buffers, and the
+      # suite asks for max_connections=200 on top; the service died independently
+      # of the step above.
+      WOODPECKER_BACKEND_DOCKER_LIMIT_SHM_SIZE = toString (256 * 1024 * 1024);
       # CFS quota against the default 100 ms period: 100000 = one full core, so
       # 300000 = three. Leaves a core for the server, Caddy and sshd, so the UI
-      # stays responsive while two workflows compile.
+      # stays responsive while the one workflow above compiles.
       WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA = "300000";
 
       WOODPECKER_LOG_LEVEL = "info";
