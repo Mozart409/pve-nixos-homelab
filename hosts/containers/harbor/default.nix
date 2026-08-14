@@ -72,15 +72,22 @@
       sleep 5
     done
 
+    # Exact-match project lookup, emitting the project object or nothing.
+    # Harbor's `?name=` filter is a FUZZY match, so a lookup for "ci" would
+    # also return a project called "cicd" -- narrow it in jq instead of
+    # trusting `.[0]`.
+    project_json() {
+      ${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
+        "$HARBOR_URL/api/v2.0/projects?name=$1" \
+        | ${pkgs.jq}/bin/jq -c --arg n "$1" '[.[] | select(.name == $n)] | .[0] // empty'
+    }
+
     # Projects Woodpecker CI pulls from (harbor.homelab.local/ci/*) and the
     # app registry (harbor.homelab.local/oyabu/*) -- both public, both
     # bootstrapped the same way so a rebuilt Harbor host never silently
     # breaks CI image pulls with "project ci not found".
     for PROJECT_NAME in oyabu ci; do
-      PROJECT_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
-        "$HARBOR_URL/api/v2.0/projects?name=$PROJECT_NAME" | ${pkgs.jq}/bin/jq 'length')
-
-      if [ "$PROJECT_EXISTS" -eq 0 ]; then
+      if [ -z "$(project_json "$PROJECT_NAME")" ]; then
         echo "Creating project '$PROJECT_NAME'..."
         ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
           -H "Content-Type: application/json" \
@@ -91,17 +98,24 @@
         echo "Project '$PROJECT_NAME' already exists"
       fi
 
-      # Get project ID
-      PROJECT_ID=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
-        "$HARBOR_URL/api/v2.0/projects?name=$PROJECT_NAME" | ${pkgs.jq}/bin/jq -r '.[0].project_id')
+      PROJECT=$(project_json "$PROJECT_NAME")
+      PROJECT_ID=$(printf '%s' "$PROJECT" | ${pkgs.jq}/bin/jq -r '.project_id')
 
-      # Check if retention policy exists
-      RETENTION_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
-        "$HARBOR_URL/api/v2.0/retentions" 2>/dev/null | ${pkgs.jq}/bin/jq --arg pid "$PROJECT_ID" \
-        '[.[] | select(.scope.ref == ($pid | tonumber))] | length' 2>/dev/null || echo "0")
+      # Harbor records a project's retention policy as metadata.retention_id,
+      # and a project may hold at most one. There is NO list-all GET on
+      # /api/v2.0/retentions -- it is POST-only and a GET returns 405 -- so the
+      # probe that used to live here failed on every run, reported "no policy",
+      # and re-POSTed a duplicate for oyabu. Harbor rejected that, and under
+      # `set -e` the rejection killed the whole loop before the `ci` iteration:
+      # the project was never created and CI could not pull its image. Read the
+      # id off the project object instead.
+      RETENTION_ID=$(printf '%s' "$PROJECT" | ${pkgs.jq}/bin/jq -r '.metadata.retention_id // ""')
 
-      if [ "$RETENTION_EXISTS" -eq 0 ]; then
+      if [ -z "$RETENTION_ID" ]; then
         echo "Creating retention policy for '$PROJECT_NAME'..."
+        # Non-fatal on purpose: a missing retention policy is a
+        # disk-housekeeping concern, never a reason to abort the loop and
+        # leave a later project -- and therefore CI -- broken.
         ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
           -H "Content-Type: application/json" \
           "$HARBOR_URL/api/v2.0/retentions" \
@@ -139,10 +153,11 @@
                 "template": "nDaysSinceLastPush"
               }
             ]
-          }'
-        echo "Retention policy created for '$PROJECT_NAME': keep last 2 tags, delete untagged after 2 days"
+          }' \
+          && echo "Retention policy created for '$PROJECT_NAME': keep last 2 tags, delete untagged after 2 days" \
+          || echo "WARNING: could not create retention policy for '$PROJECT_NAME'; continuing"
       else
-        echo "Retention policy already exists for '$PROJECT_NAME'"
+        echo "Retention policy already exists for '$PROJECT_NAME' (id $RETENTION_ID)"
       fi
     done
 
