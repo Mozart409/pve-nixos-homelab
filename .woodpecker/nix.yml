@@ -59,8 +59,9 @@ steps:
         set -e
 
         # Hosts touched by this push. hosts/<dir> maps to the flake attr
-        # name; mcp_vm is the dir for the `mcp` host; rpi* dirs have no
-        # simple mapping so they are skipped (rpi4/rpi5 are aarch64).
+        # name; mcp_vm is the dir for the `mcp` host (mapped in the loop
+        # below); rpi* dirs have no simple mapping so they are skipped
+        # (rpi4/rpi5 are aarch64).
         # CI_PREV_COMMIT_SHA, not CI_COMMIT_BEFORE: the latter is a Drone name
         # that Woodpecker does not set, so it rendered as before="" on every
         # run, the git diff below was never reached, and this gate silently
@@ -75,12 +76,25 @@ steps:
         # push touched. Falling back to the dns+woodpecker default is cheaper
         # and more honest than evaluating a bogus host set.
         if [ -n "$before" ] && [ "$before" != "$sha" ] && git merge-base --is-ancestor "$before" "$sha" 2>/dev/null; then
+          # No sed, no awk: the nixos/nix image ships neither (its package
+          # set is nix + coreutils-full + gnugrep + gitMinimal and little
+          # else), so the sed-based extraction that used to live here died
+          # with "sed: command not found" and took the step down at exit
+          # 127. It only started failing once CI_PREV_COMMIT_SHA made this
+          # branch reachable -- before that the guard above was never true.
+          # grep + cut cover it: the grep keeps the trailing-slash anchor so
+          # a stray hosts/README.md still matches nothing.
+          #
+          # `|| true` is load-bearing. When a push touches only rpi* hosts,
+          # `grep -v` filters everything and exits 1, which under `set -e`
+          # would abort the step instead of falling through to the default.
           hosts="$(
             git diff --name-only "$before" "$sha" 2>/dev/null \
-              | sed -nE 's#^hosts/([^/]+)/.*#\1#p' \
+              | grep -E '^hosts/[^/]+/' \
+              | cut -d/ -f2 \
               | sort -u \
               | grep -v '^rpi' \
-              | sed 's/^mcp_vm$/mcp/'
+              || true
           )"
         fi
         if [ -z "$hosts" ]; then
@@ -90,6 +104,12 @@ steps:
         echo "==> checking hosts: $hosts"
 
         for h in $hosts; do
+          # Directory name -> flake attr name; this is what the second sed
+          # used to do. Spelled as `if` rather than `[ ... ] && h=mcp` so it
+          # does not lean on bash exempting non-final AND-list operands from
+          # `set -e`.
+          if [ "$h" = "mcp_vm" ]; then h="mcp"; fi
+
           # A hosts/<dir> can exist while its flake attribute is commented out
           # in flake.nix (k3s-server-1, k3s-agent-1, rpi4-1 today). Building one
           # of those fails with "does not provide attribute", which reads like a
