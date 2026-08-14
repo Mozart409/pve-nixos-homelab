@@ -1088,9 +1088,10 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
   keyboard_layout = "de"
 
   # CI is bursty and this VM exists so pipelines never contend with the git
-  # forge. 4 cores lets the agent run two concurrent workflows capped at 3 cores
-  # total (WOODPECKER_BACKEND_DOCKER_LIMIT_CPU_QUOTA) while leaving one for the
-  # server, Caddy and sshd, so the UI stays responsive mid-build.
+  # forge. The agent now runs ONE workflow at a time (WOODPECKER_MAX_WORKFLOWS,
+  # lowered so a nix eval gets the whole memory budget), so 4 cores gives that
+  # single workflow its CPU quota with headroom left for the server, Caddy and
+  # sshd, keeping the UI responsive mid-build.
   cpu {
     cores = 4
     type  = "host"
