@@ -54,8 +54,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
+    # Upstream org renamed ogulcancelik -> herdrdev (NixOS/nixpkgs mirrors this).
     herdr = {
-      url = "github:ogulcancelik/herdr/v0.7.5";
+      url = "github:herdrdev/herdr/v0.8.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     # nixos-unstable (26.11) dropped x86_64-darwin; this pins the last
