@@ -105,6 +105,41 @@
     "mcp__axon-gateway__*"
     "mcp__internal-dashboard__*"
 
+    # Service and log inspection. AGENTS.md §5's post-deploy checklist is built
+    # on `journalctl -u <unit>` and `systemctl status`, but neither had a rule
+    # here, so dontAsk denied them *silently* — the checklist the repo asks for
+    # could not actually be run, and a failed unit read as a broken tool rather
+    # than a missing permission.
+    #
+    # Read-only verbs ONLY. start/stop/restart/enable/disable stay unlisted (and
+    # so denied) because this VM is shared with other agent sessions, where
+    # bouncing a unit out from under someone is the same class of harm as the
+    # reboot rules in the deny list.
+    #
+    # These are prefix matches, so the bare and `--user` spellings are separate
+    # entries: `systemctl --user status x` does not match `Bash(systemctl
+    # status:*)`. herdr-setup and moshi-hook-setup are user units, so the
+    # `--user` half is the half that matters for those.
+    "Bash(systemctl status:*)"
+    "Bash(systemctl show:*)"
+    "Bash(systemctl cat:*)"
+    "Bash(systemctl list-units:*)"
+    "Bash(systemctl list-unit-files:*)"
+    "Bash(systemctl is-active:*)"
+    "Bash(systemctl is-enabled:*)"
+    "Bash(systemctl is-failed:*)"
+    "Bash(systemctl --user status:*)"
+    "Bash(systemctl --user show:*)"
+    "Bash(systemctl --user cat:*)"
+    "Bash(systemctl --user list-units:*)"
+    "Bash(systemctl --user list-unit-files:*)"
+    "Bash(systemctl --user is-active:*)"
+    "Bash(systemctl --user is-enabled:*)"
+    "Bash(systemctl --user is-failed:*)"
+    # journalctl is read-only apart from its log-pruning flags, which the deny
+    # list blocks; a single broad rule beats enumerating -u/-b/-n/--user forms.
+    "Bash(journalctl:*)"
+
     # Shell basics. A compound command is refused unless EVERY segment is
     # allowed, so cd and friends must be listed even though they change
     # nothing on their own.
@@ -227,6 +262,14 @@
     "Bash(halt*)"
     "Bash(systemctl reboot*)"
     "Bash(systemctl poweroff*)"
+
+    # Journal integrity. `Bash(journalctl:*)` is allowed for the post-deploy
+    # checklist; these are its only non-read-only flags, and deleting logs would
+    # destroy the evidence another session is mid-debug on.
+    "Bash(journalctl --vacuum*)"
+    "Bash(journalctl --rotate*)"
+    "Bash(sudo journalctl --vacuum*)"
+    "Bash(sudo journalctl --rotate*)"
 
     # Nix store integrity. GC while another session is mid-build breaks it.
     "Bash(nix-collect-garbage*)"

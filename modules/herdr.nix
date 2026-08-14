@@ -86,9 +86,21 @@
   # Plugins provisioned by herdr-setup. `herdr plugin install <owner/repo> --yes`
   # clones from GitHub, runs the manifest build step (spreader builds with cargo),
   # and registers the plugin globally in plugins.json. Each install is guarded by
-  # `herdr plugin list` so it runs once and is skipped on later activations; a
-  # failed install exits non-zero so the unit retries (Restart=on-failure) instead
-  # of silently leaving the host half-provisioned.
+  # `herdr plugin list` so it runs once and is skipped on later activations.
+  #
+  # A failed install is NON-FATAL by design. These installs reach out to GitHub
+  # and run third-party manifest build steps, so they are the least reliable part
+  # of this module — and because herdr-setup is a *user* unit that NixOS restarts
+  # during activation, letting one abort the script fails the unit, which fails
+  # `colmena apply` for the whole host. That is a bad trade: a flaky third-party
+  # plugin should never block a system deploy. So each install is attempted
+  # independently, failures are collected in `failed`, and the script logs a loud
+  # WARNING and still exits 0.
+  #
+  # The cost is that a persistently broken plugin is *quiet* — the deploy goes
+  # green with the plugin missing. `herdr plugin list` is the check, and the
+  # warning names every plugin that did not install. Restart=on-failure is kept
+  # for the parts above that genuinely must succeed (config, integrations).
   plugins = [
     {
       # tmux `automatic-rename` for herdr: each tab is renamed to its foreground
@@ -137,7 +149,14 @@
           echo "herdr-setup: plugin ${p.id} already installed"
         else
           echo "herdr-setup: installing plugin ${p.id} (${p.source}) — ${p.description}"
-          ${herdrPkg}/bin/herdr plugin install ${p.source} --yes
+          # `if cmd` keeps this out of `set -e`'s reach, so a failure is recorded
+          # and the remaining plugins are still attempted.
+          if ${herdrPkg}/bin/herdr plugin install ${p.source} --yes; then
+            echo "herdr-setup: installed plugin ${p.id}"
+          else
+            echo "herdr-setup: WARNING failed to install plugin ${p.id} (${p.source})" >&2
+            failed="$failed ${p.id}"
+          fi
         fi
       '')
       plugins);
@@ -162,6 +181,10 @@
   setup = pkgs.writeShellScript "herdr-setup-${user}" (
     ''
       set -eu
+
+      # Names of plugins whose install failed this run; reported at the end.
+      failed=""
+
       install -Dm0644 ${configToml} "${home}/.config/herdr/config.toml"
 
       # opencode: writes ~/.config/opencode/plugins/herdr-agent-state.js (a
@@ -193,6 +216,13 @@
       if [ ! -e "$spreader_config_dir/config.yaml" ]; then
         install -m0644 ${spreaderLayout} "$spreader_config_dir/config.yaml"
       fi
+
+      # Deliberately exit 0 even here: see the plugins comment above. The deploy
+      # stays green and this warning is the only signal, so make it findable.
+      if [ -n "$failed" ]; then
+        echo "herdr-setup: WARNING these plugins are NOT installed:$failed" >&2
+        echo "herdr-setup: retry with 'systemctl --user restart herdr-setup', inspect with 'herdr plugin list'" >&2
+      fi
     ''
   );
 in {
@@ -223,9 +253,12 @@ in {
     # reproducible rather than a boot-time race. After= on a unit that does not
     # exist is a no-op, so this stays valid if moshi-hook-user.nix is not imported.
     after = ["moshi-hook-setup.service"];
-    # Plugin installs clone from GitHub and may build (spreader runs cargo), so
-    # a transient failure (network, registry) retries instead of leaving the host
-    # half-provisioned. Config/integrations are idempotent, so retries are cheap.
+    # Plugin installs no longer fail the unit (see the plugins comment above), so
+    # this covers the parts that must succeed: writing config.toml and the
+    # opencode/claude integrations. Those are idempotent, so retries are cheap.
+    # A plugin that failed to install is retried on the next activation or on a
+    # manual `systemctl --user restart herdr-setup`, since the `herdr plugin
+    # list` guard re-attempts anything still missing.
     startLimitBurst = 5;
     startLimitIntervalSec = 600;
     serviceConfig = {
