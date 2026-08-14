@@ -29,6 +29,15 @@
   # at until there's a concrete plugin to enable). Extend here once needed.
   opencodePlugins = [];
 
+  # Agent skills shipped from this repo's .opencode/skills/ (this module lives
+  # in modules/, so ../.opencode/skills). Each skill is a <name>/SKILL.md folder
+  # in the Agent Skills format. They are symlinked into ~/.claude/skills/ on
+  # every activation, which is read by BOTH Claude Code and opencode (opencode
+  # scans ~/.claude/skills as a Claude-compatible external-skill source). The
+  # symlink points at the immutable Nix store path, so skills are read-only and
+  # reproducible; a store-path change from an upgrade is re-linked each boot.
+  repoSkillsDir = ../.opencode/skills;
+
   # Claude Code's MCP config uses `${VAR}` expansion syntax.
   claudeMcpServers =
     lib.mapAttrs (_: srv: {
@@ -170,6 +179,41 @@
     # not read. Remove it so there is exactly one config file and no confusion
     # about which one is live.
     rm -f "${home}/.config/opencode/opencode.json"
+
+    # Agent skills: symlink each repo skill (claude-code-permissions, code-review,
+    # conventional-commits, orchestrate-subagents, subagent-driven-development)
+    # into ~/.claude/skills/ so Claude Code and opencode can both load them.
+    # Read-only store symlinks (never copied), refreshed every activation so an
+    # upgraded store path is picked up. User-owned real skill dirs are left
+    # untouched; only stale symlinks are pruned.
+    mkdir -p "${home}/.claude/skills"
+    current_skills=""
+    for skill in "${repoSkillsDir}"/*/; do
+      name="$(basename "$skill")"
+      current_skills="$current_skills $name"
+      target="${home}/.claude/skills/$name"
+      if [ -e "$target" ] && [ ! -L "$target" ]; then
+        echo "coding-harness: keeping user-owned skill dir $target" >&2
+        continue
+      fi
+      ln -sfn "$skill" "$target"
+    done
+
+    # Prune symlinks to skills that this repo no longer ships (their store path
+    # changed, or the skill was removed), so a retired skill cannot linger.
+    # Match on the literal target (readlink, not readlink -f) so a symlink to
+    # an already-GC'd store path is still recognized and pruned.
+    for target in "${home}"/.claude/skills/*; do
+      [ -L "$target" ] || continue
+      name="$(basename "$target")"
+      case " $current_skills " in
+        *" $name "*) continue ;;
+      esac
+      if readlink "$target" 2>/dev/null | grep -q '^/nix/store/'; then
+        echo "coding-harness: pruning stale skill symlink $target" >&2
+        rm -f "$target"
+      fi
+    done
     ${applyOpencodeAuth}
   '';
 in {
