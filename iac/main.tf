@@ -1099,6 +1099,22 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
   # 2 workflows x 1 GB step limit = 2 GB, plus ~700 MB for server/Caddy/system,
   # leaving real headroom rather than relying on swap.
   #
+  # That arithmetic was still fiction, in a second way: a workflow is not one
+  # container. internal-dashboard runs a `checks` step and a `postgres` service
+  # side by side, each capped at LIMIT_MEM, so 2 workflows is 4 GB of containers
+  # and not 2 -- already over this guest before the system takes its share. On
+  # top of that 1 GB never fit the step itself: `nix develop` there pulls the
+  # rust/llvm toolchain and then `cargo test --all-targets` links it, which is
+  # comfortably a multi-GB peak. Every pipeline in that repo has been killed
+  # mid-download since CI was introduced, with the server expiring the workflow
+  # exactly as it did for #11-#25 above.
+  #
+  # 8192 sizes for one workflow with room to breathe: ~4 GB checks + 1 GB
+  # postgres + ~700 MB system. It is deliberately not sized for two -- the agent
+  # must drop to WOODPECKER_MAX_WORKFLOWS=1 and raise LIMIT_MEM to ~3-4 GB, both
+  # of which live in the NixOS config for this host, not here. Raising this
+  # without that change buys nothing, since the 1 GB cgroup cap is what OOMs.
+  #
   # floating == dedicated PINS the memory: the balloon device stays present (so
   # the PVE UI still gets guest memory stats) but pvestatd has nothing to
   # reclaim. It used to be 1024, and that arithmetic above was fiction --
@@ -1114,8 +1130,8 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
   # ZFS ARC on 62.6 GiB, so pressure that used to land here lands elsewhere
   # instead. That oversubscription is tracked in todo/pve-gigabyte-memory-oversubscription.md.
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 8192
+    floating  = 8192
   }
 
   # Sized generously up front because growing it later is a manual guest-side
