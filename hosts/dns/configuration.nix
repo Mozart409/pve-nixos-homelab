@@ -106,6 +106,8 @@
           # interleaves these with the .local entries on commit.
           ''"albyhub.homelab.internal. A 192.168.2.149"''
           ''"albyhub.homelab.local. A 192.168.2.149"''
+          ''"alertmanager.homelab.internal. A 192.168.2.135"''
+          ''"alertmanager.homelab.local. A 192.168.2.135"''
           ''"axon.homelab.internal. A 192.168.2.149"''
           ''"axon.homelab.local. A 192.168.2.149"''
           ''"ca.homelab.internal. A 192.168.2.160"''
@@ -198,6 +200,7 @@
           # keep-sorted start
           ''"192.168.2.134 database.homelab.local"''
           ''"192.168.2.134 pgadmin.homelab.local"''
+          ''"192.168.2.135 alertmanager.homelab.local"''
           ''"192.168.2.135 loki.homelab.local"''
           ''"192.168.2.135 otel.homelab.local"''
           ''"192.168.2.135 prometheus.homelab.local"''
