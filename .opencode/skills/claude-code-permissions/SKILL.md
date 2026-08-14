@@ -1,6 +1,6 @@
 ---
 name: claude-code-permissions
-description: Use when updating Claude Code permission guardrails on the development host — editing claude-permissions-data.nix, the allow/deny/defaultMode lists, dontAsk mode, or MCP allow rules for axon-gateway / internal-dashboard, then committing, deploying with just cah development and verifying ~/.claude/settings.json on the host.
+description: Use when updating Claude Code permission guardrails on the development host — editing claude-permissions-data.nix, the allow/deny/defaultMode lists, the webSearchDomains whitelist + WebSearch/WebFetch restriction, dontAsk mode, or MCP allow rules for axon-gateway / internal-dashboard, then committing, deploying with just cah development and verifying ~/.claude/settings.json on the host.
 ---
 
 # Claude Code Permissions on `development`
@@ -15,11 +15,12 @@ a drift notification when they change.
 ## Source of truth
 
 **`modules/claude-permissions-data.nix`** — plain data (`allow`, `deny`,
-`defaultMode`), imported by exactly two consumers so they cannot drift:
+`defaultMode`, plus `webSearchDomains`), imported by exactly two consumers so
+they cannot drift:
 
 | Module | Role |
 | --- | --- |
-| `modules/claude-permissions.nix` | Writer. `claude-permissions.service` (user unit) jq-merges the three keys into `~/.claude/settings.json` at boot. |
+| `modules/claude-permissions.nix` | Writer. `claude-permissions.service` (user unit) jq-merges the three keys **and the WebSearch restriction hook** into `~/.claude/settings.json` at boot. |
 | `modules/claude-settings-verify.nix` | Checker. Confirms the rules survived; notifies `notify.iphone_von_amadeus` on drift. |
 
 Both are imported by `hosts/development/configuration.nix`.
@@ -31,12 +32,23 @@ The three keys under `permissions`:
   whole point: with nobody watching, a prompt is an indefinite hang. Never set
   it to a mode that prompts.
 
+Plus `webSearchDomains` — the domain whitelist that drives **both** the
+WebSearch PreToolUse hook and the `WebFetch(domain:…)` allow rules. Change it in
+one place; the two enforcement points are derived from it.
+
 ## Rule syntax
 
 - `Tool(pattern)` — e.g. `Bash(git push:*)`. A trailing `*` is a prefix match;
   a compound command is refused unless EVERY segment is allowed.
 - `Read(...)`, `Write(...)`, `Edit(...)` — file-path rules, also bound into the
   Bash engine (`cp .env.example .env` is refused via a Read deny on `**/.env`).
+- `WebSearch` — **no specifier.** Bare `WebSearch` is the only accepted form;
+  there is no domain filter or wildcard for it (unlike `WebFetch(domain:…)`).
+  The domain restriction is enforced by `claude-websearch-hook` (a PreToolUse
+  hook from `claude-permissions.nix`), which refuses any call whose
+  `allowed_domains` is not a non-empty subset of `webSearchDomains`, and refuses
+  `blocked_domains`. The matching `WebFetch(domain:…)` allow rules are the only
+  pages Claude may read.
 - MCP tools — `mcp__<server>__*` (server-level wildcard) or an exact
   `mcp__<server>__<tool>` name. Server/tool names keep hyphens; only characters
   outside `[a-zA-Z0-9_-]` become underscores.
@@ -48,8 +60,8 @@ The three keys under `permissions`:
 
 1. Edit `modules/claude-permissions-data.nix` only. Keep the comment grouping —
    the grouping is the documentation.
-2. Keep `AGENTS.md` §8 in sync — it mirrors the current MCP allow rules and the
-   mode rationale.
+2. Keep `AGENTS.md` §8 in sync — it mirrors the current MCP allow rules, the
+   WebSearch/WebFetch boundary, and the mode rationale.
 3. Format and validate:
    - `just fmt` (alejandra; required before commit).
    - A **scoped per-host eval** for the touched hosts:
@@ -77,7 +89,8 @@ when the rules changed.
 ```bash
 ssh development.homelab.local "systemctl --user status claude-permissions --no-pager | head -4"
 ssh development.homelab.local "jq '.permissions.defaultMode' ~/.claude/settings.json"    # "dontAsk"
-ssh development.homelab.local "jq '.permissions.allow[]' ~/.claude/settings.json | grep mcp__"
+ssh development.homelab.local "jq '.permissions.allow[]' ~/.claude/settings.json | grep -E 'WebSearch|WebFetch'"
+ssh development.homelab.local "grep -o 'claude-websearch-hook' ~/.claude/settings.json | head -1"
 ssh development.homelab.local "jq '.permissions.deny | length' ~/.claude/settings.json"  # 68
 ```
 
@@ -86,6 +99,12 @@ Then run the drift verifier end-to-end — it must print
 
 ```bash
 ssh development.homelab.local "systemctl --user start claude-settings-verify && journalctl --user -u claude-settings-verify -n 3 --no-pager"
+```
+
+To exercise the WebSearch restriction hook directly, feed it a call payload:
+
+```bash
+ssh development.homelab.local "echo '{\"tool_name\":\"WebSearch\",\"tool_input\":{\"query\":\"nix\",\"allowed_domains\":[\"github.com\"]}}' | jq -R . | ..." # unscoped / off-list calls must exit 2
 ```
 
 A non-OK result means the boot-time apply did not stick and a drift

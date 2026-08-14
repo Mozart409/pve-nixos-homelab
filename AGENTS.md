@@ -702,19 +702,21 @@ guardrail, not a prompt. Do not go looking for it in `~/.claude/settings.json`
 ### Source of truth
 
 **`modules/claude-permissions-data.nix`** — plain data (`allow`, `deny`,
-`defaultMode`), imported by exactly two consumers so the two lists cannot drift:
+`defaultMode`, plus `webSearchDomains`), imported by exactly two consumers so
+the lists cannot drift:
 
 | Module | Role |
 | --- | --- |
-| `modules/claude-permissions.nix` | **Writer.** `claude-permissions-apply` jq-merges the three keys into `~/.claude/settings.json` at boot (`claude-permissions.service`). |
+| `modules/claude-permissions.nix` | **Writer.** `claude-permissions-apply` jq-merges the three keys and the WebSearch restriction hook into `~/.claude/settings.json` at boot (`claude-permissions.service`). |
 | `modules/claude-settings-verify.nix` | **Checker.** Re-reads the same data and confirms it survived; notifies `notify.iphone_von_amadeus` via the axon gateway on drift. Runs after every boot plus a daily timer. |
 
 Both are imported by `hosts/development/configuration.nix`.
 
 **Editing `~/.claude/settings.json` by hand does not stick.** The merge is
-right-biased and wholesale for `permissions.{allow,deny,defaultMode}` — the next
-boot overwrites them, and the daily verify sends a push notification in the
-meantime. Keys outside those three (hooks, model, theme) are left alone and
+right-biased and wholesale for `permissions.{allow,deny,defaultMode}` and for
+the `PreToolUse` hook group with `matcher == "WebSearch"` — the next boot
+overwrites them, and the daily verify sends a push notification in the
+meantime. Keys outside those (model, theme, other hooks) are left alone and
 *are* hand-maintained. Change permissions in the data module and redeploy.
 
 ### Why `defaultMode = "dontAsk"`
@@ -770,3 +772,27 @@ Loki, Prometheus, PBS, Postgres) and the whole `internal-dashboard` server
 (link tools). Add any new server/tool by name there, not with `mcp__*`.
 (Server/tool names keep hyphens — only characters outside `[a-zA-Z0-9_-]`
 become underscores.)
+
+### WebSearch is allowed but domain-restricted (a hook, not a rule)
+
+`WebSearch` is in the allow list, so it works under `dontAsk` — but WebSearch
+permission rules take **no specifier** (`WebSearch` bare is the only form; no
+domain filter, no wildcards — `WebSearch(domain:…)` is rejected). "No arbitrary
+websearch" therefore has to be enforced outside the permission system, and it
+is, from the single `webSearchDomains` list in `claude-permissions-data.nix`:
+
+- **A PreToolUse hook** (`claude-websearch-hook`, written by
+  `claude-permissions.nix`) refuses any WebSearch call whose `allowed_domains`
+  is not a non-empty subset of the whitelist, and refuses `blocked_domains`
+  entirely (negative scoping can't reconcile with a whitelist). A hook deny
+  beats the allow rule, so unscoped or off-list searches fail closed.
+- **`WebFetch(domain:…)` allow rules** for the same domains are the only pages
+  Claude may read. WebSearch returns titles/URLs only; WebFetch is how it reads
+  a result page, so this closes the second half of the boundary.
+
+A whitelist change must update **both** — the hook (which bakes the list in) and
+the WebFetch allow rules. The verifier checks the allow rules exist, so a change
+that forgets them is caught as drift. The whitelist is deliberately small
+(nixos.org, nix.dev, discourse.nixos.org, github.com, stackoverflow.com,
+code.claude.com); widen it in the data module when the agent legitimately needs
+another source.

@@ -11,6 +11,21 @@
 # any matching deny — that is how `git push` is granted without granting
 # `git push --force`.
 {
+  # Domains WebSearch may be restricted to. WebSearch permission rules accept no
+  # domain specifier, so this list is the single source for two enforcement
+  # points: the PreToolUse hook in modules/claude-permissions.nix (which refuses
+  # any search whose allowed_domains is not a subset of this list) and the
+  # WebFetch allow rules above (which restrict which result pages Claude may
+  # read). Keep both in lockstep — they are one boundary.
+  webSearchDomains = [
+    "nixos.org"
+    "nix.dev"
+    "discourse.nixos.org"
+    "github.com"
+    "stackoverflow.com"
+    "code.claude.com"
+  ];
+
   # Without an allow list and with defaultMode = "dontAsk", every state-changing
   # command is refused silently. These are the ones routine work needs — the set
   # below is what sessions actually accumulated by hand before this file took
@@ -60,6 +75,22 @@
     "Bash(pg_isready:*)"
     "Bash(sqlx:*)"
     "Bash(sqruff:*)"
+
+    # Web research. WebSearch permission rules take NO specifier — a bare
+    # `WebSearch` is the only form Claude Code accepts (no domain filter, no
+    # wildcards), so "no arbitrary websearch" cannot be a permission rule. It is
+    # enforced by a PreToolUse hook (written by modules/claude-permissions.nix)
+    # that refuses any WebSearch call whose allowed_domains is not a subset of
+    # webSearchDomains above, plus the WebFetch domain rules underneath, which
+    # are the only domains Claude may read result pages from. Keep the allow
+    # list here and webSearchDomains in lockstep — they are one boundary.
+    "WebSearch"
+    "WebFetch(domain:nixos.org)"
+    "WebFetch(domain:nix.dev)"
+    "WebFetch(domain:discourse.nixos.org)"
+    "WebFetch(domain:github.com)"
+    "WebFetch(domain:stackoverflow.com)"
+    "WebFetch(domain:code.claude.com)"
 
     # MCP servers. Only the tools that are actually used are allowed — dontAsk
     # denies every unlisted MCP call silently, so without a rule a needed tool
