@@ -10,6 +10,8 @@
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
+    ./alerting.nix
+    ./blackbox.nix
   ];
 
   networking.hostName = "homelab-otel";
