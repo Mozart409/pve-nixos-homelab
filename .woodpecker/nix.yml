@@ -61,10 +61,20 @@ steps:
         # Hosts touched by this push. hosts/<dir> maps to the flake attr
         # name; mcp_vm is the dir for the `mcp` host; rpi* dirs have no
         # simple mapping so they are skipped (rpi4/rpi5 are aarch64).
-        before="${CI_COMMIT_BEFORE:-}"
+        # CI_PREV_COMMIT_SHA, not CI_COMMIT_BEFORE: the latter is a Drone name
+        # that Woodpecker does not set, so it rendered as before="" on every
+        # run, the git diff below was never reached, and this gate silently
+        # checked the dns+woodpecker fallback forever instead of the hosts the
+        # push touched.
+        before="${CI_PREV_COMMIT_SHA:-}"
         sha="${CI_COMMIT_SHA:-HEAD}"
         hosts=""
-        if [ -n "$before" ] && [ "$before" != "$sha" ] && git cat-file -e "$before" 2>/dev/null; then
+        # --is-ancestor rather than a bare existence check: CI_PREV_COMMIT_SHA
+        # is the previous PIPELINE's commit and may be on an unrelated branch,
+        # which would diff across branches and pull in far more hosts than the
+        # push touched. Falling back to the dns+woodpecker default is cheaper
+        # and more honest than evaluating a bogus host set.
+        if [ -n "$before" ] && [ "$before" != "$sha" ] && git merge-base --is-ancestor "$before" "$sha" 2>/dev/null; then
           hosts="$(
             git diff --name-only "$before" "$sha" 2>/dev/null \
               | sed -nE 's#^hosts/([^/]+)/.*#\1#p' \
@@ -80,6 +90,16 @@ steps:
         echo "==> checking hosts: $hosts"
 
         for h in $hosts; do
+          # A hosts/<dir> can exist while its flake attribute is commented out
+          # in flake.nix (k3s-server-1, k3s-agent-1, rpi4-1 today). Building one
+          # of those fails with "does not provide attribute", which reads like a
+          # broken pipeline rather than the intended "not deployed yet" -- so
+          # probe the attrset first. This is a name lookup, not a config
+          # evaluation, so it is cheap.
+          if [ "$(nix eval --apply "s: s ? \"$h\"" ".#nixosConfigurations" 2>/dev/null)" != "true" ]; then
+            echo "==> $h has no flake attribute; skipping"
+            continue
+          fi
           echo "==> $h"
           nix build --dry-run --no-link ".#nixosConfigurations.$h.config.system.build.toplevel"
         done
