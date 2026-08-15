@@ -3,7 +3,7 @@
   lib,
   pkgs,
   ...
-}: {
+}: let
   # axon-gateway: high-performance MCP gateway that aggregates multiple MCP
   # servers behind a single endpoint. https://github.com/Mozart409/axon-gateway
   #
@@ -13,12 +13,15 @@
   # we publish it on 127.0.0.1:8091 so only this host's Caddy proxies to it
   # (8080 is taken by AlbyHub). Public access is via axon.homelab.local (Caddy
   # vhost + step-ca TLS in ../configuration.nix).
-
   # Declarative gateway config. Secrets are NOT inlined here — they are referenced
   # as ${VAR} placeholders and resolved by axon at startup from the environment
   # file below. Missing referenced vars are a hard startup error, so every ${VAR}
   # used here MUST be present in secrets/axon-gateway-env.age.
-  environment.etc."axon-gateway/config.toml".text = ''
+  #
+  # Pulled into a `let` binding (rather than staying inline as `environment.etc`'s
+  # `.text`) solely so its content can be hashed below into the restart nonce —
+  # see `CONFIG_HASH` in the container's `environment`.
+  configText = ''
     [gateway]
     bind = "0.0.0.0:8080"
     base_url = "https://axon.homelab.local"
@@ -110,6 +113,8 @@
     # auth_token = "''${SECURE_API_TOKEN}"
     # enabled = true
   '';
+in {
+  environment.etc."axon-gateway/config.toml".text = configText;
 
   virtualisation.oci-containers.containers = {
     axon-gateway = {
@@ -139,6 +144,20 @@
       environment = {
         RUST_LOG = "info";
         SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
+        # Restart nonce. `podman-axon-gateway.service` is generated from this
+        # container's *declaration* (image/env/volumes/ports/...), not from the
+        # *contents* of files it bind-mounts — so editing `configText` above
+        # (e.g. adding/removing a backend) changes what lands in
+        # /etc/axon-gateway/config.toml but leaves the generated unit
+        # byte-for-byte identical. `switch-to-configuration` only restarts units
+        # whose file changed, so `colmena apply` silently no-ops and the
+        # container keeps serving the stale config until someone notices and
+        # runs `systemctl restart podman-axon-gateway` by hand (see AGENTS.md
+        # §5, and the 2026-08-15 incident where the newly-added `wp` backend
+        # didn't show up until a manual restart). Hashing `configText` into an
+        # env var makes the unit change whenever the config does, so the
+        # restart happens on its own during activation.
+        CONFIG_HASH = builtins.hashString "sha256" configText;
       };
 
       # Secrets (AXON_GATEWAY_TOKEN, any per-backend tokens) are injected here.
