@@ -193,9 +193,10 @@
     "Bash(xargs:*)"
 
     # The workspace itself. Secret files under it are carved back out by the
-    # deny list below.
+    # deny list below. `Edit` is the only path rule Claude Code consults for
+    # file modification (Write/NotebookEdit/MultiEdit path rules are ignored
+    # with a startup warning), so an Edit allow covers all file-editing tools.
     "Read(//home/amadeus/code/**)"
-    "Write(//home/amadeus/code/**)"
     "Edit(//home/amadeus/code/**)"
   ];
 
@@ -211,10 +212,12 @@
     "Edit(//home/amadeus/.ssh/**)"
 
     # Secret files inside the workspace. The allow list grants broad
-    # Read/Write/Edit on ~/code, so the secret patterns must be carved back
-    # out explicitly. This binds shell commands too: the Bash engine checks
-    # file paths in a command against these rules, which is how
-    # `cp .env.example .env` is refused without refusing `cp` itself.
+    # Read/Edit on ~/code, so the secret patterns must be carved back out
+    # explicitly. This binds shell commands too: the Bash engine checks file
+    # paths in a command against Read and Edit rules, which is how
+    # `cp .env.example .env` is refused without refusing `cp` itself. Write
+    # path rules are omitted because Claude Code never consults them — Edit
+    # rules govern every file-editing tool (Write/NotebookEdit included).
     "Read(//home/amadeus/code/**/.env)"
     "Read(//home/amadeus/code/**/.env.*)"
     "Read(//home/amadeus/code/**/*.env)"
@@ -225,16 +228,6 @@
     "Read(//home/amadeus/code/**/id_rsa*)"
     "Read(//home/amadeus/code/**/id_ed25519*)"
     "Read(//home/amadeus/code/**/credentials*)"
-    "Write(//home/amadeus/code/**/.env)"
-    "Write(//home/amadeus/code/**/.env.*)"
-    "Write(//home/amadeus/code/**/*.env)"
-    "Write(//home/amadeus/code/**/secrets/**)"
-    "Write(//home/amadeus/code/**/.secrets/**)"
-    "Write(//home/amadeus/code/**/*.pem)"
-    "Write(//home/amadeus/code/**/*.key)"
-    "Write(//home/amadeus/code/**/id_rsa*)"
-    "Write(//home/amadeus/code/**/id_ed25519*)"
-    "Write(//home/amadeus/code/**/credentials*)"
     "Edit(//home/amadeus/code/**/.env)"
     "Edit(//home/amadeus/code/**/.env.*)"
     "Edit(//home/amadeus/code/**/*.env)"
