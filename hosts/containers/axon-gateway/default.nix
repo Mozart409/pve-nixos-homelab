@@ -95,6 +95,13 @@
     transport = "http"
     enabled = true
 
+    # Woodpecker CI (wpmcp-server on the mcp_vm host, standalone there).
+    [[backends]]
+    name = "wp"
+    url = "https://wp-mcp.homelab.local/mcp"
+    transport = "http"
+    enabled = true
+
     # Example of a second backend — copy this block per MCP server you add.
     # [[backends]]
     # name = "secure-api"
