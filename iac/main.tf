@@ -1121,11 +1121,19 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
   # reclaim. It used to be 1024, and that arithmetic above was fiction --
   # node_memory_MemTotal_bytes on this guest swung between 845 MB and 3917 MB
   # over 2026-08-05 as the balloon chased the host across its 80% reclaim
-  # threshold. Under 1 GB the guest swapped, and its 4 GB of swap lives on
+  # threshold. Under 1 GB the guest swapped, and its 4 GB of swap lived on
   # zfs_pool (two spinning disks, ~78 IOPS shared cluster-wide), so fsync
   # latency exploded, sqlite writers timed out, and the server dropped running
   # workflows as expired -- pipelines #11-#25 all died that way, reported as
   # "Canceled" with a green step log. See todo/woodpecker-postgres-and-sizing.md.
+  #
+  # The disk below moved to ssd_pool (2026-08-15), which drops the swap-latency
+  # half of that finding -- ssd_pool is still ZFS (so the double-CoW reasoning
+  # in disko-xfs.nix still holds), just not two spinning disks. Memory stays
+  # pinned regardless: ballooning-induced instability was never only about
+  # where swap lived, and the CI database is moving off this guest entirely
+  # (todo/woodpecker-postgres-and-sizing.md), so there is no reason to relax
+  # this and re-invite it.
   #
   # This VM is now a non-donor: the host is committed to ~53 GiB of guests plus
   # ZFS ARC on 62.6 GiB, so pressure that used to land here lands elsewhere
@@ -1147,8 +1155,15 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
   # inflated on a pool that is only two spinning disks. The existing btrfs VMs
   # below predate this and are deliberately left alone: adding it there would
   # rewrite every VM resource for a benefit they are not currently claiming.
+  # ssd_pool, not zfs_pool: this VM's data is entirely disposable (CI history,
+  # nix store cache, podman layers -- see todo/woodpecker-postgres-and-sizing.md
+  # for why the database itself is also moving off this guest), so there is
+  # nothing to migrate. Changing datastore_id forces a replace on this disk --
+  # `tofu apply` destroys the zfs_pool-backed zvol and creates a fresh one on
+  # ssd_pool, and the guest needs a nixos-anywhere reinstall afterward (disko
+  # partitions a blank disk; it does not migrate data from the old one).
   disk {
-    datastore_id = "zfs_pool"
+    datastore_id = "ssd_pool"
     file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
     size         = 100
