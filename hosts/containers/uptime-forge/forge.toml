@@ -16,11 +16,18 @@ group = "internal"
 tags = ["internal", "smarthome"]
 
 [endpoints.hofvarpnir]
-# Readiness, NOT the root. The root returns 200 from the login redirect even when
-# the app is broken: on 2026-08-13 the download supervisor actor panicked and
-# every queued download stopped for 20h43m while this check stayed green the
-# whole time. /api/health/ready is the endpoint that returns 503 in that state.
-addr = "https://hofvarpnir.homelab.internal/api/health/ready"
+# A health endpoint, NOT the root. The root returns 200 from the login redirect
+# even when the app is broken: on 2026-08-13 the download supervisor actor
+# panicked and every queued download stopped for 20h43m while this check stayed
+# green the whole time.
+#
+# Of the three the app exposes, /api/health is the one to use -- it is the
+# "comprehensive" check (database AND yt-dlp status, 503 when unhealthy) and its
+# own OpenAPI description says it is meant for monitoring. /api/health/ready is
+# narrower (database connection only) and /api/health/live is a pure liveness
+# probe that deliberately checks no dependencies -- picking that one would
+# recreate the exact blind spot described above.
+addr = "https://hofvarpnir.homelab.internal/api/health"
 description = "Hofvarpnir"
 group = "internal"
 tags = ["internal", "media"]

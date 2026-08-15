@@ -8,7 +8,7 @@
   # is the gap that let hofvarpnir sit dead for 20h43m on 2026-08-13: the process
   # was alive, `up{job="hofvarpnir"}` was 1 the whole time, and its HTTP root kept
   # returning 200 -- while the download supervisor actor had panicked and every
-  # queued download silently stopped. Only /api/health/ready knew.
+  # queued download silently stopped. Only the health endpoints knew.
   #
   # So the rule for this list: probe the endpoint that proves the service DOES its
   # job, not the one that proves a process is listening. The `cache` entry below
@@ -22,8 +22,12 @@
   # fires forever and trains you to ignore the channel.
   probeTargets = {
     http_2xx = [
-      # The lesson above, encoded. 200 = the download supervisor is running.
-      "https://hofvarpnir.homelab.internal/api/health/ready"
+      # The lesson above, encoded. Of the app's three health endpoints this is the
+      # comprehensive one (database + yt-dlp, 503 when unhealthy) and the one its
+      # OpenAPI schema recommends for monitoring. Do NOT switch this to
+      # /api/health/live: that probe checks no dependencies by design, so it would
+      # have stayed green through the whole outage described above.
+      "https://hofvarpnir.homelab.internal/api/health"
       "https://axon.homelab.internal/health"
       "https://hermes.homelab.internal/health"
       "https://cache.homelab.internal/homelab/nix-cache-info"
