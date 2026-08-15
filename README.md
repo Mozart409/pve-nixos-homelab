@@ -1,5 +1,7 @@
 # pve-nixos-homelab
 
+[![CI status](https://ci.homelab.internal/api/badges/4/status.svg)](https://ci.homelab.internal/repos/4)
+
 NixOS flakes, Colmena, and OpenTofu definitions for a Proxmox homelab.
 
 VMs are provisioned on Proxmox with OpenTofu (`iac/`), installed with
