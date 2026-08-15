@@ -138,8 +138,13 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
         -   `hermes` — `sudo systemctl restart hermes-agent` after SOUL.md /
             skill / `config.yaml` changes, and after any axon outage (it parks
             the axon-gateway MCP and won't auto-recover).
-        -   `containers` — `sudo systemctl restart podman-axon-gateway` after
-            editing axon-gateway `config.toml` backends.
+        -   `containers` — axon-gateway backend/config edits used to need a
+            manual `sudo systemctl restart podman-axon-gateway` (the container's
+            generated unit doesn't change when only the mounted config.toml's
+            *contents* do). As of 2026-08-15 `config.toml`'s text is hashed into
+            a `CONFIG_HASH` env var on the container (see
+            `hosts/containers/axon-gateway/default.nix`), so the unit changes
+            and `colmena apply` restarts it on its own — no manual step needed.
         -   `caddy` (any host) — restart if newly-added vhosts leave certs stuck
             at HTTP 000 (step-ca ACME `badNonce` storm).
     -   **After a big flake update / package upgrade** (`chore(deps): …`, which
