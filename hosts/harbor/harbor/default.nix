@@ -91,16 +91,110 @@
       sleep 5
     done
 
-    # Check current auth mode - if OIDC is already configured, skip project/retention setup
-    # (admin basic auth doesn't work reliably after OIDC is enabled)
+    # Check current auth mode. Project bootstrap below runs regardless of
+    # this -- primary_auth_mode is set to false further down, which keeps
+    # the local admin/basic-auth superuser working even once OIDC is
+    # enabled, so there is no need to skip project provisioning on repeat
+    # runs (that used to short-circuit before the `ci` project existed --
+    # see commit 5b66aad/54de129, which fixed this same bug in a stale
+    # duplicate file that was never actually deployed).
     CURRENT_AUTH=$(${pkgs.curl}/bin/curl -sS -u "admin:$ADMIN_PASSWORD" \
       "$HARBOR_URL/api/v2.0/configurations" 2>/dev/null | ${pkgs.jq}/bin/jq -r '.auth_mode.value // "db_auth"' 2>/dev/null || echo "unknown")
+    echo "Current auth mode: $CURRENT_AUTH"
+
+    # Exact-match project lookup, emitting the project object or nothing.
+    # Harbor's `?name=` filter is a FUZZY match, so a lookup for "ci" would
+    # also return a project called "cicd" -- narrow it in jq instead of
+    # trusting `.[0]`.
+    project_json() {
+      ${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
+        "$HARBOR_URL/api/v2.0/projects?name=$1" \
+        | ${pkgs.jq}/bin/jq -c --arg n "$1" '[.[] | select(.name == $n)] | .[0] // empty'
+    }
+
+    # Projects Woodpecker CI pulls from (harbor.homelab.local/ci/*) and the
+    # app registry (harbor.homelab.local/oyabu/*) -- both public, both
+    # bootstrapped the same way so a rebuilt Harbor host never silently
+    # breaks CI image pulls with "project ci not found".
+    for PROJECT_NAME in oyabu ci; do
+      if [ -z "$(project_json "$PROJECT_NAME")" ]; then
+        echo "Creating project '$PROJECT_NAME'..."
+        ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
+          -H "Content-Type: application/json" \
+          "$HARBOR_URL/api/v2.0/projects" \
+          -d '{"project_name": "'"$PROJECT_NAME"'", "public": true, "storage_limit": 10737418240}'
+        echo "Project created"
+      else
+        echo "Project '$PROJECT_NAME' already exists"
+      fi
+
+      PROJECT=$(project_json "$PROJECT_NAME")
+      PROJECT_ID=$(printf '%s' "$PROJECT" | ${pkgs.jq}/bin/jq -r '.project_id')
+
+      # Harbor records a project's retention policy as metadata.retention_id,
+      # and a project may hold at most one. There is NO list-all GET on
+      # /api/v2.0/retentions -- it is POST-only and a GET returns 405 -- so a
+      # probe that GETs it would fail on every run, report "no policy", and
+      # re-POST a duplicate for oyabu. Harbor rejects that, and under `set -e`
+      # the rejection would kill the whole loop before the `ci` iteration.
+      # Read the id off the project object instead.
+      RETENTION_ID=$(printf '%s' "$PROJECT" | ${pkgs.jq}/bin/jq -r '.metadata.retention_id // ""')
+
+      if [ -z "$RETENTION_ID" ]; then
+        echo "Creating retention policy for '$PROJECT_NAME'..."
+        # Non-fatal on purpose: a missing retention policy is a
+        # disk-housekeeping concern, never a reason to abort the loop and
+        # leave a later project -- and therefore CI -- broken.
+        ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
+          -H "Content-Type: application/json" \
+          "$HARBOR_URL/api/v2.0/retentions" \
+          -d '{
+            "algorithm": "or",
+            "scope": {
+              "level": "project",
+              "ref": '"$PROJECT_ID"'
+            },
+            "trigger": {
+              "kind": "Schedule",
+              "settings": {
+                "cron": "0 0 0 * * *"
+              }
+            },
+            "rules": [
+              {
+                "disabled": false,
+                "action": "retain",
+                "scope_selectors": {
+                  "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
+                },
+                "tag_selectors": [{"kind": "doublestar", "decoration": "matches", "pattern": "**"}],
+                "params": {"latestPushedK": 2},
+                "template": "latestPushedK"
+              },
+              {
+                "disabled": false,
+                "action": "retain",
+                "scope_selectors": {
+                  "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
+                },
+                "tag_selectors": [{"kind": "doublestar", "decoration": "untagged", "pattern": ""}],
+                "params": {"nDaysSinceLastPush": 2},
+                "template": "nDaysSinceLastPush"
+              }
+            ]
+          }' \
+          && echo "Retention policy created for '$PROJECT_NAME': keep last 2 tags, delete untagged after 2 days" \
+          || echo "WARNING: could not create retention policy for '$PROJECT_NAME'; continuing"
+      else
+        echo "Retention policy already exists for '$PROJECT_NAME' (id $RETENTION_ID)"
+      fi
+    done
+
+    OIDC_CLIENT_ID=$(cat ${config.age.secrets.harbor-oidc-client-id.path})
+    OIDC_CLIENT_SECRET=$(cat ${config.age.secrets.harbor-oidc-client-secret.path})
 
     if [ "$CURRENT_AUTH" = "oidc_auth" ]; then
       echo "OIDC already configured, updating settings only..."
-      OIDC_CLIENT_ID=$(cat ${config.age.secrets.harbor-oidc-client-id.path})
-      OIDC_CLIENT_SECRET=$(cat ${config.age.secrets.harbor-oidc-client-secret.path})
-
       ${pkgs.curl}/bin/curl -sS -X PUT -u "admin:$ADMIN_PASSWORD" \
         -H "Content-Type: application/json" \
         "$HARBOR_URL/api/v2.0/configurations" \
@@ -116,100 +210,26 @@
           "oidc_auto_onboard": true,
           "oidc_user_claim": "email"
         }' >/dev/null 2>&1 || echo "OIDC update may have failed (auth mode already OIDC)"
-
-      echo "Harbor bootstrap complete (OIDC update only)"
-      exit 0
-    fi
-
-    echo "Fresh install detected, running full bootstrap..."
-
-    PROJECT_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
-      "$HARBOR_URL/api/v2.0/projects?name=oyabu" | ${pkgs.jq}/bin/jq 'length')
-
-    if [ "$PROJECT_EXISTS" -eq 0 ]; then
-      echo "Creating project 'oyabu'..."
-      ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
-        -H "Content-Type: application/json" \
-        "$HARBOR_URL/api/v2.0/projects" \
-        -d '{"project_name": "oyabu", "public": true, "storage_limit": 10737418240}'
-      echo "Project created"
     else
-      echo "Project 'oyabu' already exists"
-    fi
-
-    PROJECT_ID=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
-      "$HARBOR_URL/api/v2.0/projects?name=oyabu" | ${pkgs.jq}/bin/jq -r '.[0].project_id')
-
-    RETENTION_EXISTS=$(${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
-      "$HARBOR_URL/api/v2.0/retentions" 2>/dev/null | ${pkgs.jq}/bin/jq --arg pid "$PROJECT_ID" \
-      '[.[] | select(.scope.ref == ($pid | tonumber))] | length' 2>/dev/null || echo "0")
-
-    if [ "$RETENTION_EXISTS" -eq 0 ]; then
-      echo "Creating retention policy..."
-      ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
+      echo "Configuring OIDC authentication with Pocket ID..."
+      ${pkgs.curl}/bin/curl -fsS -X PUT -u "admin:$ADMIN_PASSWORD" \
         -H "Content-Type: application/json" \
-        "$HARBOR_URL/api/v2.0/retentions" \
+        "$HARBOR_URL/api/v2.0/configurations" \
         -d '{
-          "algorithm": "or",
-          "scope": {
-            "level": "project",
-            "ref": '"$PROJECT_ID"'
-          },
-          "trigger": {
-            "kind": "Schedule",
-            "settings": {
-              "cron": "0 0 0 * * *"
-            }
-          },
-          "rules": [
-            {
-              "disabled": false,
-              "action": "retain",
-              "scope_selectors": {
-                "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
-              },
-              "tag_selectors": [{"kind": "doublestar", "decoration": "matches", "pattern": "**"}],
-              "params": {"latestPushedK": 2},
-              "template": "latestPushedK"
-            },
-            {
-              "disabled": false,
-              "action": "retain",
-              "scope_selectors": {
-                "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
-              },
-              "tag_selectors": [{"kind": "doublestar", "decoration": "untagged", "pattern": ""}],
-              "params": {"nDaysSinceLastPush": 2},
-              "template": "nDaysSinceLastPush"
-            }
-          ]
+          "auth_mode": "oidc_auth",
+          "oidc_name": "Pocket ID",
+          "oidc_endpoint": "https://pocketid.dropbear-butterfly.ts.net",
+          "oidc_client_id": "'"$OIDC_CLIENT_ID"'",
+          "oidc_client_secret": "'"$OIDC_CLIENT_SECRET"'",
+          "oidc_groups_claim": "groups",
+          "oidc_admin_group": "admins",
+          "oidc_scope": "openid,offline_access,email,profile,groups",
+          "oidc_verify_cert": true,
+          "oidc_auto_onboard": true,
+          "oidc_user_claim": "email",
+          "primary_auth_mode": false
         }'
-      echo "Retention policy created: keep last 2 tags, delete untagged after 2 days"
-    else
-      echo "Retention policy already exists"
     fi
-
-    OIDC_CLIENT_ID=$(cat ${config.age.secrets.harbor-oidc-client-id.path})
-    OIDC_CLIENT_SECRET=$(cat ${config.age.secrets.harbor-oidc-client-secret.path})
-
-    echo "Configuring OIDC authentication with Pocket ID..."
-    ${pkgs.curl}/bin/curl -fsS -X PUT -u "admin:$ADMIN_PASSWORD" \
-      -H "Content-Type: application/json" \
-      "$HARBOR_URL/api/v2.0/configurations" \
-      -d '{
-        "auth_mode": "oidc_auth",
-        "oidc_name": "Pocket ID",
-        "oidc_endpoint": "https://pocketid.dropbear-butterfly.ts.net",
-        "oidc_client_id": "'"$OIDC_CLIENT_ID"'",
-        "oidc_client_secret": "'"$OIDC_CLIENT_SECRET"'",
-        "oidc_groups_claim": "groups",
-        "oidc_admin_group": "admins",
-        "oidc_scope": "openid,offline_access,email,profile,groups",
-        "oidc_verify_cert": true,
-        "oidc_auto_onboard": true,
-        "oidc_user_claim": "email",
-        "primary_auth_mode": false
-      }'
     echo "OIDC authentication configured"
 
     echo "Harbor bootstrap complete"
