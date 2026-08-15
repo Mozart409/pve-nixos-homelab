@@ -112,24 +112,35 @@ in {
       # The DSN params are NOT decoration -- a bare path here produced
       # wall-to-wall "database is locked" and silently killed pipelines
       # (todo/woodpecker-postgres-and-sizing.md). WAL lets readers run during a
-      # write; _busy_timeout makes a blocked writer WAIT 10s instead of
-      # returning SQLITE_BUSY immediately; _txlock=immediate takes the write
-      # lock at BEGIN rather than mid-transaction, which is what turns an
-      # unrecoverable "database is locked" upgrade failure into a plain wait.
+      # write; _busy_timeout makes a blocked writer WAIT before returning
+      # SQLITE_BUSY immediately; _txlock=immediate takes the write lock at
+      # BEGIN rather than mid-transaction, which is what turns an unrecoverable
+      # "database is locked" upgrade failure into a plain wait.
+      #
+      # _busy_timeout=6000 (2026-08-15): shortened from 10s to 6s at
+      # amadeus's request. Note this cuts against the disk-saturation finding
+      # from the same session -- sda was observed pinned near 100% util for
+      # 20-30 min stretches exactly when pipelines were expiring, and a
+      # shorter busy timeout gives writers less room to wait that out, not
+      # more. Revert to 10000+ if "database is locked" errors reappear.
       #
       # Driver note: woodpecker 3.16 links mattn/go-sqlite3 (cgo), so these
       # `_name=value` params are correct. If a future version switches to
       # modernc.org/sqlite (pure Go), this syntax silently stops working and
-      # the form becomes `?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)`.
+      # the form becomes `?_pragma=journal_mode(WAL)&_pragma=busy_timeout(6000)`.
       # Check go.mod before trusting this line across a major bump.
-      WOODPECKER_DATABASE_DATASOURCE = "/var/lib/woodpecker-server/woodpecker.sqlite?_journal_mode=WAL&_busy_timeout=10000&_txlock=immediate";
+      WOODPECKER_DATABASE_DATASOURCE = "/var/lib/woodpecker-server/woodpecker.sqlite?_journal_mode=WAL&_busy_timeout=6000&_txlock=immediate";
 
       # Upstream default is 100. A hundred pooled connections racing one sqlite
       # file is not concurrency, it is a lock convoy: sqlite serialises writes
-      # anyway, so the only thing the extra 99 buy is contention. Serialise in
-      # Go instead, where the pool queues cleanly. Throughput cost is nil at one
-      # agent; this is the single most direct fix for the lock errors.
-      WOODPECKER_DATABASE_MAX_CONNECTIONS = "1";
+      # anyway, so extra connections beyond a handful buy contention, not
+      # throughput.
+      #
+      # Raised 1 -> 4 (2026-08-15) at amadeus's request. This reverses the
+      # single most direct fix for the "database is locked" incident in
+      # todo/woodpecker-postgres-and-sizing.md -- if wall-to-wall lock errors
+      # come back, drop this to 1 again before looking anywhere else.
+      WOODPECKER_DATABASE_MAX_CONNECTIONS = "4";
 
       # Keep per-step BUILD OUTPUT out of the database. Upstream default is
       # "database", which makes every log line a row insert -- by far the
