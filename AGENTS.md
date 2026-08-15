@@ -778,6 +778,13 @@ Loki, Prometheus, PBS, Postgres) and the whole `internal-dashboard` server
 (Server/tool names keep hyphens — only characters outside `[a-zA-Z0-9_-]`
 become underscores.)
 
+### `Monitor` is allowed bare
+
+`Monitor` runs its target command line under tracing but changes no state and
+writes nothing, so there is no deny case for it; like `WebSearch` it takes no
+path/domain pattern, and it is allow-listed bare in `claude-permissions-data.nix`.
+The deny list still guards whatever the underlying command would do.
+
 ### WebSearch is allowed but domain-restricted (a hook, not a rule)
 
 `WebSearch` is in the allow list, so it works under `dontAsk` — but WebSearch
