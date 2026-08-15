@@ -31,7 +31,12 @@
       "https://axon.homelab.internal/health"
       "https://hermes.homelab.internal/health"
       "https://cache.homelab.internal/homelab/nix-cache-info"
-      "https://forgejo.homelab.internal"
+      # Stays on .local: forgejo's caddy has no usable cert for its .internal name
+      # and aborts the TLS handshake for that SNI (probe_http_ssl 0, no HTTP
+      # response at all, 6ms failure) even though DNS resolves and 443 is open.
+      # The vhost lists both names, so this is an ACME/cert gap on that host, not
+      # a config error -- and it predates this file. Fix the cert, then switch.
+      "https://forgejo.homelab.local"
       "https://ci.homelab.internal"
       "https://harbor.homelab.internal"
       "https://searxng.homelab.internal"
