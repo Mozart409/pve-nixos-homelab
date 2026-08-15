@@ -68,6 +68,24 @@ in {
   services.prometheus = {
     ruleFiles = [alertRules];
 
+    # Alertmanager has to be *scraped*, not just pointed at. `alertmanagers`
+    # below is where prometheus SENDS alerts; it does not collect anything back.
+    # Without this job alertmanager_notifications_failed_total has no series at
+    # all, and the AlertmanagerNotificationsFailing rule silently evaluates
+    # against nothing forever -- a broken watchdog that reports healthy, which is
+    # the same class of bug as the one this whole change exists to catch.
+    scrapeConfigs = [
+      {
+        job_name = "alertmanager";
+        static_configs = [
+          {
+            targets = ["127.0.0.1:${toString config.services.prometheus.alertmanager.port}"];
+            labels.instance = "homelab-otel";
+          }
+        ];
+      }
+    ];
+
     alertmanagers = [
       {
         static_configs = [{targets = ["127.0.0.1:${toString config.services.prometheus.alertmanager.port}"];}];
