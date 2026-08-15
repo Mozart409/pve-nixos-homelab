@@ -23,18 +23,23 @@
   probeTargets = {
     http_2xx = [
       # The lesson above, encoded. 200 = the download supervisor is running.
-      "https://hofvarpnir.homelab.local/api/health/ready"
-      "https://axon.homelab.local/health"
-      "https://hermes.homelab.local/health"
-      "https://cache.homelab.local/homelab/nix-cache-info"
+      "https://hofvarpnir.homelab.internal/api/health/ready"
+      "https://axon.homelab.internal/health"
+      "https://hermes.homelab.internal/health"
+      "https://cache.homelab.internal/homelab/nix-cache-info"
+      "https://forgejo.homelab.internal"
+      "https://ci.homelab.internal"
+      "https://harbor.homelab.internal"
+      "https://searxng.homelab.internal"
+      "https://romm.homelab.internal"
+      "https://containers.homelab.internal"
+      "https://containers.homelab.internal/uptime-forge"
+      # The one name deliberately left on .local: step-ca is not behind Caddy (it
+      # serves :8443 itself), so unlike every entry above there is no vhost
+      # listing both names -- whether its cert carries a ca.homelab.internal SAN
+      # is a step-ca config question, not a DNS one. Switch it only after
+      # confirming that cert, or the probe fails on a name change alone.
       "https://ca.homelab.local:8443/health"
-      "https://forgejo.homelab.local"
-      "https://ci.homelab.local"
-      "https://harbor.homelab.local"
-      "https://searxng.homelab.local"
-      "https://romm.homelab.local"
-      "https://containers.homelab.local"
-      "https://containers.homelab.local/uptime-forge"
       # Grafana runs on this host. Probed over loopback on purpose: going out via
       # otel.homelab.local would make a Grafana alert also depend on unbound,
       # Caddy and step-ca, so a DNS blip would read as "Grafana is down".

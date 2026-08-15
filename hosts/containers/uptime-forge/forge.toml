@@ -16,7 +16,11 @@ group = "internal"
 tags = ["internal", "smarthome"]
 
 [endpoints.hofvarpnir]
-addr = "https://hofvarpnir.homelab.local/"
+# Readiness, NOT the root. The root returns 200 from the login redirect even when
+# the app is broken: on 2026-08-13 the download supervisor actor panicked and
+# every queued download stopped for 20h43m while this check stayed green the
+# whole time. /api/health/ready is the endpoint that returns 503 in that state.
+addr = "https://hofvarpnir.homelab.internal/api/health/ready"
 description = "Hofvarpnir"
 group = "internal"
 tags = ["internal", "media"]
@@ -24,7 +28,7 @@ tags = ["internal", "media"]
 skip_tls_verification = true
 
 [endpoints.jellyfin]
-addr = "https://jellyfin.homelab.local"
+addr = "https://jellyfin.homelab.internal"
 description = "Jellyfin Media Server"
 group = "internal"
 tags = ["internal", "media"]
@@ -38,10 +42,16 @@ group = "internal"
 tags = ["internal", "infrastructure"]
 
 [endpoints.homelab-unifi]
-addr = "https://homelab-unifi.dropbear-butterfly.ts.net"
+# Moved off the MagicDNS ts.net name onto the local one: the unifi host serves
+# both (virtualHosts."unifi.homelab.local unifi.homelab.internal"), and the
+# .internal name does not depend on MagicDNS resolving, which is unreliable
+# between homelab VMs.
+addr = "https://unifi.homelab.internal"
 description = "UniFi Controller"
 group = "internal"
 tags = ["internal", "infrastructure"]
+# step-ca cert; uptime-forge (rustls/webpki-roots) does not trust step-ca.
+skip_tls_verification = true
 
 # Example: Your own services
 # [endpoints.my-api]
