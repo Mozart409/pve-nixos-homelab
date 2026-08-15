@@ -24,6 +24,9 @@ provider "proxmox" {
   endpoint = var.endpoint
   username = var.username
   password = var.password
+  # Proxmox's own web cert on :8006 is self-signed; true regardless of
+  # whether endpoint is the LAN IP or the Tailscale MagicDNS name.
+  insecure = true
   ssh {
     agent = true
   }

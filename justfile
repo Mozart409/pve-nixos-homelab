@@ -93,6 +93,9 @@ colmena-status: clear
 
 # OpenTofu/IaC commands (run in iac/ directory)
 [working-directory: 'iac']
+iac-init: clear
+  tofu init
+[working-directory: 'iac']
 iac-fmt: clear
   tofu fmt
 
