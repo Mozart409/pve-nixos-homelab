@@ -92,6 +92,13 @@
     "WebFetch(domain:stackoverflow.com)"
     "WebFetch(domain:code.claude.com)"
 
+    # The Monitor tool runs a command line under tracing (dtrace/strace) and can
+    # only ever observe the process it is started on; it writes nothing and
+    # changes no state, so there is nothing to deny-gate. Allowed bare, like
+    # WebSearch — it takes no path or domain pattern that needs narrowing. The
+    # deny list still guards the underlying commands.
+    "Monitor"
+
     # MCP servers. Only the tools that are actually used are allowed — dontAsk
     # denies every unlisted MCP call silently, so without a rule a needed tool
     # looks broken rather than permission-blocked. Both server-level wildcards
