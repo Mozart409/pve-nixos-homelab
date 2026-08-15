@@ -30,7 +30,7 @@
   # Bump this string whenever a secret, SOUL.md, USER.md, config.yaml, or a
   # skill changes; that changes restartTriggers -> the unit definition -> a
   # restart on the next colmena apply.
-  secretNonce = "2026-07-28-hermes-initial";
+  secretNonce = "2026-08-15-searxng-internal";
 
   # ── Extra (declarative) skills ────────────────────────────────────────────
   # Custom skills shipped from this repo, exposed to Hermes read-only via the
@@ -408,8 +408,9 @@ in {
       HERMES_TIMEZONE = "Europe/Berlin";
       # SearXNG instance backing the `web_search` tool (see settings.web below).
       # Served by Caddy on the containers host; step-ca TLS is trusted here via
-      # step-ca-trust.nix. Local DNS name — MagicDNS does not resolve from hermes.
-      SEARXNG_URL = "https://searxng.homelab.local";
+      # step-ca-trust.nix. The .internal name (not MagicDNS) is what resolves
+      # from hermes; it carries a step-ca cert via the searxng vhost.
+      SEARXNG_URL = "https://searxng.homelab.internal";
       # SSL cert file pointing at the system CA bundle that includes the
       # Homelab step-ca root cert. httpx (used by the searxng web-search
       # provider) needs this explicitly — it fails with CERTIFICATE_VERIFY_FAILED
