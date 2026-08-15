@@ -40,8 +40,12 @@ one place; the two enforcement points are derived from it.
 
 - `Tool(pattern)` — e.g. `Bash(git push:*)`. A trailing `*` is a prefix match;
   a compound command is refused unless EVERY segment is allowed.
-- `Read(...)`, `Write(...)`, `Edit(...)` — file-path rules, also bound into the
-  Bash engine (`cp .env.example .env` is refused via a Read deny on `**/.env`).
+- `Read(...)`, `Edit(...)` — file-path rules, also bound into the Bash engine
+  (`cp .env.example .env` is refused via a Read deny on `**/.env`). Claude Code
+  only consults `Read(path)` and `Edit(path)` rules; a `Write(path)` rule is
+  parsed, never matched, and warns at startup — `Edit` rules cover every
+  file-editing tool (Write/NotebookEdit/MultiEdit included). This repo never
+  writes `Write(...)` path rules for that reason.
 - `WebSearch` — **no specifier.** Bare `WebSearch` is the only accepted form;
   there is no domain filter or wildcard for it (unlike `WebFetch(domain:…)`).
   The domain restriction is enforced by `claude-websearch-hook` (a PreToolUse
