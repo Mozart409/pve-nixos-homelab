@@ -1,4 +1,5 @@
 {
+  lib,
   pkgs,
   herdr,
   ...
@@ -172,8 +173,10 @@
       '')
       plugins);
 
-  # herdr-spreader starter layout (tmuxinator-for-herdr). Written to the plugin's
-  # config dir only when absent, so user edits survive activations. Apply it with:
+  # herdr-spreader starter layout (tmuxinator-for-herdr). Workspace names are
+  # derived from the final directory component, so changing a root cannot leave
+  # a stale label behind. Nix owns this generated file; change the workspace
+  # roots below rather than editing the runtime copy. Apply it with:
   #   herdr plugin action invoke herdr-spreader.apply
   #
   # One workspace per repo checkout, each with the same four tabs in a fixed
@@ -182,62 +185,42 @@
   # `resume_agents_on_restore` above reattaches after a restart. `homelab` (this
   # repo) is the focused workspace, since it is the one that deploys the others.
   #
-  # Written out per workspace rather than generated from a Nix list: it is eight
-  # duplicated lines against a config that has to be read as YAML when debugging,
-  # and this way the file on disk matches the file in the repo line for line.
-  #
-  # NB the repo is `nixos-ventara-ai`; `ventara` is just the workspace label.
   # Roots must exist — spreader cannot cd into a missing directory, and that tab
   # comes up in the home dir (or not at all) instead.
-  spreaderLayout = pkgs.writeText "herdr-spreader-config.yaml" ''
-    workspaces:
-      - name: homelab
-        root: ~/code/pve-nixos-homelab
-        focus: true
-        tabs:
-          - label: claude
-            panes:
-              - command: claude
-          - label: opencode
-            panes:
-              - command: opencode
-          - label: lazygit
-            panes:
-              - command: lazygit
-          - label: shell
-            panes:
-              - command: zsh
-      - name: ventara
-        root: ~/code/nixos-ventara-ai
-        tabs:
-          - label: claude
-            panes:
-              - command: claude
-          - label: opencode
-            panes:
-              - command: opencode
-          - label: lazygit
-            panes:
-              - command: lazygit
-          - label: shell
-            panes:
-              - command: zsh
-      - name: obsidian-kb
-        root: ~/code/obsidian-kb
-        tabs:
-          - label: claude
-            panes:
-              - command: claude
-          - label: opencode
-            panes:
-              - command: opencode
-          - label: lazygit
-            panes:
-              - command: lazygit
-          - label: shell
-            panes:
-              - command: zsh
+  spreaderWorkspaces = [
+    {
+      root = "~/code/pve-nixos-homelab";
+      focus = true;
+    }
+    {root = "~/code/nixos-ventara-ai";}
+    {root = "~/code/obsidian-kb";}
+  ];
+
+  spreaderTabs = ''
+    tabs:
+      - label: claude
+        panes:
+          - command: claude
+      - label: opencode
+        panes:
+          - command: opencode
+      - label: lazygit
+        panes:
+          - command: lazygit
+      - label: shell
+        panes:
+          - command: zsh
   '';
+
+  spreaderWorkspace = workspace: ''
+    - name: ${builtins.baseNameOf (lib.removeSuffix "/" workspace.root)}
+      root: ${workspace.root}
+      ${lib.optionalString (workspace.focus or false) "focus: true\n"}${spreaderTabs}'';
+
+  spreaderLayout = pkgs.writeText "herdr-spreader-config.yaml" (
+    "workspaces:\n"
+    + builtins.concatStringsSep "" (map spreaderWorkspace spreaderWorkspaces)
+  );
 
   setup = pkgs.writeShellScript "herdr-setup-${user}" (
     ''
@@ -271,12 +254,11 @@
     ''
     + pluginInstallScript
     + ''
-      # Seed herdr-spreader's starter layout only when absent.
+      # Write the generated layout on every activation so folder-derived names
+      # stay current when a workspace root changes.
       spreader_config_dir="${home}/.config/herdr/plugins/config/herdr-spreader"
       mkdir -p "$spreader_config_dir"
-      if [ ! -e "$spreader_config_dir/config.yaml" ]; then
-        install -m0644 ${spreaderLayout} "$spreader_config_dir/config.yaml"
-      fi
+      install -m0644 ${spreaderLayout} "$spreader_config_dir/config.yaml"
 
       # Deliberately exit 0 even here: see the plugins comment above. The deploy
       # stays green and this warning is the only signal, so make it findable.
