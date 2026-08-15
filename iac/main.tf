@@ -1155,13 +1155,14 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
   # inflated on a pool that is only two spinning disks. The existing btrfs VMs
   # below predate this and are deliberately left alone: adding it there would
   # rewrite every VM resource for a benefit they are not currently claiming.
-  # ssd_pool, not zfs_pool: this VM's data is entirely disposable (CI history,
-  # nix store cache, podman layers -- see todo/woodpecker-postgres-and-sizing.md
-  # for why the database itself is also moving off this guest), so there is
-  # nothing to migrate. Changing datastore_id forces a replace on this disk --
-  # `tofu apply` destroys the zfs_pool-backed zvol and creates a fresh one on
-  # ssd_pool, and the guest needs a nixos-anywhere reinstall afterward (disko
-  # partitions a blank disk; it does not migrate data from the old one).
+  # ssd_pool, not zfs_pool. Confirmed via `tofu plan` (2026-08-15): the bpg
+  # provider updates datastore_id IN PLACE, not by replacing the resource --
+  # no `# forces replacement` annotation, `0 to destroy`. It calls Proxmox's
+  # online move-disk API, so this relocates the existing zvol's data to
+  # ssd_pool rather than discarding it; the guest keeps its NixOS install and
+  # SSH host key, no nixos-anywhere reinstall needed. (This guest's data was
+  # disposable anyway -- CI history, nix store cache, podman layers, see
+  # todo/woodpecker-postgres-and-sizing.md -- but turns out that never mattered.)
   disk {
     datastore_id = "ssd_pool"
     file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
