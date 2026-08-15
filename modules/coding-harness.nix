@@ -36,6 +36,12 @@
   # scans ~/.claude/skills as a Claude-compatible external-skill source). The
   # symlink points at the immutable Nix store path, so skills are read-only and
   # reproducible; a store-path change from an upgrade is re-linked each boot.
+  # This includes the repo-native harness skills (claude-code-permissions,
+  # code-review, conventional-commits, orchestrate-subagents,
+  # subagent-driven-development) plus the shared skill library copied here from
+  # the global ~/.agents/skills on the workstation (cue-kind-definition,
+  # grill-with-docs, kubernetes-specialist, postgres, postgresql-table-design,
+  # rust-async-patterns, rust-best-practices).
   repoSkillsDir = ../.opencode/skills;
 
   # Claude Code's MCP config uses `${VAR}` expansion syntax.
@@ -180,9 +186,8 @@
     # about which one is live.
     rm -f "${home}/.config/opencode/opencode.json"
 
-    # Agent skills: symlink each repo skill (claude-code-permissions, code-review,
-    # conventional-commits, orchestrate-subagents, subagent-driven-development)
-    # into ~/.claude/skills/ so Claude Code and opencode can both load them.
+    # Agent skills: symlink each repo skill (see ${repoSkillsDir}) into
+    # ~/.claude/skills/ so Claude Code and opencode can both load them.
     # Read-only store symlinks (never copied), refreshed every activation so an
     # upgraded store path is picked up. User-owned real skill dirs are left
     # untouched; only stale symlinks are pruned.
