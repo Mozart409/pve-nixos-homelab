@@ -398,30 +398,15 @@
           }
         ];
       }
-      # K3s server exporters
-      {
-        job_name = "k3s-server-1-node";
-        static_configs = [
-          {
-            targets = ["k3s-server-1.homelab.local:9100"];
-            labels = {
-              instance = "k3s-server-1";
-            };
-          }
-        ];
-      }
-      # K3s agent exporters
-      {
-        job_name = "k3s-agent-1-node";
-        static_configs = [
-          {
-            targets = ["k3s-agent-1.homelab.local:9100"];
-            labels = {
-              instance = "k3s-agent-1";
-            };
-          }
-        ];
-      }
+      # The k3s-server-1 / k3s-agent-1 node jobs were removed on 2026-08-15: both
+      # machines are shut down and no longer deployed, and neither had reported
+      # up == 1 in the preceding 30 days. They were scraped anyway, which cost
+      # nothing while nothing alerted -- but the TargetDown rule added in
+      # ./alerting.nix turns a permanently-absent host into a permanent page, so
+      # a target that is not expected to answer has to come out of the scrape
+      # list. Their host configs, flake entries and DNS records are untouched;
+      # re-add a job here if either is ever redeployed.
+
       # CA host exporters
       {
         job_name = "ca-node";
@@ -482,18 +467,10 @@
           }
         ];
       }
-      # ZeroClaw host exporters
-      {
-        job_name = "zeroclaw-node";
-        static_configs = [
-          {
-            targets = ["zeroclaw.homelab.local:9100"];
-            labels = {
-              instance = "homelab-zeroclaw";
-            };
-          }
-        ];
-      }
+      # The zeroclaw-node job was removed on 2026-08-15 for the same reason as the
+      # k3s jobs above: the host is shut down, last successful scrape was
+      # 21.5 days earlier. Host config, flake entry and DNS record are untouched.
+
       # Jellyfin host exporters
       {
         job_name = "jellyfin-node";
@@ -530,18 +507,10 @@
           }
         ];
       }
-      # vLLM metrics endpoint
-      {
-        job_name = "vllm";
-        static_configs = [
-          {
-            targets = ["wotan.homelab.local:10808"];
-            labels = {
-              instance = "homelab-wotan";
-            };
-          }
-        ];
-      }
+      # The vllm job on wotan was removed on 2026-08-15 along with the k3s and
+      # zeroclaw jobs above -- that host is down too. Re-add it here when wotan
+      # comes back; the endpoint was wotan.homelab.local:10808.
+
       # Hofvarpnir — migrated onto homelab-jellyfin; scrape its step-ca Caddy
       # vhost (otel trusts step-ca via modules/step-ca-trust.nix). Was the
       # tsbridge ts.net name on the old LXC.
