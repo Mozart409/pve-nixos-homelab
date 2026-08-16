@@ -289,7 +289,7 @@ in {
   # while pipelines are active; to add idle timeout, use systemd timers.
   systemd.sockets.woodpecker-server = {
     description = "Woodpecker CI Server Socket";
-    listenStream = "127.0.0.1:8000";
+    listenStreams = ["127.0.0.1:8000"];
     socketConfig.Accept = false;
   };
 
