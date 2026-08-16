@@ -18,6 +18,8 @@
     ../../modules/forgejo-cli.nix
   ];
 
+  home-manager.users.amadeus.imports = [../../modules/jj.nix];
+
   networking.hostName = "homelab-development";
 
   # This VM has TWO disks — the 256 GB OS disk (scsi0) and a 4 MB cloud-init
