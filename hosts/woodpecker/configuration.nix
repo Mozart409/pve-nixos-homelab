@@ -290,7 +290,7 @@ in {
   systemd.sockets.woodpecker-server = {
     description = "Woodpecker CI Server Socket";
     listenStream = "127.0.0.1:8000";
-    Accept = false;
+    socketConfig.Accept = false;
   };
 
   # Update woodpecker-server to require socket activation.
