@@ -196,26 +196,55 @@
     {root = "~/code/obsidian-kb";}
   ];
 
-  spreaderTabs = ''
-    tabs:
-      - label: claude
-        panes:
-          - command: claude
-      - label: opencode
-        panes:
-          - command: opencode
-      - label: lazygit
-        panes:
-          - command: lazygit
-      - label: shell
-        panes:
-          - command: zsh
-  '';
+  spreaderTabList = [
+    {
+      label = "claude";
+      command = "claude";
+    }
+    {
+      label = "opencode";
+      command = "opencode";
+    }
+    {
+      label = "lazygit";
+      command = "lazygit";
+    }
+    {
+      label = "shell";
+      command = "zsh";
+    }
+  ];
 
-  spreaderWorkspace = workspace: ''
-    - name: ${builtins.baseNameOf (lib.removeSuffix "/" workspace.root)}
-      root: ${workspace.root}
-      ${lib.optionalString (workspace.focus or false) "focus: true\n"}${spreaderTabs}'';
+  # Built as an explicit list of already-indented lines, NOT a ''-string with
+  # ${} interpolation of another multi-line ''-string. Nix computes a ''
+  # string's common-indentation strip once, statically, from its literal
+  # source lines — it ignores lines that are pure whitespace when finding the
+  # minimum. Splicing a conditional single-line interpolation (the old
+  # `focus: true\n`) in front of a separately-stripped multi-line value
+  # (the old `spreaderTabs`) made that minimum computation diverge between the
+  # focus and non-focus branches, so `tabs:` landed at column 0 (a sibling of
+  # top-level `workspaces:`, breaking the YAML) only for the focus workspace.
+  # Plain string concatenation of literal, pre-indented lines has no such
+  # static/dynamic mismatch to trip over.
+  spreaderTabsLines =
+    ["  tabs:"]
+    ++ builtins.concatMap (t: [
+      "    - label: ${t.label}"
+      "      panes:"
+      "        - command: ${t.command}"
+    ])
+    spreaderTabList;
+
+  spreaderWorkspace = workspace: let
+    lines =
+      [
+        "- name: ${builtins.baseNameOf (lib.removeSuffix "/" workspace.root)}"
+        "  root: ${workspace.root}"
+      ]
+      ++ lib.optional (workspace.focus or false) "  focus: true"
+      ++ spreaderTabsLines;
+  in
+    builtins.concatStringsSep "\n" lines + "\n";
 
   spreaderLayout = pkgs.writeText "herdr-spreader-config.yaml" (
     "workspaces:\n"
