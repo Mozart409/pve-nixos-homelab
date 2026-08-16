@@ -444,8 +444,13 @@
         ];
       }
       # Woodpecker CI host exporters
+      # Scrape interval raised to 5m: CI is typically idle between pipeline runs,
+      # so less frequent polling reduces overhead. Prometheus will still pick up
+      # metrics when pipelines are active.
       {
         job_name = "woodpecker-node";
+        scrape_interval = "5m";
+        scrape_timeout = "30s";
         static_configs = [
           {
             targets = ["woodpecker.homelab.local:9100"];
@@ -575,8 +580,13 @@
       #
       # The server binds 127.0.0.1:8000, so the only route in is its Caddy vhost
       # over HTTPS (step-ca cert, trusted here via modules/step-ca-trust.nix).
+      #
+      # Scrape interval raised to 5m: CI is typically idle between pipeline runs,
+      # so less frequent polling reduces overhead.
       {
         job_name = "woodpecker";
+        scrape_interval = "5m";
+        scrape_timeout = "30s";
         scheme = "https";
         metrics_path = "/metrics";
         authorization.credentials_file = config.age.secrets.woodpecker-metrics-token.path;
