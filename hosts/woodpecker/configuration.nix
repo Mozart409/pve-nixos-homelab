@@ -284,6 +284,21 @@ in {
     };
   };
 
+  # Socket activation for woodpecker-server: start the server on-demand when
+  # Caddy (or direct clients) connect to port 8000. The server stays running
+  # while pipelines are active; to add idle timeout, use systemd timers.
+  systemd.sockets.woodpecker-server = {
+    description = "Woodpecker CI Server Socket";
+    listenStream = "127.0.0.1:8000";
+    Accept = false;
+  };
+
+  # Update woodpecker-server to require socket activation.
+  systemd.services.woodpecker-server = {
+    requires = ["woodpecker-server.socket"];
+    after = ["woodpecker-server.socket"];
+  };
+
   age.secrets.woodpecker-server-env = {
     file = ../../secrets/woodpecker-server-env.age;
     mode = "0400";
