@@ -1,4 +1,5 @@
 {
+  config,
   lib,
   pkgs,
   herdr,
@@ -154,6 +155,22 @@
     }
   ];
 
+  # Unlike `just` (modules/just-completions.nix), herdrPkg's output has no
+  # prebuilt `share/zsh/site-functions/_herdr` — `herdr completion zsh` prints
+  # the script to stdout at runtime instead. So it's generated at build time by
+  # actually running the real binary (pure: no network/server, just clap
+  # printing static text), the same way many Rust CLIs wire this up in
+  # nixpkgs. Only installed where zsh completion is actually wired up
+  # (programs.zsh.enableCompletion in modules/common.nix puts
+  # /run/current-system/sw/share/zsh/site-functions on fpath) — a completion
+  # file is dead weight on a host with no zsh to load it.
+  herdrZshCompletion =
+    pkgs.runCommand "herdr-zsh-completions" {}
+    ''
+      mkdir -p $out/share/zsh/site-functions
+      ${herdrPkg}/bin/herdr completion zsh > $out/share/zsh/site-functions/_herdr
+    '';
+
   pluginInstallScript =
     builtins.concatStringsSep ""
     (map (p: ''
@@ -298,15 +315,17 @@
     ''
   );
 in {
-  environment.systemPackages = [
-    herdrPkg
-    # Plugin build/runtime deps for the bootstrapped plugins:
-    pkgs.cargo # herdr-spreader builds at install time
-    pkgs.gcc # cargo links with `cc` — without it the build dies with "linker `cc` not found"
-    pkgs.bun # window-title-sync event hooks run `bun sync-title.js`
-    pkgs.worktrunk # worktrunk plugin shells out to the `wt` CLI
-    pkgs.jq # automatic-rename's engine + shell hooks parse `herdr ... --json`
-  ];
+  environment.systemPackages =
+    [
+      herdrPkg
+      # Plugin build/runtime deps for the bootstrapped plugins:
+      pkgs.cargo # herdr-spreader builds at install time
+      pkgs.gcc # cargo links with `cc` — without it the build dies with "linker `cc` not found"
+      pkgs.bun # window-title-sync event hooks run `bun sync-title.js`
+      pkgs.worktrunk # worktrunk plugin shells out to the `wt` CLI
+      pkgs.jq # automatic-rename's engine + shell hooks parse `herdr ... --json`
+    ]
+    ++ lib.optional config.programs.zsh.enable herdrZshCompletion;
 
   # herdr-automatic-rename's real-time half. The plugin's manifest hooks only
   # fire on herdr *events* (tab/pane create, close, focus), and herdr has no
