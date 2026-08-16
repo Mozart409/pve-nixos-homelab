@@ -211,6 +211,7 @@
     }
     {root = "~/code/nixos-ventara-ai";}
     {root = "~/code/obsidian-kb";}
+    {root = "~/code/rust/surrealdb-engram";}
   ];
 
   spreaderTabList = [
