@@ -25,28 +25,26 @@
     onboarding = false
 
     [keys]
-    # Stock tmux-style prefix defaults, plus the docs' vetted prefix-free
-    # `ctrl+alt` family as aliases. The ctrl+alt family is the only chord set
-    # every major terminal and desktop leave free (unlike ctrl+alt+arrows =
-    # GNOME workspaces/Ghostty/Konsole, or ctrl+alt+t = "launch terminal"), so
-    # these survive the outer terminal and land in herdr. Each action keeps the
-    # prefix binding as the primary and the direct chord as a second binding.
-    focus_pane_left = ["prefix+h", "ctrl+alt+h"]
-    focus_pane_down = ["prefix+j", "ctrl+alt+j"]
-    focus_pane_up = ["prefix+k", "ctrl+alt+k"]
-    focus_pane_right = ["prefix+l", "ctrl+alt+l"]
-    previous_tab = ["prefix+p", "ctrl+alt+["]
-    next_tab = ["prefix+n", "ctrl+alt+]"]
-    new_tab = ["prefix+c", "ctrl+alt+c"]
-    split_vertical = ["prefix+v", "ctrl+alt+d"]
-    split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
-    zoom = ["prefix+z", "ctrl+alt+z"]
-    switch_tab = "prefix+1..9"
+    # ctrl+space prefix with `ctrl+alt` family as aliases. The ctrl+alt family is
+    # the only chord set every major terminal and desktop leave free (unlike
+    # ctrl+alt+arrows = GNOME workspaces/Ghostty/Konsole, or ctrl+alt+t =
+    # "launch terminal"), so these survive the outer terminal and land in herdr.
+    focus_pane_left = ["ctrl+space+h", "ctrl+alt+h"]
+    focus_pane_down = ["ctrl+space+j", "ctrl+alt+j"]
+    focus_pane_up = ["ctrl+space+k", "ctrl+alt+k"]
+    focus_pane_right = ["ctrl+space+l", "ctrl+alt+l"]
+    previous_tab = ["ctrl+space+p", "ctrl+alt+["]
+    next_tab = ["ctrl+space+n", "ctrl+alt+]"]
+    new_tab = ["ctrl+space+c", "ctrl+alt+c"]
+    split_vertical = ["ctrl+space+v", "ctrl+alt+d"]
+    split_horizontal = ["ctrl+space+minus", "ctrl+alt+shift+d"]
+    zoom = ["ctrl+space+z", "ctrl+alt+z"]
+    switch_tab = "ctrl+space+1..9"
 
-    # prefix+t opens a session-modal scratch terminal without touching the tab
+    # ctrl+space+t opens a session-modal scratch terminal without touching the tab
     # layout (docs recipe). Exit the shell to close the popup and restore the view.
     [[keys.command]]
-    key = "prefix+t"
+    key = "ctrl+space+t"
     type = "popup"
     command = "exec \"${SHELL:-sh}\""
     description = "open scratch terminal"
@@ -264,10 +262,29 @@
   in
     builtins.concatStringsSep "\n" lines + "\n";
 
-  spreaderLayout = pkgs.writeText "herdr-spreader-config.yaml" (
-    "workspaces:\n"
-    + builtins.concatStringsSep "" (map spreaderWorkspace spreaderWorkspaces)
-  );
+  # Spreader always calls `workspace create`; it does not skip a workspace that
+  # is already present. Keep one fragment per workspace so setup can omit roots
+  # that are currently visible in the running herdr session before writing the
+  # config consumed by `herdr-spreader.apply`.
+  spreaderWorkspaceFragments =
+    map (workspace: {
+      root = lib.replaceStrings ["~"] [home] workspace.root;
+      file = pkgs.writeText "herdr-spreader-${builtins.baseNameOf (lib.removeSuffix "/" workspace.root)}" (spreaderWorkspace workspace);
+    })
+    spreaderWorkspaces;
+
+  spreaderLayoutScript =
+    "printf '%s\\n' 'workspaces:' > \\\"$spreader_layout_tmp\\\"\n"
+    + builtins.concatStringsSep "\n" (map (workspace: ''
+        if [ -z "${"$spreader_snapshot"}" ] || ! printf '%s' "${"$spreader_snapshot"}" | ${pkgs.jq}/bin/jq -e --arg root "${workspace.root}" \
+          '[.result.snapshot.panes[] | select((.cwd == $root) or (.foreground_cwd == $root))] | length == 0' >/dev/null; then
+          cat ${workspace.file} >> "$spreader_layout_tmp"
+          echo "herdr-setup: including workspace ${workspace.root}"
+        else
+          echo "herdr-setup: skipping already-open workspace ${workspace.root}"
+        fi
+      '')
+      spreaderWorkspaceFragments);
 
   setup = pkgs.writeShellScript "herdr-setup-${user}" (
     ''
@@ -302,10 +319,20 @@
     + pluginInstallScript
     + ''
       # Write the generated layout on every activation so folder-derived names
-      # stay current when a workspace root changes.
+      # stay current when a workspace root changes. Spreader itself is not
+      # idempotent, so omit roots that already have a live pane in herdr.
       spreader_config_dir="${home}/.config/herdr/plugins/config/herdr-spreader"
       mkdir -p "$spreader_config_dir"
-      install -m0644 ${spreaderLayout} "$spreader_config_dir/config.yaml"
+      spreader_layout_tmp="$(mktemp "$spreader_config_dir/config.yaml.XXXXXX")"
+      if spreader_snapshot="$(${herdrPkg}/bin/herdr api snapshot 2>/dev/null)"; then
+        echo "herdr-setup: checking open workspaces before generating spreader layout"
+      else
+        spreader_snapshot=""
+        echo "herdr-setup: herdr server unavailable; including all spreader workspaces"
+      fi
+      ${spreaderLayoutScript}
+      install -m0644 "$spreader_layout_tmp" "$spreader_config_dir/config.yaml"
+      rm -f "$spreader_layout_tmp"
 
       # Deliberately exit 0 even here: see the plugins comment above. The deploy
       # stays green and this warning is the only signal, so make it findable.
