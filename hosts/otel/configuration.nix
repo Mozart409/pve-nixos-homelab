@@ -137,7 +137,7 @@
         }
       ];
       limits_config = {
-        retention_period = "720h"; # 30 days
+        retention_period = "168h"; # 7 days
         allow_structured_metadata = true;
         volume_enabled = true;
       };
