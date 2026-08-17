@@ -17,6 +17,10 @@
       url = "github:zhaofengli/colmena";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    comin = {
+      url = "github:nlewo/comin";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # MCP-server monorepo (pbs/pg/prom/loki/ha). Lives on the homelab Forgejo.
     # Fetched over HTTPS (repo is public + step-ca trusted everywhere) so no SSH
     # key is needed by CI or build hosts; the old git+ssh ts.net URL needed a
@@ -72,6 +76,7 @@
     agenix,
     disko,
     colmena,
+    comin,
     homelab-mcp,
     hermes-agent,
     homelab-dashboard,
@@ -181,10 +186,10 @@
       else hostAddrs.${name}.local;
 
     # Home-manager + Mozart409 nixvim + tmux for the amadeus user. Applied to every
-    # colmena node via `colmenaHive.defaults`, and baked into individual
-    # nixosConfigurations (used by nixos-anywhere / `just deploy`) so a reinstall
-    # keeps nixvim/tmux instead of silently dropping them — mkHost does NOT include
-    # home-manager.
+    # colmena node via `colmenaHive.defaults`, and baked into every
+    # nixosConfiguration via mkHost so comin (which builds nixosConfigurations)
+    # and colmena (which builds the hive) produce the SAME closure — without this
+    # parity the two tools would flip-flop nixvim/tmux on every poll/apply.
     homeManagerNixvim = {
       imports = [
         home-manager.nixosModules.home-manager
@@ -202,7 +207,15 @@
       ];
     };
 
-    # Function to create a NixOS system configuration
+    # Comin module parameterized by the FLAKE ATTRIBUTE name (comin derives
+    # nixosConfigurations.<hostname> from it; networking.hostName is
+    # "homelab-<name>" everywhere and would not match).
+    cominFor = hostname: import ./modules/comin.nix {inherit comin hostname;};
+
+    # Function to create a NixOS system configuration. Every mkHost host gets
+    # home-manager/nixvim (hive parity, see above) and comin. Hosts that must
+    # NOT (bootstrap/installer images like `minimal` and `iso`) are explicit
+    # nixosSystem entries instead.
     mkHost = hostname:
       nixpkgs.lib.nixosSystem {
         specialArgs = {inherit homelab-dashboard;};
@@ -216,6 +229,8 @@
           }
           disko.nixosModules.disko
           agenix.nixosModules.default
+          homeManagerNixvim
+          (cominFor hostname)
           ./hosts/${hostname}/configuration.nix
         ];
       };
@@ -228,7 +243,21 @@
         dns = mkHost "dns";
         unifi = mkHost "unifi";
         containers = mkHost "containers";
-        minimal = mkHost "minimal";
+        # Bootstrap image for nixos-anywhere (`just deploy-minimal`). Explicit
+        # (not mkHost) because it must NOT get home-manager/nixvim (slows the
+        # install) or comin (a bootstrap host should not self-deploy).
+        minimal = nixpkgs.lib.nixosSystem {
+          specialArgs = {inherit homelab-dashboard;};
+          modules = [
+            {
+              nixpkgs.hostPlatform = system;
+              nixpkgs.config.allowUnfree = true;
+            }
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            ./hosts/minimal/configuration.nix
+          ];
+        };
         # Bootable installer ISO. Explicit (not mkHost) because mkHost injects
         # disko, which a live medium has no use for. Build with:
         # just iso-build
@@ -241,10 +270,17 @@
         mcp = nixpkgs.lib.nixosSystem {
           specialArgs = {inherit homelab-dashboard homelab-mcp;};
           modules = [
-            {nixpkgs.hostPlatform = system;}
+            {
+              nixpkgs.hostPlatform = system;
+              # nixvim (via homeManagerNixvim) pulls an unfree dep; the
+              # colmenaHive sets this globally, plain nixosSystem needs it too.
+              nixpkgs.config.allowUnfree = true;
+            }
             disko.nixosModules.disko
             agenix.nixosModules.default
             homelab-mcp.nixosModules.default
+            homeManagerNixvim
+            (cominFor "mcp")
             ./hosts/mcp_vm/configuration.nix
           ];
         };
@@ -255,9 +291,7 @@
         harbor = mkHost "harbor";
         cache = mkHost "cache";
         forgejo = mkHost "forgejo";
-        # Explicit (not mkHost) so `herdr` can be passed via specialArgs, and so
-        # nixvim is baked in even on a nixos-anywhere reinstall. Mirrors
-        # colmenaHive defaults — see the jellyfin entry below.
+        # Explicit (not mkHost) so `herdr` can be passed via specialArgs.
         development = nixpkgs.lib.nixosSystem {
           specialArgs = {inherit herdr;};
           modules = [
@@ -271,6 +305,7 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             homeManagerNixvim
+            (cominFor "development")
             ./hosts/development/configuration.nix
           ];
         };
@@ -278,8 +313,8 @@
         buildbot-worker-1 = mkHost "buildbot-worker-1";
         zeroclaw = mkHost "zeroclaw";
         woodpecker = mkHost "woodpecker";
-        # Explicit (not mkHost) so nixvim is baked in even on a nixos-anywhere
-        # reinstall; mkHost omits home-manager. Mirrors colmenaHive defaults.
+        # Explicit (not mkHost) because of the disko-jellyfin multi-disk layout
+        # history; module set otherwise mirrors mkHost.
         jellyfin = nixpkgs.lib.nixosSystem {
           specialArgs = {inherit homelab-dashboard;};
           modules = [
@@ -292,6 +327,7 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             homeManagerNixvim
+            (cominFor "jellyfin")
             ./hosts/jellyfin/configuration.nix
           ];
         };
@@ -324,10 +360,17 @@
         # };
         hermes = nixpkgs.lib.nixosSystem {
           modules = [
-            {nixpkgs.hostPlatform = system;}
+            {
+              nixpkgs.hostPlatform = system;
+              # nixvim (via homeManagerNixvim) pulls an unfree dep; the
+              # colmenaHive sets this globally, plain nixosSystem needs it too.
+              nixpkgs.config.allowUnfree = true;
+            }
             disko.nixosModules.disko
             agenix.nixosModules.default
             hermes-agent.nixosModules.default
+            homeManagerNixvim
+            (cominFor "hermes")
             ./hosts/hermes/configuration.nix
           ];
         };
@@ -367,6 +410,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "database")
             ./hosts/database/configuration.nix
           ];
         };
@@ -381,6 +425,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "otel")
             ./hosts/otel/configuration.nix
           ];
         };
@@ -395,6 +440,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "dns")
             ./hosts/dns/configuration.nix
           ];
         };
@@ -409,6 +455,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "unifi")
             ./hosts/unifi/configuration.nix
           ];
         };
@@ -422,6 +469,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "containers")
             ./hosts/containers/configuration.nix
           ];
         };
@@ -437,6 +485,7 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             homelab-mcp.nixosModules.default
+            (cominFor "mcp")
             ./hosts/mcp_vm/configuration.nix
           ];
         };
@@ -455,6 +504,7 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             hermes-agent.nixosModules.default
+            (cominFor "hermes")
             ./hosts/hermes/configuration.nix
           ];
         };
@@ -497,6 +547,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "ca")
             ./hosts/ca/configuration.nix
           ];
         };
@@ -511,6 +562,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "fleet")
             ./hosts/fleet/configuration.nix
           ];
         };
@@ -525,6 +577,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "harbor")
             ./hosts/harbor/configuration.nix
           ];
         };
@@ -539,6 +592,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "cache")
             ./hosts/cache/configuration.nix
           ];
         };
@@ -553,6 +607,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "forgejo")
             ./hosts/forgejo/configuration.nix
           ];
         };
@@ -567,6 +622,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "woodpecker")
             ./hosts/woodpecker/configuration.nix
           ];
         };
@@ -581,6 +637,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "development")
             ./hosts/development/configuration.nix
           ];
         };
@@ -595,6 +652,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
+            (cominFor "jellyfin")
             ./hosts/jellyfin/configuration.nix
           ];
         };
