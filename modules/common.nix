@@ -9,6 +9,11 @@
     ./homelab-users.nix
     ./just-completions.nix
     ./nh.nix
+    # Homelab attic binary cache. Every comin host needs this: comin evaluates
+    # the flake on the host, which fetches every locked flake input — GitHub
+    # rate-limits (429) unauthenticated tarball downloads, so the inputs are
+    # pushed to attic and substituted from there instead.
+    ./attic-cache.nix
   ];
 
   # Timezone configuration
