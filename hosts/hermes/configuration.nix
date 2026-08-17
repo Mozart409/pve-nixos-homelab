@@ -269,6 +269,7 @@ in {
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
+    ../../modules/loki-logs.nix
     ../../modules/moshi-hook.nix
     ./moshi-hook.nix
   ];
@@ -291,6 +292,37 @@ in {
   services.prometheus.exporters.node = {
     enable = true;
     enabledCollectors = ["systemd" "processes"];
+  };
+
+  # Ship selected hermes-related daemon journals to the central Loki.
+  services.loki-logs = {
+    enable = true;
+    units = [
+      {
+        unit = "hermes-agent.service";
+        job = "hermes-agent";
+      }
+      {
+        unit = "hermes-config-check.service";
+        job = "hermes-config-check";
+      }
+      {
+        unit = "hermes-repo-sync.service";
+        job = "hermes-repo-sync";
+      }
+      {
+        unit = "hermes-vault-git-setup.service";
+        job = "hermes-vault-git-setup";
+      }
+      {
+        unit = "hermes-vault-bootstrap.service";
+        job = "hermes-vault-bootstrap";
+      }
+      {
+        unit = "moshi-hook-setup.service";
+        job = "moshi-hook-setup";
+      }
+    ];
   };
 
   # direnv + nix-direnv: `cd` into a dir with an `.envrc` (the repo already ships

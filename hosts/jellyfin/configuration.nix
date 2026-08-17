@@ -10,6 +10,7 @@
     ../../modules/disko-jellyfin.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
+    ../../modules/loki-logs.nix
     # Podman + oci-containers backend for the hofvarpnir container below.
     ../../modules/podman.nix
     # Declaratively pinned SSO/OIDC plugin (Pocket ID auth).
@@ -80,6 +81,17 @@
     "d /media/tv 0755 jellyfin jellyfin -"
     "d /media/music 0755 jellyfin jellyfin -"
   ];
+
+  # Ship the Jellyfin journal to the central Loki.
+  services.loki-logs = {
+    enable = true;
+    units = [
+      {
+        unit = "jellyfin.service";
+        job = "jellyfin";
+      }
+    ];
+  };
 
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {

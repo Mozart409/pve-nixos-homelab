@@ -10,6 +10,7 @@
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
+    ../../modules/loki-logs.nix
     ../../modules/podman.nix
     ./uptime-forge
     ./albyhub
@@ -50,6 +51,17 @@
     };
     # Postgres exporter is configured in ./uptime-forge/default.nix
     # because it needs access to agenix secrets for the connection string
+  };
+
+  # Ship the axon-gateway container journal to the central Loki.
+  services.loki-logs = {
+    enable = true;
+    units = [
+      {
+        unit = "podman-axon-gateway.service";
+        job = "axon-gateway";
+      }
+    ];
   };
 
   # Open WebUI now lives in ./open-webui (listens on localhost:8088)

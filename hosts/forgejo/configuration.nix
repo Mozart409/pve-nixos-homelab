@@ -10,6 +10,7 @@
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
+    ../../modules/loki-logs.nix
   ];
 
   networking.hostName = "homelab-forgejo";
@@ -121,6 +122,17 @@
   services.prometheus.exporters.node = {
     enable = true;
     enabledCollectors = ["systemd" "processes"];
+  };
+
+  # Ship the Forgejo journal to the central Loki.
+  services.loki-logs = {
+    enable = true;
+    units = [
+      {
+        unit = "forgejo.service";
+        job = "forgejo";
+      }
+    ];
   };
 
   # Caddy reverse proxy with Tailscale TLS
