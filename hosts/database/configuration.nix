@@ -73,6 +73,7 @@ in {
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
+    ../../modules/loki-logs.nix
   ];
 
   networking.hostName = "homelab-database";
@@ -536,6 +537,17 @@ in {
       enable = true;
       enabledCollectors = ["systemd" "processes"];
     };
+  };
+
+  # Ship the PostgreSQL journal to the central Loki.
+  services.loki-logs = {
+    enable = true;
+    units = [
+      {
+        unit = "postgresql.service";
+        job = "postgresql";
+      }
+    ];
   };
 
   # pgAdmin 4 - native NixOS service (no container). Binds 127.0.0.1:5050; Caddy

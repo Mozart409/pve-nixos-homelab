@@ -58,6 +58,23 @@
   pgVhostName = db: "pg-${db}-mcp.homelab.local";
   pgUnitName = db: "pgmcp-${db}-server";
   pgSecretName = db: "pg-mcp-${db}-url";
+
+  mcpServerUnits =
+    map (name: {
+      unit = "${name}.service";
+      job = name;
+    }) [
+      "pbsmcp-server"
+      "pgmcp-server"
+      "prommcp-server"
+      "lokimcp-server"
+      "hamcp-server"
+      "wpmcp-server"
+    ]
+    ++ map (db: {
+      unit = "${pgUnitName db}.service";
+      job = pgUnitName db;
+    }) (builtins.attrNames homelabDatabases);
 in {
   imports = [
     ../../modules/common.nix
@@ -65,6 +82,7 @@ in {
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
+    ../../modules/loki-logs.nix
   ];
 
   networking.hostName = "homelab-mcp";
@@ -85,6 +103,12 @@ in {
   services.prometheus.exporters.node = {
     enable = true;
     enabledCollectors = ["systemd" "processes"];
+  };
+
+  # Ship all homelab-mcp server journals to the central Loki.
+  services.loki-logs = {
+    enable = true;
+    units = mcpServerUnits;
   };
 
   # Caddy reverse proxy: one vhost per MCP server. All servers bind loopback,
