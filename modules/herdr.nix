@@ -25,26 +25,32 @@
     onboarding = false
 
     [keys]
-    # ctrl+space prefix with `ctrl+alt` family as aliases. The ctrl+alt family is
-    # the only chord set every major terminal and desktop leave free (unlike
-    # ctrl+alt+arrows = GNOME workspaces/Ghostty/Konsole, or ctrl+alt+t =
-    # "launch terminal"), so these survive the outer terminal and land in herdr.
-    focus_pane_left = ["ctrl+space+h", "ctrl+alt+h"]
-    focus_pane_down = ["ctrl+space+j", "ctrl+alt+j"]
-    focus_pane_up = ["ctrl+space+k", "ctrl+alt+k"]
-    focus_pane_right = ["ctrl+space+l", "ctrl+alt+l"]
-    previous_tab = ["ctrl+space+p", "ctrl+alt+["]
-    next_tab = ["ctrl+space+n", "ctrl+alt+]"]
-    new_tab = ["ctrl+space+c", "ctrl+alt+c"]
-    split_vertical = ["ctrl+space+v", "ctrl+alt+d"]
-    split_horizontal = ["ctrl+space+minus", "ctrl+alt+shift+d"]
-    zoom = ["ctrl+space+z", "ctrl+alt+z"]
-    switch_tab = "ctrl+space+1..9"
+    # ctrl+space prefix (tmux-style leader key) with `ctrl+alt` family as
+    # aliases. herdr bindings are written "prefix+<key>", NOT a literal
+    # "ctrl+space+<key>" chord — `herdr config check` rejects the latter as an
+    # invalid keybinding (space is not a modifier it composes with ctrl in a
+    # single chord; prefix is its own leader-key mechanism). The ctrl+alt
+    # family is the only chord set every major terminal and desktop leave free
+    # (unlike ctrl+alt+arrows = GNOME workspaces/Ghostty/Konsole, or
+    # ctrl+alt+t = "launch terminal"), so these survive the outer terminal and
+    # land in herdr.
+    prefix = "ctrl+space"
+    focus_pane_left = ["prefix+h", "ctrl+alt+h"]
+    focus_pane_down = ["prefix+j", "ctrl+alt+j"]
+    focus_pane_up = ["prefix+k", "ctrl+alt+k"]
+    focus_pane_right = ["prefix+l", "ctrl+alt+l"]
+    previous_tab = ["prefix+p", "ctrl+alt+["]
+    next_tab = ["prefix+n", "ctrl+alt+]"]
+    new_tab = ["prefix+c", "ctrl+alt+c"]
+    split_vertical = ["prefix+v", "ctrl+alt+d"]
+    split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
+    zoom = ["prefix+z", "ctrl+alt+z"]
+    switch_tab = "prefix+1..9"
 
-    # ctrl+space+t opens a session-modal scratch terminal without touching the tab
+    # prefix+t opens a session-modal scratch terminal without touching the tab
     # layout (docs recipe). Exit the shell to close the popup and restore the view.
     [[keys.command]]
-    key = "ctrl+space+t"
+    key = "prefix+t"
     type = "popup"
     command = "exec \"${SHELL:-sh}\""
     description = "open scratch terminal"
