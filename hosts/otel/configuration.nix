@@ -223,7 +223,7 @@
   services.prometheus = {
     enable = true;
     port = 9090;
-    retentionTime = "30d";
+    retentionTime = "45d";
     webExternalUrl = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
     extraFlags = ["--web.route-prefix=/"];
 
