@@ -17,6 +17,7 @@ These VMs have been deployed successfully:
 - `dns`
 - `mcp`
 - `fleet`
+- `cache`
 
 `containers` is a VM. The containerized services running on it are covered by
 that VM deployment.
@@ -39,7 +40,6 @@ succeeds.
 - `unifi`
 - `ca`
 - `harbor`
-- `cache`
 - `woodpecker`
 - `development`
 - `jellyfin`
