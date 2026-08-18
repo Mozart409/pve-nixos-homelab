@@ -78,10 +78,27 @@ evaluation load, not a comin or host failure.
 
 ### SSH Hang Pattern
 
-When multiple hosts evaluate nix configs simultaneously, the SSH daemon becomes
-unresponsive (banner exchange or command execution hangs) while ICMP and TCP
-connectivity remain healthy. This is expected under evaluation load — the
-hosts are not down.
+When hosts evaluate nix configs via comin, the SSH daemon becomes progressively
+unresponsive. There are two levels:
+
+1. **Slow commands** — SSH connects but commands take 10–30s to return
+   (seen on dns, mcp at lower load).
+2. **Banner exchange timeout** — SSH daemon doesn't even complete the
+   initial handshake, even with a 120s connect timeout. The host still
+   responds to ICMP ping. This means `sshd` is starved of CPU/memory and
+   can't accept new connections (seen on mcp, cache, otel under concurrent
+   eval load).
+
+In both cases the host is alive and comin is running — it's just a resource
+contention issue. The evaluation eventually finishes and SSH recovers.
+
+### axon-gateway Impact
+
+When multiple hosts evaluate simultaneously, the axon-gateway backends
+(Prometheus on `otel`, Loki on `fleet`) also time out. This is the same
+resource starvation: the hosts running the monitoring stack are busy
+evaluating nix configs and can't serve API requests within the 30s
+timeout.
 
 ## Common Misconceptions
 
