@@ -8,17 +8,18 @@ that VM polls the canonical Forgejo Git repository and applies updates from the
 Git after they are merged, instead of requiring a manual deployment on every
 machine.
 
-## Completed (bootstrap deployed — comin-agent not yet active)
+## Completed (comin active)
 
-These VMs have been bootstrapped, but **`comin-agent` is `inactive` on all six**,
-so none are auto-updating. Future changes require a manual `colmena apply`.
+These VMs have been bootstrapped and **`comin.service` is `active`**, polling
+Forgejo and auto-deploying from `main`. See `docs/comin-findings-2026-08-18.md`
+for details on comin behavior and the harmless `HEAD outside of refs/` warning.
 
-- `otel` — version `26.11pre-git`
-- `containers` — version `26.11.20260813.0e251e2` (nixpkgs from Aug 13)
-- `dns` — version `26.11pre-git` (updated 2026-08-18)
-- `mcp` — version `26.11pre-git`
-- `fleet` — version `26.11.20260813.0e251e2` (nixpkgs from Aug 13)
-- `cache` — version `26.11pre-git`
+- `otel` — version `26.11pre-git`; comin active
+- `containers` — version `26.11.20260813.0e251e2` (nixpkgs from Aug 13); comin active
+- `dns` — version `26.11pre-git` (updated 2026-08-18); comin active, evaluating latest commit
+- `mcp` — version `26.11pre-git`; comin active (SSH intermittently unreachable)
+- `fleet` — version `26.11.20260813.0e251e2` (nixpkgs from Aug 13); comin active
+- `cache` — version `26.11pre-git`; comin active (SSH intermittently unreachable)
 
 `containers` is a VM. The containerized services running on it are covered by
 that VM deployment.
