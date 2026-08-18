@@ -19,6 +19,7 @@
     ./axon-gateway
     ./homelab-dashboard
     ./romm
+    ./futo-notes
     # Harbor moved to dedicated VM (hosts/harbor)
   ];
 
@@ -164,6 +165,20 @@
         }
 
         reverse_proxy localhost:8095
+      '';
+    };
+
+    # FUTO Notes Server — E2E-encrypted sync server for the FUTO Notes app.
+    # Binds 127.0.0.1:3006 (see ./futo-notes), so Caddy is the only thing
+    # that proxies to it. The server only speaks HTTP internally; step-ca TLS
+    # is terminated by Caddy at notes.homelab.local.
+    virtualHosts."notes.homelab.local notes.homelab.internal" = {
+      extraConfig = ''
+        tls {
+          ca https://ca.homelab.local:8443/acme/acme/directory
+        }
+
+        reverse_proxy localhost:3006
       '';
     };
   };
