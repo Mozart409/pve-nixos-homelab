@@ -8,16 +8,17 @@ that VM polls the canonical Forgejo Git repository and applies updates from the
 Git after they are merged, instead of requiring a manual deployment on every
 machine.
 
-## Completed
+## Completed (bootstrap deployed — comin-agent not yet active)
 
-These VMs have been deployed successfully:
+These VMs have been bootstrapped, but **`comin-agent` is `inactive` on all six**,
+so none are auto-updating. Future changes require a manual `colmena apply`.
 
-- `otel`
-- `containers`
-- `dns`
-- `mcp`
-- `fleet`
-- `cache`
+- `otel` — version `26.11pre-git`
+- `containers` — version `26.11.20260813.0e251e2` (nixpkgs from Aug 13)
+- `dns` — version `26.11pre-git` (updated 2026-08-18)
+- `mcp` — version `26.11pre-git`
+- `fleet` — version `26.11.20260813.0e251e2` (nixpkgs from Aug 13)
+- `cache` — version `26.11pre-git`
 
 `containers` is a VM. The containerized services running on it are covered by
 that VM deployment.
