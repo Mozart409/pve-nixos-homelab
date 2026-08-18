@@ -59,19 +59,29 @@ rather than by branch ref, which git treats as a detached HEAD outside `refs/`.
 The local clone still has all objects and comin resolves the correct commit.
 This is a known comin quirk, not a failure.
 
-## Host Status (2026-08-18)
+## Host Status (2026-08-18, ~21:30 CET)
 
-| Host | comin.service | Last Deployed Commit | Notes |
-|------|---------------|---------------------|-------|
-| dns | active | `e25e70a` (feat: reduce loki log retention) | evaluating `32bc81d` |
-| containers | active | — | responsive, comin running |
-| fleet | active | — | responsive, comin running |
-| mcp | active* | — | SSH intermittently unreachable |
-| otel | active* | — | SSH intermittently unreachable |
-| cache | active* | — | SSH intermittently unreachable |
+All six hosts respond to ICMP ping. SSH is responsive on two hosts and hangs
+on four — likely due to concurrent nix evaluations consuming CPU/memory.
 
-\* Confirmed active during initial check; SSH timeouts on subsequent polls
-are likely due to nix evaluation load on the host.
+| Host | comin.service | Last Deployed Commit | Commit Being Evaluated | Notes |
+|------|---------------|---------------------|----------------------|-------|
+| dns | active | `e25e70a` (feat: reduce loki log retention) | `32bc81d` (15+ min) | SSH hangs; ping OK |
+| containers | active | `e25e70a` (feat: reduce loki log retention) | `27f6262` (3 min) | `Need to reboot: yes` |
+| mcp | active* | unknown | unknown | SSH hangs; ping OK |
+| fleet | active | `7f576dd` (docs: track comin rollout) | `27f6262` (< 1 min) | `Need to reboot: yes` |
+| cache | active* | unknown | unknown | SSH hangs (banner timeout); ping OK |
+| otel | active* | unknown | unknown | SSH hangs; ping OK |
+
+\* Confirmed `comin.service` active earlier. SSH hangs are consistent with nix
+evaluation load, not a comin or host failure.
+
+### SSH Hang Pattern
+
+When multiple hosts evaluate nix configs simultaneously, the SSH daemon becomes
+unresponsive (banner exchange or command execution hangs) while ICMP and TCP
+connectivity remain healthy. This is expected under evaluation load — the
+hosts are not down.
 
 ## Common Misconceptions
 
