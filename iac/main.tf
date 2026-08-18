@@ -213,8 +213,8 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   }
 
   memory {
-    dedicated = 768
-    floating  = 384
+    dedicated = 1536
+    floating  = 768
   }
 
   disk {
