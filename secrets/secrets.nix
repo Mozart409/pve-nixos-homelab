@@ -1,7 +1,7 @@
 let
   # keep-sorted start
   amadeus = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan";
-  amadeusAge = "age108er4kc0200y2at2fauw08t77u506nah2qxqlkxn8hq5c58e037qx226tw";
+  amadeusAge = "age1uslcewyhmagupmfg4nf9tc6alj8edapzexnjvuhrkkmwd3wmy4nqpmel7t";
   amadeusMacbook = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/HCRJuzlIbgcWk68ehApZl6kN+7PnKIgYSLRZ5IjzQ amadeus@Amadeuss-MacBook-Pro.local";
   hostBuildBotMaster = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIwy8ohPS5E6ElmFvYoNYNBfbiYjAfFQBVtBA5hePSiN root@homelab-buildbot-master";
   hostBuildBotWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIIZK5rnXUBhINU4lzEWkhxhdRWsLR7IxLeQID8HqLKF root@homelab-buildbot-worker-1";
