@@ -227,38 +227,10 @@
     mode = "0400";
   };
 
-  # Attic push token for the `homelab` cache (plain JWT, NOT KEY=value — it is
-  # passed as a positional argument to `attic login`, not sourced as env).
-  # Pulling needs no credential at all: the cache is public, and the substituter
-  # plus its public key come from modules/attic-cache.nix. This secret is only
-  # what lets this host UPLOAD what it builds.
-  age.secrets.attic-push-token = {
-    file = ../../secrets/attic-push-token.age;
-    owner = "amadeus";
-    mode = "0400";
-  };
-
-  # `attic login` writes ~/.config/attic/config.toml, which is mutable state the
-  # attic client has no declarative option for — so a reinstall would silently
-  # lose the ability to push until someone re-ran the command by hand. This
-  # oneshot re-applies it on every activation, making the token the only thing
-  # that has to survive.
-  systemd.services.attic-login = {
-    description = "Register the homelab attic cache for the amadeus user";
-    wantedBy = ["multi-user.target"];
-    after = ["network-online.target"];
-    wants = ["network-online.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      User = "amadeus";
-      RemainAfterExit = true;
-    };
-    script = ''
-      ${pkgs.attic-client}/bin/attic login homelab \
-        https://cache.homelab.local/homelab \
-        "$(cat ${config.age.secrets.attic-push-token.path})"
-    '';
-  };
+  # Attic push token + login + auto-push-on-activation now come from
+  # modules/attic-push.nix, pulled in fleet-wide via cominFor (modules/comin.nix)
+  # since this host is comin-managed. Used to be defined here inline; moved out
+  # so every comin host gets the same push setup instead of just this one.
 
   # Forgejo API token for the `developmentbot` account (env-file:
   # FORGEJO_TOKEN=...). Needed ONLY to create repos over the REST API — git
@@ -291,7 +263,6 @@
   # Development tools for experiments
   environment.systemPackages = with pkgs; [
     # keep-sorted start
-    attic-client
     bat
     btop
     # bun + nodejs: opencode's global plugins (~/.config/opencode/plugins/

@@ -6,11 +6,15 @@
 # `hostname` is the FLAKE ATTRIBUTE name (e.g. "database"), NOT
 # networking.hostName, which is "homelab-<name>" everywhere and has no matching
 # nixosConfigurations attribute.
+#
+# Also pulls in ./attic-push.nix: every host comin can deploy to should also
+# push what it builds back to the shared cache (see that file for why), and
+# this is the one import point common to all of them.
 {
   comin,
   hostname,
 }: {
-  imports = [comin.nixosModules.comin];
+  imports = [comin.nixosModules.comin ./attic-push.nix];
 
   services.comin = {
     enable = true;
