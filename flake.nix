@@ -600,7 +600,16 @@
         forgejo = {
           deployment = {
             targetHost = targetHost "forgejo";
+            # forgejo.homelab.local also serves Forgejo's Git SSH endpoint on
+            # port 2222; Colmena must use the VM's OpenSSH service instead.
+            targetPort = 22;
             targetUser = "amadeus";
+            sshOptions = [
+              "-i"
+              "/home/amadeus/.ssh/id_colmena_deploy"
+              "-o"
+              "IdentitiesOnly=yes"
+            ];
             buildOnTarget = false;
             tags = ["forgejo" "git"];
           };
