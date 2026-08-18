@@ -46,6 +46,16 @@
     split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
     zoom = ["prefix+z", "ctrl+alt+z"]
     switch_tab = "prefix+1..9"
+    # workspace_picker (herdr's config key; the docs prose calls it "workspace
+    # navigation") is bound to plain "prefix+w" by default and needs no entry
+    # here to work — but the sequential ctrl+space-then-w chord was observed
+    # not firing on this host (herdr-client.log shows recurring "flushing lone
+    # escape after input timeout" warnings, i.e. this terminal's raw-input
+    # parsing is timing-sensitive around chords) while other prefix chords on
+    # the same leader worked fine. ctrl+alt+w is a single simultaneous chord
+    # like the focus_pane/tab bindings above, sidestepping that timing path
+    # entirely as a reliable fallback.
+    workspace_picker = ["prefix+w", "ctrl+alt+w"]
 
     # prefix+t opens a session-modal scratch terminal without touching the tab
     # layout (docs recipe). Exit the shell to close the popup and restore the view.
@@ -200,11 +210,18 @@
   # roots below rather than editing the runtime copy. Apply it with:
   #   herdr plugin action invoke herdr-spreader.apply
   #
-  # One workspace per repo checkout, each with the same four tabs in a fixed
-  # order so prefix+1..4 means the same thing everywhere: 1 claude, 2 opencode,
-  # 3 lazygit, 4 a bare shell. The two agent tabs are what
-  # `resume_agents_on_restore` above reattaches after a restart. `homelab` (this
-  # repo) is the focused workspace, since it is the one that deploys the others.
+  # One workspace per repo checkout, each with the same two tabs in a fixed
+  # order so prefix+1..2 means the same thing everywhere: 1 lazygit, 2 a bare
+  # shell. `homelab` (this repo) is the focused workspace, since it is the one
+  # that deploys the others.
+  #
+  # Deliberately does NOT auto-launch claude/opencode: an agent tab per
+  # workspace idled at ~4 spreader workspaces was too much resident memory to
+  # keep running unused. Launch an agent by hand when you actually need one
+  # (prefix+c for a new tab, then `claude` or `opencode`) — `session` above
+  # (`resume_agents_on_restore`) still reattaches any agent pane you did start
+  # into its native conversation after a herdr server restart; it just has
+  # nothing to reattach until you start one.
   #
   # Roots must exist — spreader cannot cd into a missing directory, and that tab
   # comes up in the home dir (or not at all) instead.
@@ -216,17 +233,10 @@
     {root = "~/code/nixos-ventara-ai";}
     {root = "~/code/obsidian-kb";}
     {root = "~/code/rust/surrealdb-engram";}
+    {root = "~/code/homelab-mcps";}
   ];
 
   spreaderTabList = [
-    {
-      label = "claude";
-      command = "claude";
-    }
-    {
-      label = "opencode";
-      command = "opencode";
-    }
     {
       label = "lazygit";
       command = "lazygit";
