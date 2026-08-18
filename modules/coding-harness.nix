@@ -102,8 +102,90 @@
     };
   };
 
+  # Custom opencode theme — deployed to ~/.config/opencode/themes/
+  mozart409KanagawaOrange = pkgs.writeText "mozart409-kanagawa-orange.json" ''
+    {
+      "$schema": "https://opencode.ai/theme.json",
+      "defs": {
+        "bg": "#1f1f28",
+        "bgDark": "#16161d",
+        "bgSurface": "#2a2a37",
+        "fg": "#dcd7ba",
+        "fgSubtle": "#a8a594",
+        "fgMuted": "#727169",
+        "blue": "#7fb4ca",
+        "blueDark": "#7e9cd8",
+        "blueLight": "#a3cbee",
+        "purple": "#957fb8",
+        "green": "#98bb6c",
+        "teal": "#7aa89f",
+        "yellow": "#c0a36e",
+        "orange": "#ffa066",
+        "orangeDark": "#e76f51",
+        "orangeLight": "#f4a261",
+        "red": "#e82424",
+        "redSoft": "#ff5d62",
+        "border": "#3a3a4a",
+        "borderLight": "#4a4a5a"
+      },
+      "theme": {
+        "primary": {"dark": "blue", "light": "blueDark"},
+        "secondary": {"dark": "orange", "light": "orangeLight"},
+        "accent": {"dark": "orange", "light": "orangeDark"},
+        "error": {"dark": "red", "light": "redSoft"},
+        "warning": {"dark": "orange", "light": "orangeLight"},
+        "success": {"dark": "green", "light": "green"},
+        "info": {"dark": "blue", "light": "blueLight"},
+        "text": {"dark": "fg", "light": "fg"},
+        "textMuted": {"dark": "fgSubtle", "light": "fgMuted"},
+        "background": {"dark": "bg", "light": "bg"},
+        "backgroundPanel": {"dark": "bgDark", "light": "bgDark"},
+        "backgroundElement": {"dark": "bgSurface", "light": "bgSurface"},
+        "border": {"dark": "border", "light": "border"},
+        "borderActive": {"dark": "orange", "light": "orangeLight"},
+        "borderSubtle": {"dark": "border", "light": "border"},
+        "diffAdded": {"dark": "green", "light": "green"},
+        "diffRemoved": {"dark": "redSoft", "light": "red"},
+        "diffContext": {"dark": "fgMuted", "light": "fgMuted"},
+        "diffHunkHeader": {"dark": "purple", "light": "purple"},
+        "diffHighlightAdded": {"dark": "green", "light": "green"},
+        "diffHighlightRemoved": {"dark": "redSoft", "light": "red"},
+        "diffAddedBg": {"dark": "#2a3a2a", "light": "#2a3a2a"},
+        "diffRemovedBg": {"dark": "#3a2a2a", "light": "#3a2a2a"},
+        "diffContextBg": {"dark": "bgSurface", "light": "bgSurface"},
+        "diffLineNumber": {"dark": "fgMuted", "light": "fgMuted"},
+        "diffAddedLineNumberBg": {"dark": "#2a3a2a", "light": "#2a3a2a"},
+        "diffRemovedLineNumberBg": {"dark": "#3a2a2a", "light": "#3a2a2a"},
+        "markdownText": {"dark": "fg", "light": "fg"},
+        "markdownHeading": {"dark": "orange", "light": "orangeLight"},
+        "markdownLink": {"dark": "blue", "light": "blueLight"},
+        "markdownLinkText": {"dark": "blue", "light": "blueLight"},
+        "markdownCode": {"dark": "teal", "light": "teal"},
+        "markdownBlockQuote": {"dark": "fgMuted", "light": "fgMuted"},
+        "markdownEmph": {"dark": "orange", "light": "orangeLight"},
+        "markdownStrong": {"dark": "orangeDark", "light": "orange"},
+        "markdownHorizontalRule": {"dark": "fgMuted", "light": "fgMuted"},
+        "markdownListItem": {"dark": "blue", "light": "blueLight"},
+        "markdownListEnumeration": {"dark": "teal", "light": "teal"},
+        "markdownImage": {"dark": "blueDark", "light": "blueDark"},
+        "markdownImageText": {"dark": "fgSubtle", "light": "fgSubtle"},
+        "markdownCodeBlock": {"dark": "fg", "light": "fg"},
+        "syntaxComment": {"dark": "fgMuted", "light": "fgMuted"},
+        "syntaxKeyword": {"dark": "orange", "light": "orangeLight"},
+        "syntaxFunction": {"dark": "blue", "light": "blueLight"},
+        "syntaxVariable": {"dark": "fg", "light": "fg"},
+        "syntaxString": {"dark": "teal", "light": "teal"},
+        "syntaxNumber": {"dark": "purple", "light": "purple"},
+        "syntaxType": {"dark": "blueDark", "light": "blueDark"},
+        "syntaxOperator": {"dark": "orange", "light": "orangeLight"},
+        "syntaxPunctuation": {"dark": "fgSubtle", "light": "fgSubtle"}
+      }
+    }
+  '';
+
   opencodeConfigFragment = pkgs.writeText "opencode-config.json" (builtins.toJSON ({
       "$schema" = "https://opencode.ai/config.json";
+      theme = "mozart409-kanagawa-orange";
       mcp = opencodeMcpServers;
       permission = opencodePermissions;
     }
@@ -180,6 +262,10 @@
       || echo "coding-harness: failed to merge ~/.claude.json" >&2
     ${mergeJson} "${home}/.config/opencode/opencode.jsonc" "${opencodeConfigFragment}" \
       || echo "coding-harness: failed to merge opencode.jsonc" >&2
+
+    # Deploy custom theme and ensure it's the active one
+    mkdir -p "${home}/.config/opencode/themes"
+    cp -f "${mozart409KanagawaOrange}" "${home}/.config/opencode/themes/mozart409-kanagawa-orange.json"
 
     # Earlier revisions of this module wrote opencode.json, which opencode does
     # not read. Remove it so there is exactly one config file and no confusion
