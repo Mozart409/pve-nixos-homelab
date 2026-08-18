@@ -111,6 +111,13 @@ in {
     group = "postgres";
   };
 
+  # FUTO Notes database password
+  age.secrets.futo-notes-db-password = {
+    file = ../../secrets/futo-notes-db-password.age;
+    owner = "postgres";
+    group = "postgres";
+  };
+
   # hofvarpnir database password
   age.secrets.hofvarpnir-db-password = {
     file = ../../secrets/hofvarpnir-db-password.age;
@@ -279,7 +286,7 @@ in {
     # writer, reachable only through its own pgmcp instance, and both were
     # dropped. Removing it here does NOT drop the live database or role --
     # ensureDatabases only ever creates. See the note in hosts/mcp_vm.
-    ensureDatabases = ["appdb" "terraform" "forgejo" "romm" "hofvarpnir" "attic"];
+    ensureDatabases = ["appdb" "terraform" "forgejo" "romm" "hofvarpnir" "attic" "futo_notes"];
 
     # Initial users
     ensureUsers = [
@@ -293,6 +300,10 @@ in {
       }
       {
         name = "romm";
+        ensureDBOwnership = true;
+      }
+      {
+        name = "futo_notes";
         ensureDBOwnership = true;
       }
       {
@@ -405,6 +416,13 @@ in {
     role = "romm";
     description = "Set RomM PostgreSQL user password";
     secret = config.age.secrets.romm-db-password;
+    timeouts = migrationRoleTimeouts;
+  };
+
+  systemd.services.postgresql-futo-notes-password = mkRolePasswordUnit {
+    role = "futo_notes";
+    description = "Set FUTO Notes PostgreSQL user password";
+    secret = config.age.secrets.futo-notes-db-password;
     timeouts = migrationRoleTimeouts;
   };
 

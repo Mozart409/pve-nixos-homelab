@@ -42,6 +42,8 @@ in {
   "fleet-enroll-secret.age".publicKeys = users;
   "fleet-mysql-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostFleet];
   "forgejo-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostForgejo hostDatabase];
+  "futo-notes-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostContainers hostDatabase];
+  "futo-notes-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostContainers];
   "garage-rpc-secret.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostCache];
   "grafana-oidc-secret.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostOtel];
   "grafana-secret-key.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostOtel];
