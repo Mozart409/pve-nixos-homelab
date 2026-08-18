@@ -14,6 +14,7 @@
     # rate-limits (429) unauthenticated tarball downloads, so the inputs are
     # pushed to attic and substituted from there instead.
     ./attic-cache.nix
+    ./nixos-version-metrics.nix
   ];
 
   # Timezone configuration
