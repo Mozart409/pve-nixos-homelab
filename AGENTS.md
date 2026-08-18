@@ -147,7 +147,23 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
             and `colmena apply` restarts it on its own — no manual step needed.
         -   `caddy` (any host) — restart if newly-added vhosts leave certs stuck
             at HTTP 000 (step-ca ACME `badNonce` storm).
-    -   **After a big flake update / package upgrade** (`chore(deps): …`, which
+     -   **Systemd restart nonces:** NixOS only restarts a service when its
+         generated unit changes. Secrets and files rewritten at stable paths can
+         therefore change without restarting the consumer:
+         -   `hosts/mcp_vm/configuration.nix` — bump `secretNonce` when an MCP
+             credential changes; it is wired to the secret-consuming units'
+             `restartTriggers`.
+         -   `hosts/hermes/configuration.nix` — bump `secretNonce` when a secret,
+             `SOUL.md`, `USER.md`, `config.yaml`, or skill changes; it triggers
+             both `hermes-agent` and `hermes-config-check`.
+         -   `hosts/containers/axon-gateway/default.nix` — `configText` is hashed
+             into `CONFIG_HASH`, so changing the declarative gateway config
+             changes the generated container unit automatically.
+         -   `modules/loki-logs.nix` — changes to the selected units or Fluent
+             Bit pipeline change the generated `fluent-bit.service`; no manual
+             nonce is needed. After deployment, verify `systemctl status
+             fluent-bit` and its journal on the target host.
+     -   **After a big flake update / package upgrade** (`chore(deps): …`, which
         bumps many packages at once): a green build does NOT mean runtime config
         survived. Version bumps silently break external integrations — e.g. Open
         WebUI 0.9.6 changed OAuth callback derivation (re-register Pocket ID
