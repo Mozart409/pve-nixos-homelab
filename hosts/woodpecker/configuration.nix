@@ -294,12 +294,6 @@ in {
     mode = "0400";
   };
 
-  # Prometheus exporters
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   # Ship the woodpecker SERVER and AGENT daemon journals to the central Loki.
   #
   # Scope limit: per-step pipeline BUILD OUTPUT is not in the journal and never

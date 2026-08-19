@@ -28,12 +28,6 @@
   };
   networking.defaultGateway = "192.168.2.1";
 
-  # Prometheus exporters
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
     enable = true;

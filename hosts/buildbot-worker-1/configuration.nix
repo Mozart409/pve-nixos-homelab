@@ -69,12 +69,6 @@
   # Allow bbworker to use Nix
   nix.settings.trusted-users = ["bbworker"];
 
-  # Prometheus exporters
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   # Caddy reverse proxy with Tailscale TLS (for health checks)
   services.caddy = {
     enable = true;

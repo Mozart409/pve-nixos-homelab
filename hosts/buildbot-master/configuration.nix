@@ -162,12 +162,6 @@ in {
     "d /var/lib/buildbot/master 0750 buildbot buildbot -"
   ];
 
-  # Prometheus exporters
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
     enable = true;

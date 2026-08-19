@@ -128,6 +128,18 @@
     };
   };
 
+  # Prometheus node exporter. Was duplicated as `enable = true; enabledCollectors
+  # = ["systemd" "processes"];` across every single host file; centralised here
+  # instead. `interrupts` and `ntp` are added on top of the previous pair —
+  # meminfo/cpu/diskstats/filesystem/loadavg/netdev/... are already on by
+  # default in the node_exporter binary and need no flag. Host-specific
+  # exporters (postgres, etc.) stay declared in their own host files; this only
+  # covers the node exporter every host shares.
+  services.prometheus.exporters.node = {
+    enable = true;
+    enabledCollectors = ["systemd" "processes" "interrupts" "ntp"];
+  };
+
   # Mosh (mobile shell) for roaming/high-latency phone access. It bootstraps over
   # SSH, then switches to its own UDP protocol. openFirewall = true opens the
   # mosh UDP range (60000-61000) on every interface. Connect via the host's

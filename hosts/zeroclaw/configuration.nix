@@ -51,11 +51,6 @@
   # OCI container with no host-filesystem presence).
   environment.systemPackages = with pkgs; [claude-code opencode];
 
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   services.caddy = {
     enable = true;
 
