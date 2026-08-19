@@ -43,15 +43,9 @@
   };
   networking.defaultGateway = "192.168.2.1";
 
-  # Prometheus exporters
-  services.prometheus = {
-    exporters.node = {
-      enable = true;
-      enabledCollectors = ["systemd" "processes"];
-    };
-    # Postgres exporter is configured in ./uptime-forge/default.nix
-    # because it needs access to agenix secrets for the connection string
-  };
+  # Postgres exporter is configured in ./uptime-forge/default.nix because it
+  # needs access to agenix secrets for the connection string. The node
+  # exporter is enabled fleet-wide by modules/common.nix.
 
   # Ship the axon-gateway container journal to the central Loki.
   services.loki-logs = {

@@ -527,16 +527,11 @@ in {
     '';
   };
 
-  # Prometheus exporter
-  services.prometheus = {
-    exporters.postgres = {
-      enable = true;
-      runAsLocalSuperUser = true;
-    };
-    exporters.node = {
-      enable = true;
-      enabledCollectors = ["systemd" "processes"];
-    };
+  # Postgres exporter. The node exporter is enabled fleet-wide by
+  # modules/common.nix.
+  services.prometheus.exporters.postgres = {
+    enable = true;
+    runAsLocalSuperUser = true;
   };
 
   # Ship the PostgreSQL journal to the central Loki.
