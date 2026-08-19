@@ -230,7 +230,27 @@
       root = "~/code/pve-nixos-homelab";
       focus = true;
     }
-    {root = "~/code/nixos-ventara-ai";}
+    {
+      root = "~/code/nixos-ventara-ai";
+      tabs = [
+        {
+          label = "lazygit";
+          command = "lazygit";
+        }
+        {
+          label = "claude";
+          command = "claude";
+        }
+        {
+          label = "opencode";
+          command = "opencode";
+        }
+        {
+          label = "shell";
+          command = "zsh";
+        }
+      ];
+    }
     {root = "~/code/obsidian-kb";}
     {root = "~/code/rust/surrealdb-engram";}
     {root = "~/code/homelab-mcps";}
@@ -258,23 +278,24 @@
   # top-level `workspaces:`, breaking the YAML) only for the focus workspace.
   # Plain string concatenation of literal, pre-indented lines has no such
   # static/dynamic mismatch to trip over.
-  spreaderTabsLines =
+  spreaderTabsLines = tabs:
     ["  tabs:"]
     ++ builtins.concatMap (t: [
       "    - label: ${t.label}"
       "      panes:"
       "        - command: ${t.command}"
     ])
-    spreaderTabList;
+    tabs;
 
   spreaderWorkspace = workspace: let
+    tabs = workspace.tabs or spreaderTabList;
     lines =
       [
         "- name: ${builtins.baseNameOf (lib.removeSuffix "/" workspace.root)}"
         "  root: ${workspace.root}"
       ]
       ++ lib.optional (workspace.focus or false) "  focus: true"
-      ++ spreaderTabsLines;
+      ++ spreaderTabsLines tabs;
   in
     builtins.concatStringsSep "\n" lines + "\n";
 
