@@ -249,11 +249,6 @@
       };
     };
 
-    exporters.node = {
-      enable = true;
-      enabledCollectors = ["systemd" "processes"];
-    };
-
     # Targets are addressed by their *.homelab.local names (records live in
     # hosts/dns/configuration.nix) rather than raw IPs, so a re-IP is a one-line
     # change there instead of an edit in both places.
