@@ -100,7 +100,7 @@
 
     # Woodpecker CI (wpmcp-server on the mcp_vm host, standalone there).
     [[backends]]
-    name = "wp"
+    name = "woodpecker"
     url = "https://wp-mcp.homelab.local/mcp"
     transport = "http"
     enabled = true
