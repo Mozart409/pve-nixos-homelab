@@ -812,7 +812,12 @@ resource "proxmox_virtual_environment_vm" "cache_vm" {
   }
 
   disk {
-    datastore_id = "zfs_pool"
+    # Moved from zfs_pool to ssd_pool on 2026-08-19 (manual `qm move-disk`,
+    # outside tofu) — the shared 2-HDD zfs_pool caps out around ~78 IOPS
+    # cluster-wide and was the root cause of attic's earlier SQLite lock
+    # contention (see hosts/cache/attic/default.nix). datastore_id here just
+    # documents where the disk now lives; it does not itself trigger a move.
+    datastore_id = "ssd_pool"
     file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
     size         = 200
