@@ -14,7 +14,7 @@
   comin,
   hostname,
 }: {
-  imports = [comin.nixosModules.comin ./attic-push.nix];
+  imports = [comin.nixosModules.comin ./attic-push.nix ./loki-logs.nix];
 
   services.comin = {
     enable = true;
@@ -30,6 +30,21 @@
         # operation defaults to "switch" (merge = deploy). Per-host testing
         # branches (testing-<hostname>, operation "test") stay available.
         branches.main.name = "main";
+      }
+    ];
+  };
+
+  # Ship comin's own journal to the central Loki. This is the one import point
+  # common to every comin host, so `comin status`-equivalent visibility (fetch/
+  # eval/deploy results, the eval-failed-under-memory-pressure pattern from
+  # 2026-08-19) is queryable centrally instead of needing SSH per host. See
+  # ./attic-push.nix for the matching attic-login/attic-push-system units.
+  services.loki-logs = {
+    enable = true;
+    units = [
+      {
+        unit = "comin.service";
+        job = "comin";
       }
     ];
   };
