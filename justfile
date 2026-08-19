@@ -62,6 +62,7 @@ deploy host ip:
 alias ca := colmena-apply
 alias cah := colmena-apply-host
 alias cb := colmena-build
+alias cs := colmena-current-system
 
 colmena-apply: clear
   @echo "Deploying to all hosts..."
@@ -86,6 +87,10 @@ colmena-build: clear
 colmena-reboot host: clear
   @echo "Rebooting {{host}}..."
   colmena exec --on {{host}} -- sudo reboot
+
+colmena-current-system host: clear
+  @echo "Current system on {{host}}:"
+  colmena exec --on {{host}} -- readlink -f /run/current-system
 
 colmena-status: clear
   @echo "Checking host status..."
