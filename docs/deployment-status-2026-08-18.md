@@ -57,6 +57,12 @@ succeeds.
 
 ## Still To Deploy
 
+- `otel` — comin-agent inactive, needs manual `colmena apply` or service start
+- `containers` — comin-agent inactive, needs manual `colmena apply` or service start
+- `dns` — comin-agent inactive, needs manual `colmena apply` or service start
+- `mcp` — comin-agent inactive, needs manual `colmena apply` or service start
+- `fleet` — comin-agent inactive, needs manual `colmena apply` or service start
+- `cache` — comin-agent inactive, needs manual `colmena apply` or service start
 - `database`
 - `unifi`
 - `ca`
