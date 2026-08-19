@@ -4,6 +4,12 @@
   pkgs,
   ...
 }: {
+  # loki-logs.nix is already imported transitively via modules/comin.nix (the
+  # only importer of this file), but imported again here too so this module
+  # stays self-contained if that ever changes — duplicate imports of the same
+  # path are deduplicated by the module system.
+  imports = [./loki-logs.nix];
+
   # Attic push token for the `homelab` cache (plain JWT, NOT KEY=value — it is
   # passed as a positional argument to `attic login`, not sourced as env).
   # Pulling needs no credential (modules/attic-cache.nix, public cache); this
@@ -66,4 +72,19 @@
   '';
 
   environment.systemPackages = [pkgs.attic-client];
+
+  # Ship this host's push-client logs to the central Loki. Job names are
+  # "attic-login"/"attic-push", distinct from the "attic" job used by the
+  # atticd SERVER daemon (hosts/cache/attic/default.nix) — the cache host runs
+  # both, and they'd otherwise collide under the same job label.
+  services.loki-logs.units = [
+    {
+      unit = "attic-login.service";
+      job = "attic-login";
+    }
+    {
+      unit = "attic-push-system.service";
+      job = "attic-push";
+    }
+  ];
 }
