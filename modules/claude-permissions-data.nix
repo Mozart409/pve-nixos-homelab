@@ -111,6 +111,11 @@
     # internal-dashboard is added per-host and exposes its full tool set too.
     "mcp__axon-gateway__*"
     "mcp__internal-dashboard__*"
+    # ventara-gateway (modules/coding-harness.nix) is the separate
+    # nixos-ventara-ai deployment's own axon-gateway instance, aggregating
+    # that repo's Prometheus/Loki MCP servers and internal-dashboard's own
+    # MCP endpoint.
+    "mcp__ventara-gateway__*"
 
     # Service and log inspection. AGENTS.md §5's post-deploy checklist is built
     # on `journalctl -u <unit>` and `systemctl status`, but neither had a rule
