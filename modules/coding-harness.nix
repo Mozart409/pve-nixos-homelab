@@ -21,6 +21,21 @@
       # below for where that env var actually gets set.
       tokenEnvVar = "AXON_GATEWAY_TOKEN";
     };
+    # The Ventara deployment's own axon-gateway instance (nixos-ventara-ai
+    # repo, services/axon-gateway) -- a SEPARATE gateway from the one above,
+    # aggregating that repo's own backends (Prometheus/Loki MCP servers,
+    # internal-dashboard's built-in MCP endpoint). Reached over the shared
+    # Tailscale tailnet, not the homelab LAN, hence the .ts.net URL rather
+    # than a *.homelab.local one.
+    #
+    # "axon-gateway-env" was already taken by the entry above, so this one's
+    # token lives in its own secret (ventara-gateway-env, see
+    # hasVentaraGatewayKey below) under its own env var name -- the two
+    # tokens are unrelated and must not collide in the shell environment.
+    ventara-gateway = {
+      url = "https://ventara-vm01.dropbear-butterfly.ts.net:8093/mcp";
+      tokenEnvVar = "VENTARA_GATEWAY_TOKEN";
+    };
   };
 
   # opencode's own "plugin" config key (npm package names) and Claude Code's
@@ -229,6 +244,12 @@
   # evaluation fails.
   hasOpencodeKey = config.age.secrets ? opencode-zen-key;
 
+  # Same gating rationale as hasOpencodeKey above: only hosts that need the
+  # ventara-gateway MCP entry to actually authenticate declare this secret
+  # (currently just development); everywhere else the reference below must
+  # not be evaluated at all, or eval fails with "attribute ... missing".
+  hasVentaraGatewayKey = config.age.secrets ? ventara-gateway-env;
+
   applyOpencodeAuth = lib.optionalString hasOpencodeKey ''
     secret=${config.age.secrets.opencode-zen-key.path}
     authfile="${home}/.local/share/opencode/auth.json"
@@ -328,11 +349,19 @@ in {
   # are launched by hand. Gated on readability so it's a silent no-op for
   # any user other than the secret's owner (each importing host must declare
   # `age.secrets.axon-gateway-env` with `owner = "amadeus";`).
-  environment.interactiveShellInit = ''
-    if [ -r "${config.age.secrets.axon-gateway-env.path}" ]; then
-      set -a
-      . "${config.age.secrets.axon-gateway-env.path}"
-      set +a
-    fi
-  '';
+  environment.interactiveShellInit =
+    ''
+      if [ -r "${config.age.secrets.axon-gateway-env.path}" ]; then
+        set -a
+        . "${config.age.secrets.axon-gateway-env.path}"
+        set +a
+      fi
+    ''
+    + lib.optionalString hasVentaraGatewayKey ''
+      if [ -r "${config.age.secrets.ventara-gateway-env.path}" ]; then
+        set -a
+        . "${config.age.secrets.ventara-gateway-env.path}"
+        set +a
+      fi
+    '';
 }

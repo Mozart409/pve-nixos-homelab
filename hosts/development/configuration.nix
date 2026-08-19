@@ -210,6 +210,17 @@
     mode = "0400";
   };
 
+  # Ventara gateway MCP bearer token (file contains
+  # VENTARA_GATEWAY_TOKEN=...) -- the separate nixos-ventara-ai axon-gateway
+  # instance registered in modules/coding-harness.nix as "ventara-gateway".
+  # Its value must equal that repo's own AXON_GATEWAY_TOKEN
+  # (secrets/axon-gateway-env.age there); see that repo for how it's minted.
+  age.secrets.ventara-gateway-env = {
+    file = ../../secrets/ventara-gateway-env.age;
+    owner = "amadeus";
+    mode = "0400";
+  };
+
   # opencode-zen provider key (env-file: OPENCODE_ZEN_API_KEY=...). Declared
   # under the generic `opencode-zen-key` attribute that modules/coding-harness.nix
   # looks for, while the file itself is per-host — every consumer gets its own
