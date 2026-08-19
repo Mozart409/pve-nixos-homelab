@@ -48,12 +48,6 @@
     k9s
   ];
 
-  # Prometheus node exporter
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   # Firewall configuration
   networking.firewall = {
     enable = true;

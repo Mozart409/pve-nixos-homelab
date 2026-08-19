@@ -145,12 +145,6 @@
     };
   };
 
-  # Prometheus node exporter
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   # Caddy reverse proxy with Tailscale TLS
   services.caddy = {
     enable = true;

@@ -288,12 +288,6 @@ in {
   };
   networking.defaultGateway = "192.168.2.1";
 
-  # Node exporter for Prometheus monitoring
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   # Ship selected hermes-related daemon journals to the central Loki.
   services.loki-logs = {
     enable = true;

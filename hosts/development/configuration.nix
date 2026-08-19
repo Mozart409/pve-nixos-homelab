@@ -41,12 +41,6 @@
   };
   networking.defaultGateway = "192.168.2.1";
 
-  # Node exporter for Prometheus monitoring
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   # Compressed RAM swap, as the first line of defence under memory pressure.
   #
   # The only other swap here is the 4 GB btrfs swapfile from

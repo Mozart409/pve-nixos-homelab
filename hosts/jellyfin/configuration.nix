@@ -147,12 +147,6 @@
   # Give Caddy access to Tailscale socket for cert fetching
   systemd.services.caddy.serviceConfig.BindPaths = "/var/run/tailscale/tailscaled.sock";
 
-  # Prometheus exporters
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   # Firewall configuration
   networking.firewall = {
     enable = true;

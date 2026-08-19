@@ -118,12 +118,6 @@
     compression = "zstd";
   };
 
-  # Prometheus exporters
-  services.prometheus.exporters.node = {
-    enable = true;
-    enabledCollectors = ["systemd" "processes"];
-  };
-
   # Ship the Forgejo journal to the central Loki.
   services.loki-logs = {
     enable = true;
