@@ -81,6 +81,7 @@ in {
   "tailscale-auth-key.age".publicKeys = users;
   "terraform-state-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostDatabase];
   "uptime-forge-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostContainers];
+  "ventara-gateway-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostDevelopment];
   "woodpecker-agent-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostWoodpecker]; # WOODPECKER_AGENT_SECRET only; must match the server's byte-for-byte
   "woodpecker-mcp-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostMcp]; # WP_TOKEN for wpmcp-server; a Woodpecker personal access token
   "woodpecker-metrics-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostOtel]; # bare bearer token for prometheus; same value as WOODPECKER_PROMETHEUS_AUTH_TOKEN in woodpecker-server-env.age
