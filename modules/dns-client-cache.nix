@@ -88,6 +88,22 @@ lib.mkIf (config.networking.hostName != "homelab-dns") {
           name = "internal.";
           forward-addr = ["192.168.2.145" "192.168.2.1"];
         }
+        # Tailscale's tailscaled normally self-inserts 100.100.100.100 (its
+        # own MagicDNS resolver, always reachable locally over tailscale0)
+        # into /etc/resolv.conf at runtime, on top of whatever
+        # `networking.nameservers` says. Overriding `networking.nameservers`
+        # below regenerates resolv.conf on activation and can race/clobber
+        # that dynamic entry -- confirmed live: `git push` (over the Tailscale
+        # SSH remote) failed to resolve its *.ts.net host right after this
+        # module's first deploy, while `dig @100.100.100.100` for the same
+        # name answered fine (Tailscale itself was healthy; only the default
+        # resolution path was broken). Forwarding "ts.net." explicitly here
+        # makes this host's own MagicDNS resolution correct by construction
+        # instead of depending on tailscaled's self-healing race.
+        {
+          name = "ts.net.";
+          forward-addr = ["100.100.100.100"];
+        }
       ];
     };
   };
