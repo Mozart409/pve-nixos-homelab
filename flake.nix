@@ -814,6 +814,8 @@
           [
             # keep-sorted start
 
+            # IaC
+
             agenixPkg
             alejandra
             bacon
@@ -838,12 +840,12 @@
             opentofu
             podman-compose
             podman-tui
+            pwgen
             rainfrog
             rust-analyzer
             rustc
             # k8s
             timoni
-            # IaC
             tofu-ls
 
             # keep-sorted end
