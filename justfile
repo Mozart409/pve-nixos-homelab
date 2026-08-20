@@ -96,6 +96,15 @@ colmena-status: clear
   @echo "Checking host status..."
   colmena exec -- uptime
 
+# Deploy the CURRENT host without SSH: builds into the local nix store and
+# switches in place. Run this ON the host itself — e.g. from development, where
+# colmena's SSH push to development.homelab.local fails because that name does
+# not resolve from itself. Runs the same agenix + home-manager activation as
+# colmena-apply-host.
+self-deploy host="development":
+  @echo "Self-deploying {{host}} with nixos-rebuild switch (no SSH)..."
+  sudo nixos-rebuild switch --flake .#{{host}}
+
 # OpenTofu/IaC commands (run in iac/ directory)
 [working-directory: 'iac']
 iac-init: clear
