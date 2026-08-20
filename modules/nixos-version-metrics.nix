@@ -6,11 +6,21 @@
 }: let
   textfileDir = "/var/lib/node_exporter/textfile";
 
+  # Activation scripts can run with a minimal PATH that doesn't reliably
+  # include environment.systemPackages (gnused is installed system-wide, but
+  # that alone isn't enough here) -- e.g. `sudo switch-to-configuration
+  # switch` inherits sudo's sanitized `secure_path`, not
+  # /run/current-system/sw/bin. Surfaced live as "sed: command not found"
+  # during a manual activation on 2026-08-20 (uncertain whether a normal
+  # comin/colmena-driven apply, running as root without going through sudo,
+  # would hit this the same way -- but referencing the store path directly is
+  # the standard, unconditionally-correct pattern for anything invoked from
+  # system.activationScripts regardless).
   generationScript = ''
     gen=0
     system_link=$(readlink -f /run/current-system 2>/dev/null || echo "")
     if [ -n "$system_link" ]; then
-      gen=$(echo "$system_link" | sed 's/.*-system-//')
+      gen=$(echo "$system_link" | ${pkgs.gnused}/bin/sed 's/.*-system-//')
     fi
     echo "$gen"
   '';
