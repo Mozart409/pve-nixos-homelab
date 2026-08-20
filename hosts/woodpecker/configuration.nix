@@ -37,6 +37,7 @@ in {
     ../../modules/osquery.nix
     ../../modules/podman.nix
     ../../modules/loki-logs.nix
+    ../../modules/caddy-http3.nix
   ];
 
   networking.hostName = "homelab-woodpecker";

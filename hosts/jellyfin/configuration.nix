@@ -13,6 +13,7 @@
     ../../modules/loki-logs.nix
     # Podman + oci-containers backend for the hofvarpnir container below.
     ../../modules/podman.nix
+    ../../modules/caddy-http3.nix
     # Declaratively pinned SSO/OIDC plugin (Pocket ID auth).
     ./sso-plugin.nix
     # Declaratively themed web client (overrides services.jellyfin.package).

@@ -9,6 +9,7 @@
     ../../modules/disko-config.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
+    ../../modules/caddy-http3.nix
   ];
 
   # Fleet MySQL password

@@ -12,6 +12,7 @@
     ../../modules/osquery.nix
     ../../modules/loki-logs.nix
     ../../modules/podman.nix
+    ../../modules/caddy-http3.nix
     ./uptime-forge
     ./albyhub
     ./open-webui

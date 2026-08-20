@@ -10,6 +10,7 @@
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
+    ../../modules/caddy-http3.nix
   ];
 
   # Allow unfree packages (required for UniFi controller)

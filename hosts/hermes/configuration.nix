@@ -272,6 +272,7 @@ in {
     ../../modules/loki-logs.nix
     ../../modules/moshi-hook.nix
     ./moshi-hook.nix
+    ../../modules/caddy-http3.nix
   ];
 
   networking.hostName = "homelab-hermes";
