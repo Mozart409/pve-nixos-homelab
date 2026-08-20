@@ -622,7 +622,7 @@ port 9000. Two setup steps live outside the repo:
    `WOODPECKER_FORGEJO_SECRET`.
 2. **`WOODPECKER_AGENT_SECRET` must be identical** in
    `woodpecker-server-env.age` and `woodpecker-agent-env.age`
-   (`openssl rand -hex 32`). A mismatch shows up only as the agent failing to
+   (`pwgen -sc 48 1`). A mismatch shows up only as the agent failing to
    register — the server starts fine and the UI looks healthy but no pipeline
    ever picks up.
 
