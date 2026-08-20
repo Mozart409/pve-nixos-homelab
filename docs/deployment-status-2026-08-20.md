@@ -1,14 +1,16 @@
 # Deployment Status — 2026-08-20
 
-Snapshot of the comin/colmena fleet as of 2026-08-20, ~11:45 CEST. Supersedes
-`docs/deployment-status-2026-08-18.md` (deleted; git history has the full
-blow-by-blow if needed).
+Snapshot of the comin/colmena fleet as of 2026-08-20, ~15:00 CEST (refreshed
+with a concrete per-host store-path drift check; the ~11:45 snapshot's rollout
+claims below were inferred from Loki and only partially held up under direct
+verification). Supersedes `docs/deployment-status-2026-08-18.md` (deleted; git
+history has the full blow-by-blow if needed).
 
-This is the **Comin deployment**. Once Comin is active on a VM, that VM polls
-the canonical Forgejo Git repository and applies updates from `main`
-automatically — no manual deployment needed once bootstrapped.
+This is the **Comin deployment**, with **colmena as the manual push path for
+hosts that need human action**. Once Comin is active on a VM, that VM polls the
+canonical Forgejo Git repository and applies updates from `main` automatically.
 
-## `main` HEAD: `cfc382f`
+## `main` HEAD: `98f29e7`
 
 Commits landed on `main` today, on top of yesterday's `9cd05ec`:
 
@@ -20,6 +22,11 @@ Commits landed on `main` today, on top of yesterday's `9cd05ec`:
 | `5552b2e` | `feat(dns)`: local unbound client-cache + staggered comin polling | First cut — see below, needed 3 follow-up fixes. |
 | `1cf6a66` | `chore(docs)`: deployment status update | The doc this one replaces. |
 | `3ff0a83`, `a89c96d`, `28ce2fa`, `cfc382f` | `fix(dns)` / `fix(metrics)` ×4 | Follow-up fixes to `5552b2e`, see below. |
+| `3104f60` | `docs`: replace deployment status with this doc's 11:45 snapshot | Docs only; no Nix effect. |
+| `98f29e7` | `fix(iac)`: raise harbor memory to 2GiB, ballooning off | Harbor wedged on 2026-08-20 when Proxmox ballooned the VM down to 768 MiB (`floating=768` < the memory harbor's containers actually need). `dedicated = floating = 2048` so the balloon can never shrink it. IaC only — requires `tofu apply`, does **not** touch harbor's system closure. |
+
+No Nix config changed between `cfc382f` and `98f29e7` — so a host caught up to
+`cfc382f` is, at the Nix level, caught up to `main` HEAD.
 
 ### The DNS client-cache saga (`5552b2e` → `cfc382f`)
 
@@ -66,56 +73,103 @@ generated config.
 
 ## Host rollout status
 
-15 of the 17 hosts touched by `4c42656`/`5552b2e` are live `colmenaHive`
-targets (confirmed via `nix eval .#colmenaHive.nodes`); `buildbot-master` and
-`buildbot-worker-1` have no `hostAddrs` entry or hive node, so the change
-lands in their `nixosConfiguration` but nothing will ever deploy it there.
-`zeroclaw` is in the same non-live situation (commented-out hive entry) but
-wasn't touched by these commits.
+15 hosts are live `colmenaHive` targets (confirmed via
+`nix eval .#colmenaHive.nodes`): `ca`, `cache`, `containers`, `database`,
+`development`, `dns`, `fleet`, `forgejo`, `harbor`, `hermes`, `mcp`, `otel`,
+`unifi`, `woodpecker` (plus `jellyfin`, which pings DOWN). `buildbot-master`
+and `buildbot-worker-1` have no `hostAddrs` entry or hive node, so changes land
+in their `nixosConfiguration` but nothing will ever deploy them there.
 
-**Confirmed reaching `cfc382f` (or evaluating a commit in this chain) via
-Loki this session:** `cache`, `mcp`, `containers`, `forgejo`, `otel`,
-`development`. `development` is fully re-verified directly on the host
-(above); the other five were last seen evaluating an *earlier* commit in this
-chain (`4c42656`) and have staggered poll periods now, so their exact
-position in the chain as of `cfc382f` is not re-confirmed — the axon-gateway
-MCP (fronts the Loki queries used for this doc) has been stuck/timing out
-since ~11:15 CEST and hasn't recovered despite a `/mcp` reconnect, so this
-doc could not be refreshed against live logs before writing.
+The original ~11:45 snapshot claimed via Loki that `cache`, `mcp`, `containers`,
+`forgejo`, `otel`, `development` were "reaching `cfc382f`". A direct store-path
+sweep (~15:00) **contradicted most of that** — Loki shows comin *evaluating*
+commits, not that the activation succeeded. This table is authoritative; it was
+produced by comparing `readlink -f /run/current-system` on each host against
+the toplevel closure that `main` currently evaluates to.
 
-**Hosts needing manual attention (`colmena apply --on <host>`), not comin:**
+### ⚠️ Two closure families complicate the comparison
 
-| Host | Why |
-| --- | --- |
-| `hermes` | Comin bootstrap previously reported incomplete (`comin.service` didn't exist). A later reachability sweep found an activated system there anyway — status is genuinely ambiguous, confirm `systemctl status comin` before assuming either way. |
-| `jellyfin` | Unreachable (`No route to host`) as of last check — investigate power/network on the VM before any deploy method will work, comin included. |
-| `database` | Never confirmed comin-active in any check this session or the prior one. |
-| `ca` | SSH banner-exchange hang noted 2026-08-19, never resolved — don't add load until this is understood. |
+`nix build .#nixosConfigurations.<host>` and `nix build
+.#colmenaHive.nodes.<host>...` currently produce **different** toplevel
+closures: the `26.11.20260813.0e251e2` suffix (nixosConfigurations) vs
+`26.11pre-git` (colmenaHive). The hive's `meta.nixpkgs = import nixpkgs` loses
+the flake's `self.rev`/`lastModified`, which nixpkgs embeds in its `version`
+attribute, so the store path necessarily differs even for identical config —
+but that makes the two outputs **not bit-identical closures**. Since comin
+builds `nixosConfigurations` and colmena deploys the hive, the two tools can
+disagree about "up to date" for the same host. Do not decode the suffix alone;
+compare full store paths.
 
-**Unconfirmed either way** (colmenaHive members, `cominFor` applied, but no
-positive `job="comin"` Loki evidence in any check this session — this may
-just mean comin's Loki log-shipping isn't wired for them yet, not that comin
-itself is down): `unifi`, `harbor`, `woodpecker`, `fleet`, `dns`. Worth a
-`just cs <host>` reachability check or a Loki re-query once the gateway
-recovers, rather than assuming either "fine" or "broken."
+### Per-host sweep (against the **hive** closure colmena would push)
+
+| Host | Running (from host) | Matches current `main`? |
+| --- | --- | --- |
+| development | `4qx5987…26.11.20260813.0e251e2` | ✅ matches a current nixosConfiguration-family build |
+| woodpecker | `b7xzb29…26.11.20260813.0e251e2` | ✅ matches current build (deployed manually today) |
+| harbor | `mvcv76wm…26.11pre-git` | ✅ matches current hive closure (deployed manually today) |
+| cache | `vmird4gb…26.11.20260813.0e251e2` | ⚠️ older build, **not** current |
+| containers | `y2sq2pn…26.11pre-git` | ⚠️ older pre-git closure |
+| forgejo | `w764s4x…26.11pre-git` | ⚠️ older pre-git closure |
+| hermes | `3g2h24f…26.11pre-git` | ⚠️ older pre-git closure |
+| otel | `dwq5sddp…26.11pre-git` | ⚠️ older pre-git closure |
+| database | unreachable (SSH timeout) | ❓ unknown — likely stale |
+| dns | unreachable (SSH timeout) | ❓ unknown — likely stale |
+| unifi | unreachable (SSH timeout) | ❓ unknown — likely stale |
+| ca | unreachable (SSH timeout) | ❓ unknown — SSH hang known since 2026-08-19 |
+| fleet | unreachable (SSH timeout) | ❓ unknown |
+| mcp | unreachable (SSH timeout) | ❓ unknown |
+| jellyfin | `No route to host` | 💀 **down** |
+
+**Reachability nuance:** *all* of the "unreachable" hosts above respond to
+`ping` (they are powered and on-LAN); they dropped out at the SSH layer
+(connect timeout on port 22), so this is an SSH/DNS-deploy-path problem, not
+powered-off VMs. `dns` is the resolver every other host depends on — its own
+SSH being unreachable while ping works is the single most concerning item in
+this list (same symptom family as the `ca` 08-19 banner-exchange hang).
+
+### Where things stand
+
+- **Up to date (3):** `development`, `woodpecker`, `harbor`. Woodpecker and
+  harbor were pushed manually today via `colmena apply` — the only hosts this
+  session directly converged.
+- **Stale (5):** `cache`, `containers`, `forgejo`, `hermes`, `otel` — all
+  running closures older than the DNS-saga chain (`5552b2e`→`cfc382f`). Their
+  comin poll did not land the chain despite Loki showing evaluations.
+- **Unknown (6):** `database`, `dns`, `unifi`, `ca`, `fleet`, `mcp` — SSH is
+  unreachable, so neither comin *nor* colmena can converge them until that is
+  fixed. **`dns` first** (it is the resolver everything else trusts).
+- **Down (1):** `jellyfin` — no route to host; VM off or networking down.
+
+**Recommended next action:** fix SSH to `dns` (and the other unreachables), then
+`just colmena-apply` — the 5 stale hosts should converge on their own after
+`dns` is healthy, and the unknowns become visible.
 
 ## Known open items
 
-- **axon-gateway MCP stuck** since ~11:15 CEST — every tool group times out
-  or fails DNS resolution, survived a `/mcp` reconnect. Needs investigation
-  independent of anything above (the underlying DNS fix is confirmed correct
-  by direct host-level testing, so this looks like a separate gateway/process
-  issue, not a recurrence of the DNSSEC bug).
-- **Recurring forgejo pull failures**: two occurrences now (2026-08-19
-  isolated 502s on `cache`/`containers`; 2026-08-20 09:52–10:05 six-host
-  burst with mixed DNS/TLS/502 errors, `forgejo` itself failing to resolve
-  its own name). Root cause not identified — could be the `dns` host or
-  forgejo's Caddy vhost under transient load. Watch for a third occurrence.
+- **SSH layer unreachable on 6 hosts despite ping UP** (`database`, `dns`,
+  `unifi`, `ca`, `fleet`, `mcp`) — same symptom family as the `ca` 08-19
+  banner hang, now widespread. Investigate SSH daemon / fail2ban / network path
+  (Tailscale vs LAN) before anything deploy-shaped.
+- **jellyfin down** — `No route to host`. VM may be off; matches the earlier
+  snapshot.
+- **Harbor memory fix is IaC-side only** — `98f29e7` needs `tofu apply` to
+  actually take effect on the VM (currently pending in `iac/`).
+- **Recurring forgejo pull failures**: two occurrences now (2026-08-19 isolated
+  502s on `cache`/`containers`; 2026-08-20 09:52–10:05 six-host burst with mixed
+  DNS/TLS/502 errors, `forgejo` itself failing to resolve its own name). Root
+  cause not identified — could be the `dns` host or forgejo's Caddy vhost under
+  transient load. Watch for a third occurrence.
 - **HTTP/3 not smoke-tested anywhere yet.** Opening UDP/443 doesn't confirm
   Caddy is negotiating `h3` — check per-host with:
   ```bash
   curl --http3 -v https://<vhost> 2>&1 | grep -i "using http/3\|alt-svc"
   ```
+- **`attic-push-system` stale unit warning** surfaced on woodpecker's
+  deploy ("Unit not found") — harmless stale trigger, not a live failure.
+- **Resolved since the 11:45 snapshot:** the axon-gateway MCP health — it
+  recovered and served this session's Loki/prometheus queries fine; the earlier
+  "stuck" report was transient. (Axon-gateway MCP listed here as previously
+  degraded 2026-08-20 ~11:15–13:00.)
 
 ## Reference: live verification commands
 
