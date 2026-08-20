@@ -15,6 +15,7 @@
     # pushed to attic and substituted from there instead.
     ./attic-cache.nix
     ./nixos-version-metrics.nix
+    ./dns-client-cache.nix
   ];
 
   # Timezone configuration
