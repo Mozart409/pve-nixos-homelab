@@ -343,9 +343,14 @@ resource "proxmox_virtual_environment_vm" "harbor_vm" {
     type  = "host"
   }
 
+  # Ballooning shrank this VM to its 768 MiB floating floor under host memory
+  # pressure (pve-gigabyte is oversubscribed), starving colmena activation:
+  # load spiked to 21, systemd-logind's connection to systemd wedged, and every
+  # deploy failed with "Unable to list users with logind" (exit 4). Locking
+  # floating = dedicated keeps the guaranteed 2 GiB and prevents the wedge.
   memory {
-    dedicated = 1536
-    floating  = 768
+    dedicated = 2048
+    floating  = 2048
   }
 
   disk {
