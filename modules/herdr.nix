@@ -230,27 +230,7 @@
       root = "~/code/pve-nixos-homelab";
       focus = true;
     }
-    {
-      root = "~/code/nixos-ventara-ai";
-      tabs = [
-        {
-          label = "lazygit";
-          command = "lazygit";
-        }
-        {
-          label = "claude";
-          command = "claude";
-        }
-        {
-          label = "opencode";
-          command = "opencode";
-        }
-        {
-          label = "shell";
-          command = "zsh";
-        }
-      ];
-    }
+    {root = "~/code/nixos-ventara-ai";}
     {root = "~/code/obsidian-kb";}
     {root = "~/code/rust/surrealdb-engram";}
     {root = "~/code/homelab-mcps";}
@@ -311,7 +291,7 @@
     spreaderWorkspaces;
 
   spreaderLayoutScript =
-    "printf '%s\\n' 'workspaces:' > \\\"$spreader_layout_tmp\\\"\n"
+    "printf '%s\\n' 'workspaces:' > \"$spreader_layout_tmp\"\n"
     + builtins.concatStringsSep "\n" (map (workspace: ''
         if [ -z "${"$spreader_snapshot"}" ] || ! printf '%s' "${"$spreader_snapshot"}" | ${pkgs.jq}/bin/jq -e --arg root "${workspace.root}" \
           '[.result.snapshot.panes[] | select((.cwd == $root) or (.foreground_cwd == $root))] | length == 0' >/dev/null; then
