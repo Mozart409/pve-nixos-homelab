@@ -42,10 +42,50 @@ lib.mkIf (config.networking.hostName != "homelab-dns") {
         serve-expired-client-timeout = 1800;
         # Refresh popular entries just before they expire.
         prefetch = true;
+
+        # unbound auto-configures both "local." (RFC 6762, mDNS) and
+        # "internal." (RFC 9476) as reserved special-use TLDs and answers
+        # them NXDOMAIN internally by default. The homelab runs parallel
+        # `*.homelab.local` and `*.homelab.internal` zones (the latter for
+        # Apple/mDNS clients that force *.local off-DNS, see
+        # hosts/dns/configuration.nix), so both need overriding or this stub
+        # breaks the moment any host's `networking.nameservers` points at it.
+        #
+        # Getting this right needs BOTH pieces below -- confirmed by actually
+        # running the built config through `unbound -d -c ...` and `dig`
+        # against it, not just a green build (Nix happily writes a config
+        # that never starts, and a config that starts but silently NXDOMAINs
+        # everything under these TLDs):
+        #   1. `local-zone: <tld> transparent` here, to suppress unbound's
+        #      built-in default handling for the reserved TLD (its presence,
+        #      not really its type, is what matters -- omit it and unbound's
+        #      instant built-in NXDOMAIN wins over even a specific
+        #      forward-zone).
+        #   2. A forward-zone specifically for that TLD (below), not just the
+        #      catch-all "." one -- without it, "transparent" falls through
+        #      to real iterative resolution via the internet root servers
+        #      (which genuinely NXDOMAINs, since "local"/"internal" aren't
+        #      real gTLDs) instead of consulting any configured forward-zone.
+        # This MUST live inside `server`, not as a sibling of it -- placed at
+        # the `settings` top level it renders as a bare `local-zone:` line
+        # positioned after `forward-zone:`'s content with nothing to re-open
+        # a clause, which unbound's line-based (indentation-insensitive)
+        # parser reads as still belonging to `forward-zone:` and rejects
+        # with a syntax error (caught with `unbound-checkconf` against the
+        # actual generated /etc/unbound/unbound.conf).
+        local-zone = ["local. transparent" "internal. transparent"];
       };
       forward-zone = [
         {
           name = ".";
+          forward-addr = ["192.168.2.145" "192.168.2.1"];
+        }
+        {
+          name = "local.";
+          forward-addr = ["192.168.2.145" "192.168.2.1"];
+        }
+        {
+          name = "internal.";
           forward-addr = ["192.168.2.145" "192.168.2.1"];
         }
       ];
