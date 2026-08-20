@@ -48,6 +48,7 @@ in {
   "grafana-oidc-secret.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostOtel];
   "grafana-secret-key.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostOtel];
   "harbor-admin-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostHarbor];
+  "harbor-anchore-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostHarbor];
   "harbor-core-secret.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostHarbor];
   "harbor-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostHarbor];
   "harbor-oidc-client-id.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostHarbor];
