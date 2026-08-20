@@ -13,6 +13,7 @@
     ../../modules/podman.nix
     ../../modules/moshi-hook-user.nix
     ../../modules/coding-harness.nix
+    ../../modules/caddy-http3.nix
     ./zeroclaw
   ];
 

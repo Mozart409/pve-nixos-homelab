@@ -40,6 +40,7 @@ in {
     ../../modules/osquery.nix
     ./garage
     ./attic
+    ../../modules/caddy-http3.nix
   ];
 
   networking.hostName = "homelab-cache";

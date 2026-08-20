@@ -10,6 +10,7 @@
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
+    ../../modules/caddy-http3.nix
   ];
 
   networking.hostName = "homelab-buildbot-worker-1";

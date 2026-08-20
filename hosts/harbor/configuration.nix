@@ -11,6 +11,7 @@
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
     ../../modules/podman.nix
+    ../../modules/caddy-http3.nix
     ./harbor
   ];
 
