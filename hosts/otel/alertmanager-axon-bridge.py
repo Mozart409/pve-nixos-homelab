@@ -47,21 +47,15 @@ def format_message(payload):
     """Render an Alertmanager payload as a short push notification body."""
     status = payload.get("status", "unknown").upper()
     alerts = payload.get("alerts", [])
-    name = payload.get("groupLabels", {}).get("alertname") or "alerts"
 
-    marker = "[RESOLVED]" if status == "RESOLVED" else "[FIRING]"
-    lines = [f"{marker} {name} ({len(alerts)})"]
+    emoji = "❌" if status == "FIRING" else "✅"
+    count_suffix = f" ({len(alerts)})" if len(alerts) > 1 else ""
 
+    lines = []
     for alert in alerts[:MAX_LISTED]:
         labels = alert.get("labels", {})
-        summary = alert.get("annotations", {}).get("summary")
-        if summary:
-            lines.append(f"- {summary}")
-        else:
-            # No annotation to lean on: fall back to whatever identifies it.
-            instance = labels.get("instance", "?")
-            job = labels.get("job")
-            lines.append(f"- {instance} ({job})" if job else f"- {instance}")
+        instance = labels.get("instance", "?")
+        lines.append(f"{emoji} {instance}{count_suffix if alert == alerts[0] else ''}")
 
     if len(alerts) > MAX_LISTED:
         lines.append(f"...and {len(alerts) - MAX_LISTED} more")
