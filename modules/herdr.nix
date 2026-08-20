@@ -210,10 +210,10 @@
   # roots below rather than editing the runtime copy. Apply it with:
   #   herdr plugin action invoke herdr-spreader.apply
   #
-  # One workspace per repo checkout, each with the same two tabs in a fixed
-  # order so prefix+1..2 means the same thing everywhere: 1 lazygit, 2 a bare
-  # shell. `homelab` (this repo) is the focused workspace, since it is the one
-  # that deploys the others.
+  # One workspace per repo checkout, each with the same three tabs in a fixed
+  # order so prefix+1..3 means the same thing everywhere: 1 and 2 are bare
+  # shells, 3 is lazygit. `homelab` (this repo) is the focused workspace,
+  # since it is the one that deploys the others.
   #
   # Deliberately does NOT auto-launch claude/opencode: an agent tab per
   # workspace idled at ~4 spreader workspaces was too much resident memory to
@@ -238,12 +238,16 @@
 
   spreaderTabList = [
     {
-      label = "lazygit";
-      command = "lazygit";
+      label = "shell-1";
+      command = "zsh";
     }
     {
-      label = "shell";
+      label = "shell-2";
       command = "zsh";
+    }
+    {
+      label = "lazygit";
+      command = "lazygit";
     }
   ];
 
