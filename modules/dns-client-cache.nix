@@ -74,6 +74,22 @@ lib.mkIf (config.networking.hostName != "homelab-dns") {
         # with a syntax error (caught with `unbound-checkconf` against the
         # actual generated /etc/unbound/unbound.conf).
         local-zone = ["local. transparent" "internal. transparent"];
+
+        # unbound's `validator` module (loaded by default) DNSSEC-validates
+        # every answer, including forwarded ones. None of these zones are
+        # signed -- they're private/reserved namespaces with no real
+        # delegation from the actual root -- so validation can't cleanly
+        # resolve to "insecure" the way it does for a normal unsigned
+        # internet domain and returns SERVFAIL instead of passing the answer
+        # through. This is what was ACTUALLY behind the intermittent
+        # failures chased at length on 2026-08-20 as "network flakiness to
+        # the dns host": confirmed live by re-running a failing query with
+        # `dig +cd` (Checking Disabled, skips validation) against this same
+        # unbound instance -- the SERVFAIL disappeared even though nothing
+        # about the network path changed. `domain-insecure` tells the
+        # validator to skip these zones entirely rather than trying (and
+        # failing) to validate them.
+        domain-insecure = ["local." "internal." "ts.net."];
       };
       forward-zone = [
         {
