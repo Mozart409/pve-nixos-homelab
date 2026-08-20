@@ -3,7 +3,13 @@
   lib,
   pkgs,
   ...
-}: {
+}: let
+  # See the comment on attic-login's restartTriggers below: bump this
+  # whenever attic-push-token.age is intentionally rotated so the next
+  # colmena/comin deploy re-applies it instead of silently keeping a stale
+  # token on hosts where the login unit already succeeded once.
+  secretNonce = "2026-08-20-attic-push-token-rekey";
+in {
   # loki-logs.nix is already imported transitively via modules/comin.nix (the
   # only importer of this file), but imported again here too so this module
   # stays self-contained if that ever changes — duplicate imports of the same
@@ -28,6 +34,15 @@
   # silently lose the ability to push until someone re-ran the command by
   # hand. This oneshot re-applies it on every activation, making the token
   # the only thing that has to survive.
+  #
+  # `RemainAfterExit = true` means NixOS only reruns this unit when its
+  # *generated unit file* changes (or on reboot) — not merely when the
+  # decrypted secret's content changes, since ExecStart references a stable
+  # path (config.age.secrets.attic-push-token.path), not the content. A
+  # `just reencrypt`/`agenix -r` that rotates or widens recipients on
+  # attic-push-token.age therefore does NOT re-run this on hosts where it
+  # already succeeded once — they keep using whatever token was live at
+  # their last activation/boot, silently, until a manual restart or reboot.
   systemd.services.attic-login = {
     description = "Register the homelab attic cache for the amadeus user";
     wantedBy = ["multi-user.target"];
@@ -38,6 +53,7 @@
       User = "amadeus";
       RemainAfterExit = true;
     };
+    restartTriggers = [secretNonce];
     script = ''
       ${pkgs.attic-client}/bin/attic login homelab \
         https://cache.homelab.local/homelab \
