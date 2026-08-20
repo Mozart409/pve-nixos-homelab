@@ -10,7 +10,7 @@
 # host or the network path to it therefore fails every in-flight lookup on
 # every host at once. This hit hard on 2026-08-20: a comin-poll burst caused
 # a ~13 minute run of DNS/forgejo pull failures across six hosts simultaneously
-# (see docs/deployment-status-2026-08-18.md).
+# (see docs/deployment-status-2026-08-20.md).
 #
 # Fix: a tiny local unbound stub-resolver on every OTHER host, forwarding to
 # the `dns` host (then the LAN gateway as fallback). It still queries fresh on
