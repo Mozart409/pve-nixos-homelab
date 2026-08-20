@@ -21,7 +21,7 @@
   # nothing staggers them they can drift into phase and hit it in the same
   # few seconds. That's what turned a routine deploy into a 09:52-10:05 CEST
   # burst of DNS/forgejo pull failures across six hosts on 2026-08-20 (see
-  # docs/deployment-status-2026-08-18.md). Giving each host a distinct period
+  # docs/deployment-status-2026-08-20.md). Giving each host a distinct period
   # makes them drift apart over time instead of staying in phase. Values are
   # arbitrary -- what matters is that every live host has a different one.
   pollerPeriods = {
