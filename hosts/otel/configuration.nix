@@ -171,14 +171,17 @@
         wal.path = "/var/lib/tempo/wal";
         block = {
           bloom_filter_false_positive = 0.05;
-          v2_index_downsample_bytes = 1000;
-          v2_encoding = "zstd";
         };
       };
-      compactor = {
-        compaction = {
-          block_retention = "720h"; # 30 days
-        };
+      # Tempo 3.0 removed the `compactor` component and the v2 block
+      # encoding entirely; compaction is now driven by the backend
+      # worker, so retention moved to `backend_worker.compaction.*`
+      # (tempodb.CompactorConfig), and the `v2_index_downsample_bytes` /
+      # `v2_encoding` block settings no longer exist. Config predates the
+      # 3.0.2 package bump and Tempo's strict decoder rejects unknown
+      # fields, so it never started.
+      backend_worker.compaction = {
+        block_retention = "720h"; # 30 days
       };
       metrics_generator = {
         registry.external_labels = {
