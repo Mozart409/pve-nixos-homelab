@@ -108,8 +108,8 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
         -   Verify with `tofu validate` (if inside `iac/`).
 
 3.  **Verification**:
-    -   Always run `just nixos-check` after modifying Nix files.
-    -   If modifying `flake.nix`, ensure `nix flake check` passes.
+    -   `just fmt` is the required check (see below); `just nixos-check` is
+        optional, not a default step after every Nix edit.
     -   For extensive changes, try a dry-run build (`just nixos-test <host>`).
     -   **`just nixos-check` does NOT gate the colmena deploy.** It only checks
         `nixosConfigurations`, which use `mkHost` — and `mkHost` omits the
