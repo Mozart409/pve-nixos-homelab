@@ -263,6 +263,8 @@
   environment.shellAliases = {
     op = "opencode";
     cl = "claude";
+    spreader = "herdr plugin action invoke herdr-spreader.apply";
+    rename-reset = "herdr plugin action invoke herdr-automatic-rename.reset";
   };
 
   # Development tools for experiments
