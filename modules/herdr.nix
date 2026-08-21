@@ -234,6 +234,7 @@
     {root = "~/code/obsidian-kb";}
     {root = "~/code/rust/surrealdb-engram";}
     {root = "~/code/homelab-mcp-servers";}
+    {root = "~/code/rust/hofvarpnir";}
   ];
 
   spreaderTabList = [
