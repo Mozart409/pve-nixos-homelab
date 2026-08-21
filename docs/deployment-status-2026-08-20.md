@@ -49,10 +49,20 @@ User asked whether `notes.homelab.internal` (FUTO Notes, added `620e00b`,
 2026-08-19) is up on the `containers` host. It is not — traced to a second,
 independent instance of the `dns` host simply not having been redeployed.
 
-`dns` is colmena-push-only (not comin-managed — it can't `git pull` over a
-DNS name that its own resolver is responsible for), so it only advances when
-someone runs `colmena apply`/`just ca` against it specifically. Evidence
-it's stuck on a pre-`620e00b` build:
+**Correction (was wrong here originally):** `dns` is *not* colmena-push-only
+by design — `modules/comin.nix` is imported unconditionally for every real
+host (`flake.nix:443`, `(cominFor "dns")`), same as `database`/`containers`/
+everything else. `database`'s comin is confirmed actively working (Loki:
+repeated `"New commits have been fetched"`, most recently 2026-08-20 23:46) —
+comin fetching/applying automatically is the norm fleet-wide, not the
+exception. `dns` was simply not doing it: Loki has **zero log lines from
+`homelab-dns` for any job**, comin included, going back past 2026-08-19 —
+comin.service (or its log shipping) appears to have not been running, not
+"working as designed but push-only." Root cause not identified; still true
+even in the window right after this morning's redeploy (see below), so
+either comin still isn't running there or its `loki-logs` shipping is
+broken independently — open question, not chased further this session.
+Evidence `dns` was stuck on a pre-`620e00b` build regardless of cause:
 
 - Raw DNS queries direct against `dns` (`192.168.2.145`) for
   `notes.homelab.local`/`.internal` return a clean, consistent **NXDOMAIN**
@@ -242,6 +252,15 @@ this list (same symptom family as the `ca` 08-19 banner-exchange hang).
   snapshot.
 - **Harbor memory fix is IaC-side only** — `98f29e7` needs `tofu apply` to
   actually take effect on the VM (currently pending in `iac/`).
+- **`dns` ships zero logs to Loki for any job (found 2026-08-21).** comin is
+  enabled there like every other host (`flake.nix:443`), but
+  `{host="homelab-dns"}` returns nothing in Loki going back past 2026-08-19,
+  including right after this morning's confirmed-successful `just cah dns`
+  activation. Either comin isn't actually running on `dns` (would explain
+  why it sat on a pre-`620e00b` build until manually pushed today) or its
+  `loki-logs`/fluent-bit shipping is broken independent of that — not
+  distinguished. Check `systemctl status comin fluent-bit` directly on `dns`
+  next time it's reachable.
 - **Recurring forgejo pull failures**: two occurrences now (2026-08-19 isolated
   502s on `cache`/`containers`; 2026-08-20 09:52–10:05 six-host burst with mixed
   DNS/TLS/502 errors, `forgejo` itself failing to resolve its own name). Root
