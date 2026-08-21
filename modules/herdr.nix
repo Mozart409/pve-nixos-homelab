@@ -233,7 +233,7 @@
     {root = "~/code/nixos-ventara-ai";}
     {root = "~/code/obsidian-kb";}
     {root = "~/code/rust/surrealdb-engram";}
-    {root = "~/code/homelab-mcps";}
+    {root = "~/code/homelab-mcp-servers";}
   ];
 
   spreaderTabList = [
