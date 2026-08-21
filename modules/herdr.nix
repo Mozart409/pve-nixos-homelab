@@ -10,6 +10,16 @@
 
   herdrPkg = herdr.packages.${pkgs.stdenv.hostPlatform.system}.herdr;
 
+  # Shared opencode server: every opencode TUI process bundles its own full
+  # embedded server (provider clients, plugin runtime, sqlite handles), and
+  # each idle instance costs ~500MB resident. Session/project data lives in a
+  # shared local DB independent of any particular server process (verified
+  # against the server's own HTTP API: /project and /session already listed
+  # entries from unrelated prior `opencode` runs on first query), so nothing
+  # is lost by pointing every pane at one shared server instead of running N
+  # independent embedded ones. See the `opencode` zsh function below.
+  opencodeServerPort = 44096;
+
   # herdr — terminal workspace manager for AI coding agents (tmux/zellij-class).
   # moshi-hook detects it as a multiplexer, and herdr's own opencode integration
   # reports agent state back into the workspace UI.
@@ -399,6 +409,38 @@ in {
       break
     done
     unset _f
+
+    # Route interactive opencode launches/resumes through one shared server
+    # (see opencodeServerPort's comment in modules/herdr.nix for why this is
+    # safe) instead of each pane spawning its own embedded one. herdr's own
+    # resume flow types `opencode --session <id>` into a real interactive
+    # shell rather than exec'ing the binary directly (src/app/agent_resume.rs
+    # in herdr's source), so this function is exactly as visible to herdr's
+    # resume as it is to a manually-typed `opencode`. Only a bare launch or
+    # the flag set herdr's resume plan actually uses is intercepted; anything
+    # else (subcommands like `auth`/`run`/`models`, or flags `attach` doesn't
+    # support) passes straight through to the real binary untouched.
+    opencode() {
+      case "$1" in
+        ""|--session|-s|--continue|-c|--fork)
+          if ! systemctl --user is-active --quiet opencode-server.service 2>/dev/null; then
+            systemd-run --user --unit=opencode-server --collect \
+              ${pkgs.opencode}/bin/opencode serve --port ${toString opencodeServerPort} --hostname 127.0.0.1 \
+              >/dev/null 2>&1
+            local _oc_tries=0
+            until ${pkgs.curl}/bin/curl -sS -m1 -o /dev/null "http://127.0.0.1:${toString opencodeServerPort}/doc" 2>/dev/null \
+              || [ "$_oc_tries" -ge 40 ]; do
+              sleep 0.25
+              _oc_tries=$((_oc_tries + 1))
+            done
+          fi
+          command opencode attach "http://127.0.0.1:${toString opencodeServerPort}" --dir "$PWD" "$@"
+          ;;
+        *)
+          command opencode "$@"
+          ;;
+      esac
+    }
   '';
 
   # Start the user manager at boot so this runs without a login session.
