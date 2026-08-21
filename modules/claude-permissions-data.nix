@@ -99,6 +99,12 @@
     # deny list still guards the underlying commands.
     "Monitor"
 
+    # Scheduling. These are explicit Claude tools rather than shell sleeps, so
+    # unattended sessions can schedule future work without prompting.
+    "CronCreate"
+    "ScheduleWakeup"
+    "Skill(schedule)"
+
     # MCP servers. Only the tools that are actually used are allowed — dontAsk
     # denies every unlisted MCP call silently, so without a rule a needed tool
     # looks broken rather than permission-blocked. Both server-level wildcards

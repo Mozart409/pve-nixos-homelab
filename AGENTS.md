@@ -803,6 +803,19 @@ writes nothing, so there is no deny case for it; like `WebSearch` it takes no
 path/domain pattern, and it is allow-listed bare in `claude-permissions-data.nix`.
 The deny list still guards whatever the underlying command would do.
 
+### Scheduling is explicitly allowed
+
+Claude's native scheduling tools are allow-listed so unattended sessions can
+create future work without prompting under `defaultMode = "dontAsk"`:
+
+- `CronCreate`
+- `ScheduleWakeup`
+- `Skill(schedule)`
+
+This does not broaden shell execution or change the existing deny list. The
+native scheduling tools are preferred over long `sleep` calls, which remain
+subject to the tooling policy.
+
 ### WebSearch is allowed but domain-restricted (a hook, not a rule)
 
 `WebSearch` is in the allow list, so it works under `dontAsk` — but WebSearch
