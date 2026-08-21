@@ -97,12 +97,22 @@ lib.mkIf (config.networking.hostName != "homelab-dns") {
           forward-addr = ["192.168.2.145" "192.168.2.1"];
         }
         {
+          # dns-host only -- 192.168.2.1 (LAN gateway) has no idea about this
+          # private zone and answers NXDOMAIN rather than failing, which
+          # unbound can't distinguish from a real authoritative answer. Listing
+          # it here caused intermittent wrong-NXDOMAIN flapping for
+          # *.homelab.local names (confirmed 2026-08-21: repeated raw queries
+          # against this resolver alternated between correct answers and
+          # NXDOMAIN while the dns host itself was always correct). Keep the
+          # gateway only on the "." catch-all above, where it's a sane
+          # fallback for real internet lookups.
           name = "local.";
-          forward-addr = ["192.168.2.145" "192.168.2.1"];
+          forward-addr = ["192.168.2.145"];
         }
         {
+          # Same reasoning as "local." above.
           name = "internal.";
-          forward-addr = ["192.168.2.145" "192.168.2.1"];
+          forward-addr = ["192.168.2.145"];
         }
         # Tailscale's tailscaled normally self-inserts 100.100.100.100 (its
         # own MagicDNS resolver, always reachable locally over tailscale0)
