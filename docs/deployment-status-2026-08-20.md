@@ -69,17 +69,26 @@ it's stuck on a pre-`620e00b` build:
   ACME issuance for `notes.homelab.local` couldn't resolve/validate the name
   while `dns` didn't know about it.
 
-**Fix:** redeploy `dns` (user-initiated `colmena apply`). **Attempted
-2026-08-21, did not complete** — `just ca`/`colmena apply` run from
-`development` overloads the host and freezes before anything actually
-deploys. Still open; needs a lighter path (e.g. `just cb dns` to build, then
-apply from a host that isn't itself under load, or a scoped `colmena apply
---on dns`). Once the A record is live, Caddy on `containers` should retry
-issuance on its own; if it doesn't self-heal, restart it manually:
+**Fix — RESOLVED 2026-08-21 ~10:28 CEST.** Full-hive `just ca`/`colmena
+apply` from `development` froze the host and never completed, as noted
+above; the working path was the host-scoped `just cah dns`
+(`colmena-apply-host`), which built/pushed/activated cleanly in ~6 minutes.
+Caddy on `containers` did not self-heal its cert on its own within the wait
+window, so it got the manual nudge:
 
 ```bash
 colmena exec --on containers -- sudo systemctl restart caddy
 ```
+
+**Verified:** DNS queries for `notes.homelab.local`/`.internal` now return
+`NOERROR` (20/20) from both `development`'s local resolver and the `dns`
+host directly. `https://notes.homelab.internal/` and
+`https://notes.homelab.local/` both return `200`, and `notes.homelab.local`
+verifies clean **with** cert validation on (no `-k`) — Caddy successfully
+completed step-ca ACME issuance once the A record was resolvable.
+`just cah <host>` (single-node `colmena-apply-host`) is the better path for
+future `dns`-style deploys from `development` — avoid the full-hive `just
+ca`/`colmena apply` there.
 
 **Bonus finding while checking Loki:** `harbor` and `woodpecker` both show
 intermittent comin pull failures this morning (`lookup forgejo.homelab.local:
@@ -192,7 +201,7 @@ compare full store paths.
 | hermes | `3g2h24f…26.11pre-git` | ⚠️ older pre-git closure |
 | otel | `dwq5sddp…26.11pre-git` | ⚠️ older pre-git closure |
 | database | unreachable (SSH timeout) | ❓ unknown — likely stale |
-| dns | `xr7bw3s…26.11pre-git` (reachable now, confirmed 2026-08-21) | ⚠️ stale — predates `620e00b` (2026-08-19), missing `notes.homelab.*` A records; redeploy attempted 2026-08-21, froze `development` before completing — still open |
+| dns | `g0kh7fvy…26.11pre-git` (redeployed 2026-08-21 via `just cah dns`) | ✅ current — `notes.homelab.*` A records live, verified resolving |
 | unifi | unreachable (SSH timeout) | ❓ unknown — likely stale |
 | ca | unreachable (SSH timeout) | ❓ unknown — SSH hang known since 2026-08-19 |
 | fleet | unreachable (SSH timeout) | ❓ unknown |
