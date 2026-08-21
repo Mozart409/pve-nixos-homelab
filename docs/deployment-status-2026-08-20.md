@@ -10,7 +10,86 @@ This is the **Comin deployment**, with **colmena as the manual push path for
 hosts that need human action**. Once Comin is active on a VM, that VM polls the
 canonical Forgejo Git repository and applies updates from `main` automatically.
 
-## `main` HEAD: `98f29e7`
+## Update — 2026-08-21: DNS forward-zone gateway fix
+
+`192e1e2` (`fix(dns): drop LAN gateway from local./internal. forward-zone`),
+on top of `98f29e7`. Found while diagnosing an unrelated `just self-deploy`
+failure (`nixos-rebuild switch` exit 4 — activation itself succeeded, but
+`switch-to-configuration.pl` reported a unit failure) on `development`.
+
+`modules/dns-client-cache.nix`'s `local.`/`internal.` `forward-zone` entries
+listed both the `dns` host (`192.168.2.145`) and the LAN gateway
+(`192.168.2.1`) as forwarders. Unbound distributes queries across
+`forward-addr` entries by measured RTT, not by which server actually knows
+the zone — so it periodically asked the gateway for `*.homelab.local` /
+`*.homelab.internal` names. The gateway has no idea about those private
+zones and answers **NXDOMAIN** (a valid-looking but wrong response) instead
+of failing, which unbound can't distinguish from a real authoritative
+answer. Confirmed live: 20 repeated raw DNS queries against `development`'s
+local unbound for `development.homelab.local` / `dns.homelab.local` /
+`containers.homelab.local` intermittently returned NXDOMAIN while the same
+queries against the `dns` host directly were correct 100% of the time.
+
+Fix: `local.`/`internal.` now forward to `192.168.2.145` only. The gateway
+stays on the `.` catch-all forward-zone, where it's a legitimate fallback for
+real internet lookups. This module applies to every host except `dns`
+itself, so the same intermittent flapping was live fleet-wide, not just on
+`development`.
+
+**Verified deployed on `development`** (`just self-deploy`, clean run, no
+exit-4 this time — `unbound.service` restarted automatically since
+`unbound.conf`'s content changed): `/run/current-system` →
+`wsg3s868kvdl75hpm3dc0ihhi6j25p9j-nixos-system-homelab-development-26.11.20260813.0e251e2`,
+20/20 correct resolutions post-deploy for all three test names. Fleet-wide
+rollout (comin) not yet confirmed — see Known open items.
+
+## Update — 2026-08-21 (later): `notes.homelab.*` unreachable — `dns` host stale since before `620e00b`
+
+User asked whether `notes.homelab.internal` (FUTO Notes, added `620e00b`,
+2026-08-19) is up on the `containers` host. It is not — traced to a second,
+independent instance of the `dns` host simply not having been redeployed.
+
+`dns` is colmena-push-only (not comin-managed — it can't `git pull` over a
+DNS name that its own resolver is responsible for), so it only advances when
+someone runs `colmena apply`/`just ca` against it specifically. Evidence
+it's stuck on a pre-`620e00b` build:
+
+- Raw DNS queries direct against `dns` (`192.168.2.145`) for
+  `notes.homelab.local`/`.internal` return a clean, consistent **NXDOMAIN**
+  (20/20, no flapping) — the A record from `620e00b` was never loaded, unlike
+  the forwarder-flapping bug above which alternated answers.
+- `containers` itself **is** current — comin last fetched there 2026-08-20
+  23:46 (Loki), and sibling Caddy vhosts on the same host from the same
+  config file (`romm.homelab.internal`, `dashboard.homelab.internal`,
+  `axon.homelab.internal`) all return `200` when hit directly by IP+SNI
+  (`curl --resolve <name>:443:192.168.2.149 ...`, bypassing DNS entirely).
+- `notes.homelab.internal`/`.local` via the same direct-IP method returns a
+  TLS `internal error` alert, not a clean response — Caddy has the vhost
+  configured but is stuck without a valid cert for it, because its step-ca
+  ACME issuance for `notes.homelab.local` couldn't resolve/validate the name
+  while `dns` didn't know about it.
+
+**Fix:** redeploy `dns` (user-initiated `colmena apply`). **Attempted
+2026-08-21, did not complete** — `just ca`/`colmena apply` run from
+`development` overloads the host and freezes before anything actually
+deploys. Still open; needs a lighter path (e.g. `just cb dns` to build, then
+apply from a host that isn't itself under load, or a scoped `colmena apply
+--on dns`). Once the A record is live, Caddy on `containers` should retry
+issuance on its own; if it doesn't self-heal, restart it manually:
+
+```bash
+colmena exec --on containers -- sudo systemctl restart caddy
+```
+
+**Bonus finding while checking Loki:** `harbor` and `woodpecker` both show
+intermittent comin pull failures this morning (`lookup forgejo.homelab.local:
+no such host`, recurring 04:01, 05:55, 08:45–09:39) — the same LAN-gateway
+forwarder-flapping bug fixed by `192e1e2` above, but that fix has so far only
+been deployed to `development` (`self-deploy`), not fleet-wide. Self-limiting
+(comin eventually gets a clean poll through) but worth a `just colmena-apply`
+sweep once `dns` is healthy.
+
+## `main` HEAD: `192e1e2` (was `98f29e7`)
 
 Commits landed on `main` today, on top of yesterday's `9cd05ec`:
 
@@ -113,7 +192,7 @@ compare full store paths.
 | hermes | `3g2h24f…26.11pre-git` | ⚠️ older pre-git closure |
 | otel | `dwq5sddp…26.11pre-git` | ⚠️ older pre-git closure |
 | database | unreachable (SSH timeout) | ❓ unknown — likely stale |
-| dns | unreachable (SSH timeout) | ❓ unknown — likely stale |
+| dns | `xr7bw3s…26.11pre-git` (reachable now, confirmed 2026-08-21) | ⚠️ stale — predates `620e00b` (2026-08-19), missing `notes.homelab.*` A records; redeploy attempted 2026-08-21, froze `development` before completing — still open |
 | unifi | unreachable (SSH timeout) | ❓ unknown — likely stale |
 | ca | unreachable (SSH timeout) | ❓ unknown — SSH hang known since 2026-08-19 |
 | fleet | unreachable (SSH timeout) | ❓ unknown |
@@ -170,6 +249,22 @@ this list (same symptom family as the `ca` 08-19 banner-exchange hang).
   recovered and served this session's Loki/prometheus queries fine; the earlier
   "stuck" report was transient. (Axon-gateway MCP listed here as previously
   degraded 2026-08-20 ~11:15–13:00.)
+- **`nixos_system_generation` metric is broken fleet-wide (found 2026-08-21).**
+  `modules/nixos-version-metrics.nix`'s `generationScript` does
+  `readlink -f /run/current-system | sed 's/.*-system-//'`, which strips the
+  *store path* (leaving e.g. `homelab-development-26.11.20260813.0e251e2`) —
+  not the numeric profile generation the metric claims to be
+  (`# TYPE nixos_system_generation gauge`). node_exporter's textfile
+  collector rejects the whole `nixos.prom` file on this line
+  (`level=ERROR ... text format parsing error ... expected float as value,
+  got "homelab-development-..."`, seen repeatedly in `development`'s journal),
+  so **`nixos_info` and `nixos_system_build_timestamp_seconds` are also
+  silently absent from Prometheus** even though their own lines are
+  well-formed — confirmed via `prom_query` returning an empty vector for all
+  three metrics fleet-wide. This is the tool this doc's own "Reference: live
+  verification commands" section would otherwise use to check per-host
+  rollout without SSH; until fixed, use `just cs <host>` (colmena
+  reachability) instead.
 
 ## Reference: live verification commands
 
