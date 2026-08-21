@@ -297,7 +297,7 @@
   spreaderLayoutScript =
     "printf '%s\\n' 'workspaces:' > \"$spreader_layout_tmp\"\n"
     + builtins.concatStringsSep "\n" (map (workspace: ''
-        if [ -z "${"$spreader_snapshot"}" ] || ! printf '%s' "${"$spreader_snapshot"}" | ${pkgs.jq}/bin/jq -e --arg root "${workspace.root}" \
+        if [ -z "${"$spreader_snapshot"}" ] || printf '%s' "${"$spreader_snapshot"}" | ${pkgs.jq}/bin/jq -e --arg root "${workspace.root}" \
           '[.result.snapshot.panes[] | select((.cwd == $root) or (.foreground_cwd == $root))] | length == 0' >/dev/null; then
           cat ${workspace.file} >> "$spreader_layout_tmp"
           echo "herdr-setup: including workspace ${workspace.root}"
