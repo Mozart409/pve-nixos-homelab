@@ -1,8 +1,17 @@
 {
   config,
   pkgs,
+  nix-ai-tools,
   ...
-}: {
+}: let
+  # crush (charmbracelet/crush) is packaged in nixpkgs too, but is `meta.unfree
+  # = true` there (FSL-1.1-MIT) -- Hydra never builds unfree packages, so it
+  # is unbuilt on both cache.nixos.org and this fleet's own attic cache, and
+  # `pkgs.crush` would compile the Go source on every activation. nix-ai-tools
+  # publishes its own binary cache (cache.numtide.com, wired in below) that
+  # has it prebuilt. See flake.nix's nix-ai-tools input comment.
+  crushPkg = nix-ai-tools.packages.${pkgs.stdenv.hostPlatform.system}.crush;
+in {
   imports = [
     ../../modules/common.nix
     ../../modules/disko-config.nix
@@ -264,8 +273,21 @@
   environment.shellAliases = {
     op = "opencode";
     cl = "claude";
+    cr = "crush";
     spreader = "herdr plugin action invoke herdr-spreader.apply";
     rename-reset = "herdr plugin action invoke herdr-automatic-rename.reset";
+  };
+
+  # nix-ai-tools' own binary cache (see flake.nix's nix-ai-tools input comment
+  # and crushPkg above). nixpkgs declares `substituters`/`trusted-public-keys`
+  # with mkAfter (nixos/modules/config/nix.nix), so this MERGES with the
+  # cache.nixos.org + cache.homelab.local entries from modules/attic-cache.nix
+  # rather than replacing them -- same pattern that module uses. Plain public
+  # CA TLS (unlike cache.homelab.local's step-ca cert), so no extra trust
+  # module is needed here.
+  nix.settings = {
+    substituters = ["https://cache.numtide.com"];
+    trusted-public-keys = ["niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="];
   };
 
   # Development tools for experiments
@@ -278,6 +300,7 @@
     # bun:sqlite, and opencode bootstraps their node_modules on first run.
     bun
     claude-code
+    crushPkg
     curl
     delta
     eza

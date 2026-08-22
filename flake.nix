@@ -63,6 +63,18 @@
       url = "github:herdrdev/herdr/v0.8.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # crush (charmbracelet/crush) and other coding-agent CLIs, curated by
+    # numtide. crush IS packaged in nixpkgs too, but its FSL-1.1-MIT license
+    # makes nixpkgs mark it `meta.unfree = true` -- Hydra never builds unfree
+    # packages, so cache.nixos.org and our own attic cache (modules/attic-cache.nix)
+    # both 404 on it and every host would compile the Go source itself. This
+    # flake publishes its own binary cache (see its `nixConfig` -- niks3 at
+    # cache.numtide.com) that DOES have it prebuilt, wired into
+    # hosts/development below via `nix.settings.substituters`.
+    nix-ai-tools = {
+      url = "github:numtide/nix-ai-tools";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # nixos-unstable (26.11) dropped x86_64-darwin; this pins the last
     # darwin-capable channel for the Intel Mac devShell only.
     nixpkgs-darwin.url = "github:NixOS/nixpkgs/nixpkgs-26.05-darwin";
@@ -84,6 +96,7 @@
     mozart409-nixvim,
     nixos-hardware,
     herdr,
+    nix-ai-tools,
     nixpkgs-darwin,
   }: let
     system = "x86_64-linux";
@@ -291,9 +304,9 @@
         harbor = mkHost "harbor";
         cache = mkHost "cache";
         forgejo = mkHost "forgejo";
-        # Explicit (not mkHost) so `herdr` can be passed via specialArgs.
+        # Explicit (not mkHost) so `herdr`/`nix-ai-tools` can be passed via specialArgs.
         development = nixpkgs.lib.nixosSystem {
-          specialArgs = {inherit herdr;};
+          specialArgs = {inherit herdr nix-ai-tools;};
           modules = [
             {
               nixpkgs.hostPlatform = system;
@@ -391,6 +404,7 @@
             inherit homelab-dashboard;
             inherit nixos-hardware;
             inherit herdr;
+            inherit nix-ai-tools;
           };
         };
 
