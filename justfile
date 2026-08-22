@@ -30,6 +30,13 @@ nixos-test host:
   @echo "Dry building {{host}} configuration..."
   nix build .#nixosConfigurations.{{host}}.config.system.build.toplevel --dry-run
 
+# Boots a real QEMU VM from hosts/<host>/configuration.nix and checks its
+# primary services come up. Heavier than `nixos-test` (a dry-run eval) --
+# see AGENTS.md's "nixosTest Integration Tests" section for scope/limits.
+nixos-test-vm host: clear
+  @echo "Running nixosTest VM for {{host}}..."
+  nix build .#nixosTests.x86_64-linux.{{host}} -L
+
 # DESTRUCTIVE: reinstalls the OS from scratch via nixos-anywhere (disko wipes ALL
 # disks) — only for turning a bare VM into minimal NixOS. Never run against an
 # already-provisioned host; for config changes use colmena-apply-host instead.

@@ -8,7 +8,6 @@ The project uses `just` as a command runner. Always prefer `just` commands over 
 
 ### Core Commands
 - **Check Configuration**: `just nixos-check`
-  - Runs `nix flake check` to verify the validity of all configurations.
 - **Format Code**: `just fmt`
   - Uses `alejandra` to format Nix files.
   - Ensure all Nix files are formatted before committing.
@@ -23,6 +22,22 @@ The project uses `just` as a command runner. Always prefer `just` commands over 
 - **Dry Run**: `just nixos-test <host>`
   - Performs a dry-run build for a specific host.
   - Example: `just nixos-test ferron`
+- **VM Integration Test**: `just nixos-test-vm <host>`
+  - Boots a real QEMU VM from the host's actual `hosts/<host>/configuration.nix`
+    and asserts it reaches `multi-user.target` and its primary services
+    respond (e.g. dns: unbound answers `dig`; otel: prometheus/grafana/loki/
+    otel-collector respond on their ports; database: postgresql accepts
+    connections and ensureDatabases/ensureUsers exist).
+  - Covers `dns`, `otel`, `database` today (`tests/hosts/*.nix`).
+  - This is NOT a substitute for `just colmena-build` -- it deliberately
+    skips comin and the home-manager/nixvim layer (see `tests/lib.nix`) to
+    stay fast and free of real network dependencies. It IS a substitute for
+    manually SSHing into a freshly-deployed host to poke at its services.
+  - Not part of `just check` / `just nixos-check` / any bare `nix flake
+    check` -- these build real QEMU VMs, which is much heavier than the
+    dry-run eval those already do, and is exactly the class of cost this
+    repo has already worked around (see `.woodpecker/nix.yml`). Run it
+    explicitly, and not on every push.
 - **Preview a build without deploying**: `just colmena-build-host <host>`
   - There is no drift/diff recipe; compare `readlink /run/current-system` on the
     host against the path this prints if you need to check what is deployed.
@@ -580,6 +595,52 @@ just reencrypt                  # agenix -r: re-encrypts every secret to current
 ```
 Every host runs Tailscale, so a new host almost always needs adding to the
 `users` list (recipients of `tailscale-auth-key.age`).
+
+### nixosTest Integration Tests: Scope and Secret Fixtures
+
+`tests/` builds real QEMU VMs directly from `hosts/<host>/configuration.nix`
+(`disko.nixosModules.disko` + `agenix.nixosModules.default` added manually,
+mirroring what `mkHost` does -- see `tests/lib.nix`), but skips comin and the
+home-manager/nixvim layer entirely. That's a deliberate scope decision: comin
+needs a real forgejo server and home-manager/nixvim is slow to build, and
+neither is required for `multi-user.target` (comin.service is only
+`wantedBy=multi-user.target`, nothing requires it).
+
+**agenix secrets fail softly in these tests, by design.** A nixosTest VM
+generates fresh, ephemeral SSH host keys, which never match any recipient in
+`secrets/secrets.nix` -- so every real secret fails to decrypt, exactly like
+the "no identity matched any of the recipients" incident above, and boot
+still succeeds (agenix's activation script decrypts each secret independently
+inside one shared `agenixInstall` snippet; a failure only records status, it
+never aborts the loop, so unrelated secrets on the same host are unaffected).
+
+For the 2 secrets whose consuming PRIMARY service the otel test asserts on
+(`grafana-secret-key`, `grafana-oidc-secret` -- grafana reads both via
+`$__file{...}` at startup and won't come up without them), the test instead
+overrides `age.identityPaths` to a dedicated, disposable, committed test-only
+age identity (`tests/fixtures/test-age-identity.txt`) and points just those
+two secrets at dummy values encrypted to its public key
+(`tests/fixtures/secrets/*.age`). This makes agenix's real decrypt pipeline
+succeed for real inside the VM -- not a bypass, the legitimate mechanism.
+Everything else (tailscale-auth-key, axon-gateway-env,
+woodpecker-metrics-token, every database-host role password, pgadmin's
+secrets, osquery's fleet-enroll-secret) is left to fail softly and is never
+asserted on. See `tests/fixtures/README.md` to regenerate.
+
+**Static IPs never take effect.** `hosts/dns`, `hosts/otel`, `hosts/database`
+all set `networking.interfaces.ens18...`, a device that doesn't exist in a
+QEMU test VM. `tests/lib.nix`'s `clearStaticNetworking` module removes just
+that interface definition and `networking.defaultGateway` -- NOT
+`networking.useDHCP`, which must stay untouched so the test framework's own
+auto-provisioned interface still comes up (needed for `network-online.target`,
+a real dependency of e.g. `unbound.service` on dns).
+
+**Network-dependent integrations are expected to be non-functional and are
+never asserted on**: tailscaled-autoconnect, comin's forgejo pull, Caddy's
+step-ca ACME cert issuance (`ca.homelab.local` is unreachable), osquery
+enrollment, `services.loki-logs` shipping to `loki.homelab.local`, the
+alertmanager-axon-bridge webhook relay. None of these block
+`multi-user.target` or the services under test.
 
 ### Jellyfin SSO (OIDC) Behind Caddy: `redirect_uri` Comes Out `http` → "Invalid callback URL"
 

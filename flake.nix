@@ -697,6 +697,13 @@
         # };
         # END
       };
+
+      # Opt-in QEMU integration tests (boot + primary-service availability).
+      # NOT under `checks` -- nix flake check/just check/just nixos-check all
+      # build `checks.*`, and this repo already works around nix-daemon OOM
+      # from full evaluation (AGENTS.md §3/§7); several real VM boots is
+      # heavier still. Invoke explicitly: `just nixos-test-vm <host>`.
+      nixosTests.${system} = import ./tests {inherit nixpkgs disko agenix system;};
     }
     // flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux" "aarch64-darwin" "x86_64-darwin"] (system: let
       # nixos-unstable (26.11) dropped x86_64-darwin, so the Intel Mac devShell
