@@ -294,29 +294,9 @@
   in
     builtins.concatStringsSep "\n" lines + "\n";
 
-  # Spreader always calls `workspace create`; it does not skip a workspace that
-  # is already present. Keep one fragment per workspace so setup can omit roots
-  # that are currently visible in the running herdr session before writing the
-  # config consumed by `herdr-spreader.apply`.
-  spreaderWorkspaceFragments =
-    map (workspace: {
-      root = lib.replaceStrings ["~"] [home] workspace.root;
-      file = pkgs.writeText "herdr-spreader-${builtins.baseNameOf (lib.removeSuffix "/" workspace.root)}" (spreaderWorkspace workspace);
-    })
-    spreaderWorkspaces;
-
-  spreaderLayoutScript =
-    "printf '%s\\n' 'workspaces:' > \"$spreader_layout_tmp\"\n"
-    + builtins.concatStringsSep "\n" (map (workspace: ''
-        if [ -z "${"$spreader_snapshot"}" ] || printf '%s' "${"$spreader_snapshot"}" | ${pkgs.jq}/bin/jq -e --arg root "${workspace.root}" \
-          '[.result.snapshot.panes[] | select((.cwd == $root) or (.foreground_cwd == $root))] | length == 0' >/dev/null; then
-          cat ${workspace.file} >> "$spreader_layout_tmp"
-          echo "herdr-setup: including workspace ${workspace.root}"
-        else
-          echo "herdr-setup: skipping already-open workspace ${workspace.root}"
-        fi
-      '')
-      spreaderWorkspaceFragments);
+  spreaderLayoutFiles = map (workspace:
+    pkgs.writeText "herdr-spreader-${builtins.baseNameOf (lib.removeSuffix "/" workspace.root)}" (spreaderWorkspace workspace))
+  spreaderWorkspaces;
 
   setup = pkgs.writeShellScript "herdr-setup-${user}" (
     ''
@@ -350,19 +330,21 @@
     ''
     + pluginInstallScript
     + ''
-      # Write the generated layout on every activation so folder-derived names
-      # stay current when a workspace root changes. Spreader itself is not
-      # idempotent, so omit roots that already have a live pane in herdr.
+      # Write the full layout on every activation so folder-derived names stay
+      # current when a workspace root changes. There is deliberately NO
+      # "skip roots already open in the running session" guard here: it was
+      # tried and is structurally wrong — this script snapshots at activation
+      # time, but config.yaml is consumed later whenever `herdr-spreader apply`
+      # runs, and session state between the two moments is unrelated (it once
+      # shipped a config with 1 of 6 workspaces because the stale snapshot said
+      # the rest were open). Idempotency belongs at apply time, inside spreader
+      # itself, where live state actually exists.
       spreader_config_dir="${home}/.config/herdr/plugins/config/herdr-spreader"
       mkdir -p "$spreader_config_dir"
       spreader_layout_tmp="$(mktemp "$spreader_config_dir/config.yaml.XXXXXX")"
-      if spreader_snapshot="$(${herdrPkg}/bin/herdr api snapshot 2>/dev/null)"; then
-        echo "herdr-setup: checking open workspaces before generating spreader layout"
-      else
-        spreader_snapshot=""
-        echo "herdr-setup: herdr server unavailable; including all spreader workspaces"
-      fi
-      ${spreaderLayoutScript}
+      printf '%s\n' 'workspaces:' > "$spreader_layout_tmp"
+      ${builtins.concatStringsSep "\n" (map (file: "cat ${file} >> \"$spreader_layout_tmp\"") spreaderLayoutFiles)}
+      echo "herdr-setup: wrote ${toString builtins.length spreaderLayoutFiles} workspaces to $spreader_config_dir/config.yaml"
       install -m0644 "$spreader_layout_tmp" "$spreader_config_dir/config.yaml"
       rm -f "$spreader_layout_tmp"
 
