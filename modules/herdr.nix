@@ -409,12 +409,23 @@ in {
             systemd-run --user --unit=opencode-server --collect \
               ${pkgs.opencode}/bin/opencode serve --port ${toString opencodeServerPort} --hostname 127.0.0.1 \
               >/dev/null 2>&1
+            # A cold-boot start (server binary + plugin node_modules bootstrap)
+            # has been observed taking ~15s end to end, well past a short poll
+            # budget — so this waits up to 60s, and on genuine failure to come
+            # up REFUSES to attach instead of racing an `opencode attach` against
+            # a still-closed port (which fails with an opaque "Unable to
+            # connect" from the opencode CLI itself, indistinguishable from a
+            # real outage).
             local _oc_tries=0
             until ${pkgs.curl}/bin/curl -sS -m1 -o /dev/null "http://127.0.0.1:${toString opencodeServerPort}/doc" 2>/dev/null \
-              || [ "$_oc_tries" -ge 40 ]; do
+              || [ "$_oc_tries" -ge 240 ]; do
               sleep 0.25
               _oc_tries=$((_oc_tries + 1))
             done
+            if [ "$_oc_tries" -ge 240 ]; then
+              echo "opencode: shared server did not come up on 127.0.0.1:${toString opencodeServerPort} within 60s — check 'systemctl --user status opencode-server'" >&2
+              return 1
+            fi
           fi
           command opencode attach "http://127.0.0.1:${toString opencodeServerPort}" --dir "$PWD" "$@"
           ;;
