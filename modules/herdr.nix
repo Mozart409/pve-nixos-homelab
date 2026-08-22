@@ -406,7 +406,18 @@ in {
       case "$1" in
         ""|--session|-s|--continue|-c|--fork)
           if ! systemctl --user is-active --quiet opencode-server.service 2>/dev/null; then
+            # `systemd-run --user` starts the transient unit as a child of the
+            # systemd --user manager, NOT of this shell — so it does not
+            # inherit AXON_GATEWAY_TOKEN/VENTARA_GATEWAY_TOKEN just because
+            # interactiveShellInit (coding-harness.nix) exported them here.
+            # Bare `--setenv=NAME` (no `=VALUE`) forwards this shell's current
+            # value into the unit, and is a silent no-op when a var is unset
+            # (e.g. VENTARA_GATEWAY_TOKEN on hosts without that key) — verified
+            # empirically, not just per the systemd-run(1) NAME[=VALUE] syntax.
+            # Without this the shared server's MCP clients silently authed
+            # with an empty bearer token and every MCP call was rejected.
             systemd-run --user --unit=opencode-server --collect \
+              --setenv=AXON_GATEWAY_TOKEN --setenv=VENTARA_GATEWAY_TOKEN \
               ${pkgs.opencode}/bin/opencode serve --port ${toString opencodeServerPort} --hostname 127.0.0.1 \
               >/dev/null 2>&1
             # A cold-boot start (server binary + plugin node_modules bootstrap)
