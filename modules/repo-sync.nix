@@ -44,9 +44,10 @@
 
       if [ -n "$dirty" ]; then
         log "uncommitted changes, skipping pull (fetched only)"
+      elif merge_out="$(git merge --ff-only "$upstream" 2>&1)"; then
+        log "pulled: $merge_out"
       else
-        merge_out="$(git merge --ff-only "$upstream" 2>&1)" && log "pulled: $merge_out" \
-          || log "not fast-forwardable, skipping pull"
+        log "not fast-forwardable, skipping pull"
       fi
 
       ahead="$(git rev-list --count "$upstream..HEAD")"
