@@ -344,7 +344,7 @@
       spreader_layout_tmp="$(mktemp "$spreader_config_dir/config.yaml.XXXXXX")"
       printf '%s\n' 'workspaces:' > "$spreader_layout_tmp"
       ${builtins.concatStringsSep "\n" (map (file: "cat ${file} >> \"$spreader_layout_tmp\"") spreaderLayoutFiles)}
-      echo "herdr-setup: wrote ${toString builtins.length spreaderLayoutFiles} workspaces to $spreader_config_dir/config.yaml"
+      echo "herdr-setup: wrote ${toString (builtins.length spreaderLayoutFiles)} workspaces to $spreader_config_dir/config.yaml"
       install -m0644 "$spreader_layout_tmp" "$spreader_config_dir/config.yaml"
       rm -f "$spreader_layout_tmp"
 
