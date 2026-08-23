@@ -81,6 +81,10 @@
     "d /media/hofvarpnir 0755 jellyfin jellyfin -"
     "d /media/tv 0755 jellyfin jellyfin -"
     "d /media/music 0755 jellyfin jellyfin -"
+    # hofvarpnir's yt-dlp cache (JS-challenge solver state, etc.) — see
+    # hofvarpnir.nix's volumes comment for why this needs its own dir owned
+    # by jellyfin rather than living under the image's baked-in $HOME.
+    "d /var/lib/hofvarpnir-cache 0755 jellyfin jellyfin -"
   ];
 
   # Ship the Jellyfin journal to the central Loki.
