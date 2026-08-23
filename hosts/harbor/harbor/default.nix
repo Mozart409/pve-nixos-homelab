@@ -1,26 +1,9 @@
 {
   config,
-  lib,
   pkgs,
   ...
 }: let
   dataDir = "/var/lib/harbor";
-
-  # Projects that get explicit security/SBOM metadata (auto_scan,
-  # auto_sbom_generation, prevent_vul, severity) instead of relying on
-  # Harbor's defaults, unlike the plain oyabu/ci loop below. Add an entry
-  # here to declare a new project with a retention policy plus CVE
-  # scanning and SBOM generation wired in from creation.
-  securedProjects = [
-    {
-      name = "k3s";
-      public = true;
-      autoScan = true;
-      autoSbom = true;
-      preventVul = true;
-      severity = "critical";
-    }
-  ];
 
   dbEnvTemplate = pkgs.writeText "harbor-db-env-template" ''
     POSTGRES_DB=registry
@@ -109,108 +92,6 @@
       -e "s/__ANCHORE_ADMIN_PASSWORD__/$ANCHORE_ADMIN_PASSWORD/" \
       ${anchoreEngineEnvTemplate} > /run/harbor/anchore-engine.env
     chmod 600 /run/harbor/anchore-engine.env
-  '';
-
-  # Per-project bootstrap block for `securedProjects` entries: create-if-missing
-  # project, explicit security/SBOM metadata, and a retention policy. Relies on
-  # the `project_json` shell function defined in harborBootstrap below, so this
-  # is concatenated into that same script rather than run standalone.
-  #
-  # auto_scan/auto_sbom_generation are set explicitly rather than relied on as
-  # Harbor 2.11 defaults, so a Harbor upgrade changing that default can't
-  # silently turn scanning off. prevent_vul blocks pulling/running images with
-  # a finding at or above `severity`; lower severities still scan and report
-  # but never block, to avoid noisy CVEs locking out routine pulls.
-  mkSecuredProjectBootstrap = {
-    name,
-    public,
-    autoScan,
-    autoSbom,
-    preventVul,
-    severity,
-  }: ''
-    if [ -z "$(project_json "${name}")" ]; then
-      echo "Creating project '${name}'..."
-      ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
-        -H "Content-Type: application/json" \
-        "$HARBOR_URL/api/v2.0/projects" \
-        -d '{"project_name": "${name}", "public": ${lib.boolToString public}, "storage_limit": 10737418240}'
-      echo "Project created"
-    else
-      echo "Project '${name}' already exists"
-    fi
-
-    PROJECT=$(project_json "${name}")
-    PROJECT_ID=$(printf '%s' "$PROJECT" | ${pkgs.jq}/bin/jq -r '.project_id')
-
-    echo "Setting '${name}' project security/SBOM metadata..."
-    ${pkgs.curl}/bin/curl -fsS -X PUT -u "admin:$ADMIN_PASSWORD" \
-      -H "Content-Type: application/json" \
-      "$HARBOR_URL/api/v2.0/projects/$PROJECT_ID" \
-      -d '{
-        "metadata": {
-          "public": "${lib.boolToString public}",
-          "auto_scan": "${lib.boolToString autoScan}",
-          "auto_sbom_generation": "${lib.boolToString autoSbom}",
-          "prevent_vul": "${lib.boolToString preventVul}",
-          "severity": "${severity}",
-          "reuse_sys_cve_allowlist": "true"
-        }
-      }'
-
-    # Read retention_id off the project object rather than GETing
-    # /api/v2.0/retentions -- that endpoint is POST-only and returns 405,
-    # which would make this probe always report "no policy" and re-POST a
-    # duplicate on every run (Harbor rejects that).
-    RETENTION_ID=$(printf '%s' "$PROJECT" | ${pkgs.jq}/bin/jq -r '.metadata.retention_id // ""')
-
-    if [ -z "$RETENTION_ID" ]; then
-      echo "Creating retention policy for '${name}'..."
-      # Non-fatal on purpose: a missing retention policy is a
-      # disk-housekeeping concern, never a reason to abort the bootstrap.
-      ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
-        -H "Content-Type: application/json" \
-        "$HARBOR_URL/api/v2.0/retentions" \
-        -d '{
-          "algorithm": "or",
-          "scope": {
-            "level": "project",
-            "ref": '"$PROJECT_ID"'
-          },
-          "trigger": {
-            "kind": "Schedule",
-            "settings": {
-              "cron": "0 0 0 * * *"
-            }
-          },
-          "rules": [
-            {
-              "disabled": false,
-              "action": "retain",
-              "scope_selectors": {
-                "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
-              },
-              "tag_selectors": [{"kind": "doublestar", "decoration": "matches", "pattern": "**"}],
-              "params": {"latestPushedK": 2},
-              "template": "latestPushedK"
-            },
-            {
-              "disabled": false,
-              "action": "retain",
-              "scope_selectors": {
-                "repository": [{"kind": "doublestar", "decoration": "repoMatches", "pattern": "**"}]
-              },
-              "tag_selectors": [{"kind": "doublestar", "decoration": "untagged", "pattern": ""}],
-              "params": {"nDaysSinceLastPush": 2},
-              "template": "nDaysSinceLastPush"
-            }
-          ]
-        }' \
-        && echo "Retention policy created for '${name}': keep last 2 tags, delete untagged after 2 days" \
-        || echo "WARNING: could not create retention policy for '${name}'; continuing"
-    else
-      echo "Retention policy already exists for '${name}' (id $RETENTION_ID)"
-    fi
   '';
 
   harborBootstrap = pkgs.writeShellScript "harbor-bootstrap" ''
@@ -343,8 +224,6 @@
         echo "Retention policy already exists for '$PROJECT_NAME' (id $RETENTION_ID)"
       fi
     done
-
-    ${lib.concatMapStrings mkSecuredProjectBootstrap securedProjects}
 
     OIDC_CLIENT_ID=$(cat ${config.age.secrets.harbor-oidc-client-id.path})
     OIDC_CLIENT_SECRET=$(cat ${config.age.secrets.harbor-oidc-client-secret.path})
