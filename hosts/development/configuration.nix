@@ -26,6 +26,7 @@ in {
     ../../modules/claude-settings-verify.nix
     ../../modules/attic-cache.nix
     ../../modules/forgejo-cli.nix
+    ../../services/k3s.nix
   ];
 
   home-manager.users.amadeus.imports = [../../modules/jj.nix];

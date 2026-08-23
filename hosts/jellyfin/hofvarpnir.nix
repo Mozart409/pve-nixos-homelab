@@ -42,6 +42,14 @@
       # ignores this and uses bundled webpki-roots (would not trust step-ca) — in
       # that case Loki log-push over HTTPS fails but the app + OTLP still work.
       "/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro"
+      # yt-dlp's cache (JS-challenge/sigfunc solver state, etc.) lives under
+      # $HOME/.cache — but the image bakes /home/hofvarpnir as 1000:1000 while
+      # this container actually runs as 999:999 (jellyfin, for media ownership
+      # parity above), so without an explicit mount here that directory is not
+      # writable by the running UID and every yt-dlp call re-solves JS
+      # challenges from scratch (PermissionError, compounding CPU cost).
+      # tmpfiles creates /var/lib/hofvarpnir-cache 0755 jellyfin:jellyfin.
+      "/var/lib/hofvarpnir-cache:/home/hofvarpnir/.cache"
     ];
 
     environment = {
