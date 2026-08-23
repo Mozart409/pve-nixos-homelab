@@ -59,6 +59,15 @@
   # rust-async-patterns, rust-best-practices).
   repoSkillsDir = ../.opencode/skills;
 
+  # Agent slash-commands shipped from this repo's .opencode/command/ (this
+  # module lives in modules/, so ../.opencode/command). Each <name>.md file
+  # becomes a /<name> command in BOTH harnesses: symlinked into
+  # ~/.config/opencode/command/ (opencode) and ~/.claude/commands/ (Claude
+  # Code). The $ARGUMENTS placeholder and `description` frontmatter key are
+  # understood by both tools; opencode-only keys like `agent:` are silently
+  # ignored by Claude Code, so one markdown file serves both.
+  repoCommandsDir = ../.opencode/command;
+
   # Claude Code's MCP config uses `${VAR}` expansion syntax.
   claudeMcpServers =
     lib.mapAttrs (_: srv: {
@@ -323,6 +332,32 @@
       esac
       if readlink "$target" 2>/dev/null | grep -q '^/nix/store/'; then
         echo "coding-harness: pruning stale skill symlink $target" >&2
+        rm -f "$target"
+      fi
+    done
+
+    # Slash commands: symlink every ${repoCommandsDir}/*.md into BOTH
+    # harnesses' user-level command dirs (~/.config/opencode/command/ for
+    # opencode, ~/.claude/commands/ for Claude Code). Same store-symlink
+    # convention as the skills above: read-only, refreshed every activation,
+    # real user-owned files never touched, stale /nix/store symlinks pruned.
+    mkdir -p "${home}/.config/opencode/command" "${home}/.claude/commands"
+    current_commands=""
+    for cmd in "${repoCommandsDir}"/*.md; do
+      [ -e "$cmd" ] || continue
+      name="$(basename "$cmd")"
+      current_commands="$current_commands $name"
+      ln -sfn "$cmd" "${home}/.config/opencode/command/$name"
+      ln -sfn "$cmd" "${home}/.claude/commands/$name"
+    done
+    for target in "${home}/.config/opencode/command"/* "${home}/.claude/commands"/*; do
+      [ -L "$target" ] || continue
+      name="$(basename "$target")"
+      case " $current_commands " in
+        *" $name "*) continue ;;
+      esac
+      if readlink "$target" 2>/dev/null | grep -q '^/nix/store/'; then
+        echo "coding-harness: pruning stale command symlink $target" >&2
         rm -f "$target"
       fi
     done
