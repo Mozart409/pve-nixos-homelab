@@ -138,14 +138,6 @@
         local = "mcp.homelab.local";
         tailscale = "homelab-mcp";
       };
-      "k3s-server-1" = {
-        local = "k3s-server-1.homelab.local";
-        tailscale = "k3s-server-1.homelab.local";
-      };
-      "k3s-agent-1" = {
-        local = "k3s-agent-1.homelab.local";
-        tailscale = "k3s-agent-1.homelab.local";
-      };
       ca = {
         local = "ca.homelab.local";
         tailscale = "homelab-ca";
@@ -297,8 +289,6 @@
             ./hosts/mcp_vm/configuration.nix
           ];
         };
-        # k3s-server-1 = mkHost "k3s-server-1";
-        # k3s-agent-1 = mkHost "k3s-agent-1";
         ca = mkHost "ca";
         fleet = mkHost "fleet";
         harbor = mkHost "harbor";
@@ -322,8 +312,6 @@
             ./hosts/development/configuration.nix
           ];
         };
-        buildbot-master = mkHost "buildbot-master";
-        buildbot-worker-1 = mkHost "buildbot-worker-1";
         zeroclaw = mkHost "zeroclaw";
         woodpecker = mkHost "woodpecker";
         # Explicit (not mkHost) because of the disko-jellyfin multi-disk layout
@@ -522,34 +510,6 @@
             ./hosts/hermes/configuration.nix
           ];
         };
-
-        # k3s-server-1 = {
-        #   deployment = {
-        #     targetHost = targetHost "k3s-server-1";
-        #     targetUser = "amadeus";
-        #     buildOnTarget = false;
-        #     tags = ["kubernetes" "k3s" "server"];
-        #   };
-        #   imports = [
-        #     disko.nixosModules.disko
-        #     agenix.nixosModules.default
-        #     ./hosts/k3s-server-1/configuration.nix
-        #   ];
-        # };
-
-        # k3s-agent-1 = {
-        #   deployment = {
-        #     targetHost = targetHost "k3s-agent-1";
-        #     targetUser = "amadeus";
-        #     buildOnTarget = false;
-        #     tags = ["kubernetes" "k3s" "agent"];
-        #   };
-        #   imports = [
-        #     disko.nixosModules.disko
-        #     agenix.nixosModules.default
-        #     ./hosts/k3s-agent-1/configuration.nix
-        #   ];
-        # };
 
         ca = {
           deployment = {
