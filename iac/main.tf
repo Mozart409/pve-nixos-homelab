@@ -976,7 +976,7 @@ resource "proxmox_virtual_environment_vm" "development_vm" {
   # 4 GB when the sessions are idle.
   memory {
     dedicated = 12288
-    floating  = 4096
+    floating  = 8192
   }
 
   disk {
