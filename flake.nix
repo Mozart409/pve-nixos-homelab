@@ -236,6 +236,7 @@
           agenix.nixosModules.default
           homeManagerNixvim
           (cominFor hostname)
+          ./modules/container-registries.nix
           ./hosts/${hostname}/configuration.nix
         ];
       };
@@ -398,7 +399,7 @@
 
         # Applied to every node in the hive
         defaults = {
-          imports = [homeManagerNixvim];
+          imports = [homeManagerNixvim ./modules/container-registries.nix];
         };
 
         # Host definitions
