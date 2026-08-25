@@ -97,7 +97,7 @@ colmena-reboot host: clear
 
 colmena-current-system host: clear
   @echo "Current system on {{host}}:"
-  colmena exec --on {{host}} -- readlink -f /run/current-system
+  ssh amadeus@{{host}}.homelab.internal readlink -f /run/current-system
 
 colmena-status: clear
   @echo "Checking host status..."
