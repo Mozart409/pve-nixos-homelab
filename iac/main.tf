@@ -1309,10 +1309,14 @@ resource "proxmox_virtual_environment_vm" "k3s_cntrl_1_vm" {
 
   # See the harbor_vm comment above: locking floating = dedicated avoids
   # ballooning starving the control plane (etcd/kube-apiserver) under host
-  # memory pressure.
+  # memory pressure. Kept small (2 GiB, k3s' own recommended floor for a
+  # single-node control plane) because pve-gigabyte is already oversubscribed
+  # -- see todo/pve-gigabyte-memory-oversubscription.md. A pinned guest is a
+  # balloon non-donor, so every MiB here is a MiB permanently unavailable to
+  # the rest of the fleet; do not raise this without addressing that doc first.
   memory {
-    dedicated = 4096
-    floating  = 4096
+    dedicated = 2048
+    floating  = 2048
   }
 
   disk {
