@@ -388,19 +388,6 @@
     fi
     echo "OIDC authentication configured"
 
-    echo "Waiting for Anchore scanner adapter to be ready..."
-    for i in $(seq 1 60); do
-      if ${pkgs.podman}/bin/podman exec harbor-anchore-scanner-adapter curl -fsS http://localhost:8080/probe/healthy >/dev/null 2>&1; then
-        echo "Anchore scanner adapter is ready"
-        break
-      fi
-      if [ $i -eq 60 ]; then
-        echo "Anchore scanner adapter failed to become ready"
-        exit 1
-      fi
-      sleep 5
-    done
-
     registry_json() {
       ${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
         "$HARBOR_URL/api/v2.0/registries?name=$1" \
@@ -430,23 +417,6 @@
       echo "Docker Hub proxy-cache project created"
     else
       echo "Docker Hub proxy-cache project already exists or registry endpoint unavailable"
-    fi
-
-    scanner_json() {
-      ${pkgs.curl}/bin/curl -fsS -u "admin:$ADMIN_PASSWORD" \
-        "$HARBOR_URL/api/v2.0/scanners?name=$1" \
-        | ${pkgs.jq}/bin/jq -c --arg n "$1" '[.[] | select(.name == $n)] | .[0] // empty'
-    }
-
-    if [ -z "$(scanner_json "Anchore")" ]; then
-      echo "Registering Anchore scanner adapter..."
-      ${pkgs.curl}/bin/curl -fsS -X POST -u "admin:$ADMIN_PASSWORD" \
-        -H "Content-Type: application/json" \
-        "$HARBOR_URL/api/v2.0/scanners" \
-        -d '{"name": "Anchore", "description": "Anchore Engine scanner", "url": "http://harbor-anchore-scanner-adapter:8080", "auth": "", "access_credential": "None", "skip_cert_verify": true, "use_internal_addr": true}'
-      echo "Anchore scanner registered"
-    else
-      echo "Anchore scanner already registered"
     fi
 
     echo "Harbor bootstrap complete"
@@ -660,7 +630,13 @@ in {
 
     harbor-anchore-db = {
       image = "postgres:13-alpine";
-      autoStart = true;
+      # Anchore is disabled -- Harbor already scans via Trivy (WITH_TRIVY=true
+      # above). Containers are kept defined (not deleted) so re-enabling is a
+      # one-line flip back to `autoStart = true` per container, plus restoring
+      # the wait/registration steps removed from harborBootstrap below and the
+      # scanner-adapter dependency removed from harbor-bootstrap's
+      # after/requires.
+      autoStart = false;
       volumes = ["harbor_anchore_db:/var/lib/postgresql/data"];
       environmentFiles = ["/run/harbor/anchore-db.env"];
       extraOptions = [
@@ -674,7 +650,7 @@ in {
 
     harbor-anchore-catalog = {
       image = "anchore/anchore-engine:v1.1.0";
-      autoStart = true;
+      autoStart = false;
       environmentFiles = ["/run/harbor/anchore-engine.env"];
       dependsOn = ["harbor-anchore-db"];
       extraOptions = [
@@ -690,7 +666,7 @@ in {
 
     harbor-anchore-simplequeue = {
       image = "anchore/anchore-engine:v1.1.0";
-      autoStart = true;
+      autoStart = false;
       environmentFiles = ["/run/harbor/anchore-engine.env"];
       dependsOn = ["harbor-anchore-db" "harbor-anchore-catalog"];
       extraOptions = [
@@ -706,7 +682,7 @@ in {
 
     harbor-anchore-policy-engine = {
       image = "anchore/anchore-engine:v1.1.0";
-      autoStart = true;
+      autoStart = false;
       environmentFiles = ["/run/harbor/anchore-engine.env"];
       dependsOn = ["harbor-anchore-db" "harbor-anchore-catalog"];
       extraOptions = [
@@ -722,7 +698,7 @@ in {
 
     harbor-anchore-analyzer = {
       image = "anchore/anchore-engine:v1.1.0";
-      autoStart = true;
+      autoStart = false;
       environmentFiles = ["/run/harbor/anchore-engine.env"];
       dependsOn = ["harbor-anchore-db" "harbor-anchore-catalog"];
       extraOptions = [
@@ -738,7 +714,7 @@ in {
 
     harbor-anchore-api = {
       image = "anchore/anchore-engine:v1.1.0";
-      autoStart = true;
+      autoStart = false;
       environmentFiles = ["/run/harbor/anchore-engine.env"];
       dependsOn = ["harbor-anchore-db" "harbor-anchore-catalog"];
       extraOptions = [
@@ -754,7 +730,7 @@ in {
 
     harbor-anchore-scanner-adapter = {
       image = "anchore/harbor-scanner-adapter:1.5.2";
-      autoStart = true;
+      autoStart = false;
       environment = {
         SCANNER_ADAPTER_LISTEN_ADDR = ":8080";
         SCANNER_ADAPTER_LOG_LEVEL = "info";
@@ -907,8 +883,8 @@ in {
   systemd.services.harbor-bootstrap = {
     description = "Harbor bootstrap - create projects, retention policies, proxy cache and scanner";
     wantedBy = ["multi-user.target"];
-    after = ["podman-harbor-core.service" "podman-harbor-jobservice.service" "podman-harbor-anchore-scanner-adapter.service"];
-    requires = ["podman-harbor-core.service" "podman-harbor-jobservice.service" "podman-harbor-anchore-scanner-adapter.service"];
+    after = ["podman-harbor-core.service" "podman-harbor-jobservice.service"];
+    requires = ["podman-harbor-core.service" "podman-harbor-jobservice.service"];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
