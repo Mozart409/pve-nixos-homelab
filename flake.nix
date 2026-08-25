@@ -209,6 +209,7 @@
             imports = [
               mozart409-nixvim.homeModules.default
               ./modules/tmux.nix
+              ./modules/git.nix
             ];
             home.stateVersion = "25.05";
           };

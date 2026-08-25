@@ -180,14 +180,14 @@ in {
   '';
 
   # Commit identity, so a reinstall doesn't leave git prompting for one.
-  # Matches the bot account the SSH key authenticates as.
+  # Matches the bot account the SSH key authenticates as. Everything else
+  # (defaultBranch, pull.rebase, ignores) is owned by the shared home-manager
+  # module modules/git.nix.
   programs.git = {
     enable = true;
     config = {
       user.name = "developmentbot";
       user.email = "developmentbot@homelab.local";
-      init.defaultBranch = "main";
-      pull.rebase = true;
     };
   };
 
