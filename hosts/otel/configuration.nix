@@ -511,6 +511,18 @@
           }
         ];
       }
+      # K3s control plane host exporters
+      {
+        job_name = "k3s-cntrl-1-node";
+        static_configs = [
+          {
+            targets = ["k3s-cntrl-1.homelab.local:9100"];
+            labels = {
+              instance = "homelab-k3s-cntrl-1";
+            };
+          }
+        ];
+      }
       # The vllm job on wotan was removed on 2026-08-15 along with the k3s and
       # zeroclaw jobs above -- that host is down too. Re-add it here when wotan
       # comes back; the endpoint was wotan.homelab.local:10808.

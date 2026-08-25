@@ -174,6 +174,10 @@
         local = "woodpecker.homelab.local";
         tailscale = "homelab-woodpecker";
       };
+      "k3s-cntrl-1" = {
+        local = "k3s-cntrl-1.homelab.local";
+        tailscale = "homelab-k3s-cntrl-1";
+      };
       # Raspberry Pi hosts (update IP after first boot). Left as an IP because
       # there is no rpi4-1.homelab.local record to point at -- the node is still
       # commented out of both nixosConfigurations and colmenaHive below, and the
@@ -315,6 +319,7 @@
         };
         zeroclaw = mkHost "zeroclaw";
         woodpecker = mkHost "woodpecker";
+        "k3s-cntrl-1" = mkHost "k3s-cntrl-1";
         # Explicit (not mkHost) because of the disko-jellyfin multi-disk layout
         # history; module set otherwise mirrors mkHost.
         jellyfin = nixpkgs.lib.nixosSystem {
@@ -638,6 +643,21 @@
             agenix.nixosModules.default
             (cominFor "jellyfin")
             ./hosts/jellyfin/configuration.nix
+          ];
+        };
+
+        "k3s-cntrl-1" = {
+          deployment = {
+            targetHost = targetHost "k3s-cntrl-1";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["kubernetes" "k3s"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            (cominFor "k3s-cntrl-1")
+            ./hosts/k3s-cntrl-1/configuration.nix
           ];
         };
 

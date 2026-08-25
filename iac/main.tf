@@ -1288,6 +1288,79 @@ resource "proxmox_virtual_environment_vm" "scratchpad_vm" {
   on_boot = true
 }
 
+# K3s Control Plane VM (cluster-init, embedded etcd -- see
+# modules/k3s-control-plane.nix)
+resource "proxmox_virtual_environment_vm" "k3s_cntrl_1_vm" {
+  name        = "k3s-cntrl-1"
+  description = "K3s Control Plane - Debian base for NixOS installation via nixos-anywhere"
+  tags        = ["terraform", "debian", "nixos-target", "kubernetes", "k3s"]
+
+  node_name = "pve-gigabyte"
+  vm_id     = 4349
+
+  bios = "seabios"
+
+  keyboard_layout = "de"
+
+  cpu {
+    cores = 4
+    type  = "host"
+  }
+
+  # See the harbor_vm comment above: locking floating = dedicated avoids
+  # ballooning starving the control plane (etcd/kube-apiserver) under host
+  # memory pressure.
+  memory {
+    dedicated = 4096
+    floating  = 4096
+  }
+
+  disk {
+    # etcd and the k3s API server are latency-sensitive; ssd_pool avoids the
+    # ~78 IOPS zfs_pool HDD bottleneck shared by most other VMs.
+    datastore_id = "ssd_pool"
+    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    interface    = "scsi0"
+    size         = 64
+  }
+
+  network_device {
+    bridge = "vmbr0"
+  }
+
+  operating_system {
+    type = "l26"
+  }
+
+  initialization {
+    datastore_id = "local-lvm"
+
+    ip_config {
+      ipv4 {
+        address = "192.168.2.186/24"
+        gateway = "192.168.2.1"
+      }
+    }
+
+    user_account {
+      username = "amadeus"
+      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
+    }
+  }
+
+  serial_device {}
+
+  # Enable QEMU Guest Agent
+  agent {
+    enabled = true
+    timeout = "60s"
+  }
+
+  started = true
+
+  on_boot = true
+}
+
 # # K3s Server (Control Plane) VM
 # resource "proxmox_virtual_environment_vm" "k3s_server_1_vm" {
 #   name        = "k3s-server-1"
@@ -1456,6 +1529,7 @@ output "vm_ipv4_addresses" {
     zeroclaw    = proxmox_virtual_environment_vm.zeroclaw_vm.ipv4_addresses
     scratchpad  = proxmox_virtual_environment_vm.scratchpad_vm.ipv4_addresses
     woodpecker  = proxmox_virtual_environment_vm.woodpecker_vm.ipv4_addresses
+    k3s_cntrl_1 = proxmox_virtual_environment_vm.k3s_cntrl_1_vm.ipv4_addresses
     # k3s_server_1 = proxmox_virtual_environment_vm.k3s_server_1_vm.ipv4_addresses
     # k3s_agent_1  = proxmox_virtual_environment_vm.k3s_agent_1_vm.ipv4_addresses
   }

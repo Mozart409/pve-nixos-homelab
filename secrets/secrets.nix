@@ -16,14 +16,12 @@ let
   hostHarbor = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBJmT6FxRSlang9smAuBoq1QhYGtQ4adP4kK1lkLn8Ip root@homelab-harbor";
   hostHermes = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKBloNkev1cC0W2YBDi0Qk0adUqVwWve1oXK4X5PYnds root@homelab-hermes";
   hostJellyfin = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDjBjNv4pvr08UdR2QL72Re3B22cUV+3DQvR2oG3/nsA root@homelab-jellyfin";
-  hostK3sServer1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILK0KcBwr2zXxl97/JjpFRBD38XpG0wEWZjkIQgarRcJ root@k3s-server-1";
-  hostK3sWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMtwgQdHZdj7KSSmzc5nI02kzRIUqV26A2B4D/dbEpj7 root@homelab-minimal root@k3s-worker-1";
   hostMcp = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGkfmvav5dWx4dAbDHcJSuKG32GSmdVdOK+uQ1xjCtse root@homelab-mcp";
   hostOtel = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGz4mCD5XyFkwVaSzzWHhral8WqMGo01nKZM3gAX2vzP amadeus@homelab-otel";
   hostUnifi = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG1dva0wW3yY7pu0bT2HafVcn08BZMjzTwEh3CGcdfb8 root@homelab-unifi";
   hostWoodpecker = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIACJjy5GtvoeSP5muZFLj3/rMvIAlm7gfXZ80micVVgm root@homelab-woodpecker";
   hostZeroclaw = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF8hvOMPXx4HOK9/yxL/r8oj1itQIFQDpnk362IwrIfy root@homelab-minimal";
-  users = [amadeus amadeusAge amadeusMacbook hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostK3sServer1 hostK3sWorker1 hostCa hostFleet hostHarbor hostCache hostForgejo hostBuildBotMaster hostBuildBotWorker1 hostJellyfin hostZeroclaw hostDevelopment hostWoodpecker];
+  users = [amadeus amadeusAge amadeusMacbook hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostCa hostFleet hostHarbor hostCache hostForgejo hostBuildBotMaster hostBuildBotWorker1 hostJellyfin hostZeroclaw hostDevelopment hostWoodpecker];
   # keep-sorted end
 in {
   # keep-sorted start
@@ -60,7 +58,7 @@ in {
   "hofvarpnir-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostDatabase hostJellyfin];
   "hofvarpnir-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostJellyfin];
   "homeassistant-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostMcp];
-  "k3s-server-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostK3sServer1 hostK3sWorker1];
+  "k3s-server-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook]; # add hostK3sCntrl1 + `just reencrypt` once k3s-cntrl-1 is installed and its real host key is known
   "moshi-device-id.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostHermes hostDevelopment hostZeroclaw]; # plain auth token
   "open-webui-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostContainers];
   "pbs-mcp-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostMcp];
