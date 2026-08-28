@@ -274,8 +274,6 @@ in {
     op = "opencode";
     cl = "claude";
     cr = "crush";
-    spreader = "herdr plugin action invoke herdr-spreader.apply";
-    rename-reset = "herdr plugin action invoke herdr-automatic-rename.reset";
   };
 
   # nix-ai-tools' own binary cache (see flake.nix's nix-ai-tools input comment
