@@ -60,7 +60,7 @@
     nixos-hardware.url = "github:NixOS/nixos-hardware/master";
     # Upstream org renamed ogulcancelik -> herdrdev (NixOS/nixpkgs mirrors this).
     herdr = {
-      url = "github:herdrdev/herdr/v0.8.0";
+      url = "github:herdrdev/herdr/v0.8.2";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     # crush (charmbracelet/crush) and other coding-agent CLIs, curated by
