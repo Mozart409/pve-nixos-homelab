@@ -2,6 +2,16 @@
 
 This repository contains the NixOS configurations and Infrastructure as Code (OpenTofu) for a Proxmox-based homelab. It currently manages the `database` and `otel` hosts using Nix Flakes, Colmena, and Disko.
 
+**Everything is declarative — that is the entire point of NixOS here.** Any
+config that should persist (agent skills/commands, dotfiles, keybindings,
+package sets, service config, …) belongs in this repo and reaches a host via
+Nix + `colmena apply`, never a hand-edited or hand-copied file on a live
+host. A file written directly into `$HOME` or `/etc` on a running host is
+gone (or silently stale, diverging from the repo) the moment that host is
+reprovisioned or the next deploy overwrites it. If you catch yourself about
+to `Write`/`cp`/`ssh … >file` config onto a host instead of editing the
+module that generates it, stop and edit the module instead.
+
 ## 1. Build, Lint, and Test Commands
 
 The project uses `just` as a command runner. Always prefer `just` commands over raw `nix` or `colmena` commands when available.
