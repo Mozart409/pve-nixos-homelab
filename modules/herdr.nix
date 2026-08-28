@@ -56,6 +56,7 @@
     split_horizontal = ["prefix+minus", "ctrl+alt+shift+d"]
     zoom = ["prefix+z", "ctrl+alt+z"]
     switch_tab = "prefix+1..9"
+    focus_agent = "prefix+alt+1..9"
     # workspace_picker (herdr's config key; the docs prose calls it "workspace
     # navigation") is bound to plain "prefix+w" by default and needs no entry
     # here to work — but the sequential ctrl+space-then-w chord was observed
