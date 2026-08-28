@@ -205,6 +205,17 @@
         {
           home-manager.useGlobalPkgs = true;
           home-manager.useUserPackages = true;
+          # Move a pre-existing unmanaged dotfile aside instead of aborting
+          # activation. Without this, any file home-manager wants to own that
+          # already exists on disk fails the whole switch with "Existing file
+          # '<path>' would be clobbered" -> switch-to-configuration exit 4,
+          # which is what `just self-deploy` hit on ~/.config/git/ignore (owned
+          # by modules/git.nix's programs.git.ignores). Colmena hides this
+          # class of failure less often than it looks: the same activation runs
+          # there too, so a hand-made dotfile wedges every deploy path until it
+          # is moved. Backing up is the safe default -- nothing is deleted, the
+          # old file lands next to it as <name>.hm-bak.
+          home-manager.backupFileExtension = "hm-bak";
           home-manager.users.amadeus = {
             imports = [
               mozart409-nixvim.homeModules.default
