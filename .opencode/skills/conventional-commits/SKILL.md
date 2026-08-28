@@ -8,6 +8,17 @@ compatibility: opencode
 
 A repeatable, project-aware commit workflow. Never commit unless the user asks.
 
+**Default commit message is exactly one line: `type(scope): title`. Nothing
+else.** No body, no bullet lists, no blank-line-separated paragraphs, no
+trailers of any kind — that means no `Co-authored-by`, no DCO signoff, no
+"🤖 Generated with …" / "Generated with Claude Code" footer, no tool
+signature. This is the default for every repo unless that repo's own
+`AGENTS.md`/`CLAUDE.md`/`CONTRIBUTING.md` **explicitly** documents a
+different house style (e.g. explanatory bodies or trailers) — silence means
+single-line, it is never the permissive default. If your harness normally
+appends a signature/co-author trailer to commits automatically, suppress it
+here; it is not part of the message.
+
 ## 1. Survey the repo state
 
 - `git status --short` — what is staged, unstaged, untracked?
@@ -26,8 +37,9 @@ before writing a message. Conventions that differ per repo:
   trailers (`Co-authored-by`, DCO signoff).
 - **Case and punctuation** of the subject line.
 
-Follow what the repo already does — match the dominant recent style. If the
-repo forbids bodies (e.g. "single-line, no body"), do not add one.
+Follow what the repo already does for type set, scope, and casing. Body
+policy stays single-line (see above) unless the repo's own docs explicitly
+say otherwise — a repo's silence on the topic is not permission to add one.
 
 ## 3. Security check the diff
 
@@ -52,15 +64,16 @@ gitignore entry and history scrub, but do not commit the secret.
 
 ## 5. Write the message
 
-`type(scope): summary` — imperative, ≤ ~72 chars, lower-case unless a proper
-noun. Example:
+`type(scope): summary` — one line, imperative, ≤ ~72 chars, lower-case unless
+a proper noun. The whole commit message. Example:
 
 ```
 fix(cache): grant atticd secret access by group
 ```
 
-If the repo's `AGENTS.md`/`CONTRIBUTING.md` allows bodies, add them only when
-the subject can't carry the context; otherwise keep it single-line.
+Only add a body/trailer when the repo's own `AGENTS.md`/`CONTRIBUTING.md`
+explicitly documents that convention (see the rule at the top of this file).
+That is the exception, not the default — most repos get exactly one line.
 
 ## 6. Run pre-commit checks
 
