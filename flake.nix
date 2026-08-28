@@ -302,6 +302,7 @@
             agenix.nixosModules.default
             homelab-mcp.nixosModules.default
             homeManagerNixvim
+            ./modules/container-registries.nix
             (cominFor "mcp")
             ./hosts/mcp_vm/configuration.nix
           ];
@@ -325,6 +326,7 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             homeManagerNixvim
+            ./modules/container-registries.nix
             (cominFor "development")
             ./hosts/development/configuration.nix
           ];
@@ -346,6 +348,7 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             homeManagerNixvim
+            ./modules/container-registries.nix
             (cominFor "jellyfin")
             ./hosts/jellyfin/configuration.nix
           ];
@@ -389,6 +392,7 @@
             agenix.nixosModules.default
             hermes-agent.nixosModules.default
             homeManagerNixvim
+            ./modules/container-registries.nix
             (cominFor "hermes")
             ./hosts/hermes/configuration.nix
           ];
