@@ -52,7 +52,7 @@
   # symlink points at the immutable Nix store path, so skills are read-only and
   # reproducible; a store-path change from an upgrade is re-linked each boot.
   # This includes the repo-native harness skills (claude-code-permissions,
-  # code-review, conventional-commits, orchestrate-subagents,
+  # code-review, conventional-commits, herdr, orchestrate-subagents,
   # subagent-driven-development) plus the shared skill library copied here from
   # the global ~/.agents/skills on the workstation (cue-kind-definition,
   # grill-with-docs, kubernetes-specialist, postgres, postgresql-table-design,
