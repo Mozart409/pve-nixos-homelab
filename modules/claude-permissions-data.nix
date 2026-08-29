@@ -59,6 +59,7 @@
     "Bash(go:*)"
     "Bash(make:*)"
     "Bash(pnpm:*)"
+    "Bash(herdr:*)"
 
     # Rust.
     "Bash(cargo:*)"
