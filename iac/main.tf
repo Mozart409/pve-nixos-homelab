@@ -746,9 +746,16 @@ resource "proxmox_virtual_environment_vm" "forgejo_vm" {
     type  = "host"
   }
 
+  # Pinned floating = dedicated: ballooning dragged this guest to its 768 MiB
+  # floor (MemTotal swung 698-1466 MiB over 2026-08-20..08-30) as pvestatd
+  # chased the host past its ~80% reclaim threshold. At 698 MiB the guest
+  # swapped onto zfs_pool (two HDDs, ~78 IOPS shared), I/O pressure hit
+  # full=47%, page loads took 4-9s and systemctl/journalctl wedged. Same fix
+  # as harbor_vm and woodpecker_vm above. Root cause is host oversubscription:
+  # todo/pve-gigabyte-memory-oversubscription.md.
   memory {
     dedicated = 1536
-    floating  = 768
+    floating  = 1536
   }
 
   disk {
