@@ -214,6 +214,50 @@ in {
           ;;
       esac
     }
+
+    # herdr derives a space's label from its cwd exactly once, when the space is
+    # created, and never re-derives it: on 0.8.2 a `cd` updates the pane's
+    # tracked `cwd`/`foreground_cwd` while the space label stays put. So a space
+    # created from $HOME reads "~" forever, even once its panes sit deep inside a
+    # project. There is no config key for follow-the-cwd naming (`herdr
+    # --default-config` offers only prompt_new_workspace_name and the manual
+    # rename_workspace binding), so re-apply herdr's own rule from a chpwd hook.
+    #
+    # Nix owns the *mechanism*; the label itself stays herdr session state in
+    # session.json, which is where it belongs -- it changes on every cd and is
+    # deliberately not declared anywhere in this module.
+    #
+    # The name is the git worktree root's basename rather than plain ''${PWD:t},
+    # so moving around inside a repo (hosts/, modules/, ...) keeps the space
+    # named after the repo instead of flapping to the last subdirectory. Outside
+    # a repo it falls back to herdr's own rule: basename of $PWD, `~` for $HOME.
+    if [[ -n ''${HERDR_ENV:-} && -n ''${HERDR_WORKSPACE_ID:-} ]]; then
+      autoload -Uz add-zsh-hook
+
+      _herdr_rename_space_to_cwd() {
+        local label root
+        if root=$(command git rev-parse --show-toplevel 2>/dev/null) && [[ -n $root ]]; then
+          label=''${root:t}
+        elif [[ $PWD == $HOME ]]; then
+          label='~'
+        else
+          label=''${PWD:t}
+        fi
+
+        # chpwd fires on every cd; only hit the socket when the resulting name
+        # actually differs. Both calls are ~4ms, so this stays synchronous and
+        # renames cannot land out of order.
+        [[ $label == ''${_HERDR_SPACE_LABEL:-} ]] && return 0
+        _HERDR_SPACE_LABEL=$label
+        # NB HERDR_WORKSPACE_ID is the id injected when this pane was created;
+        # a pane later moved to another space keeps the old one, so its cds
+        # would rename the space it came from until the shell is restarted.
+        command herdr workspace rename "$HERDR_WORKSPACE_ID" "$label" >/dev/null 2>&1
+      }
+
+      add-zsh-hook chpwd _herdr_rename_space_to_cwd
+      _herdr_rename_space_to_cwd
+    fi
   '';
 
   # Start the user manager at boot so this runs without a login session.
