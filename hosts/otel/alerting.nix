@@ -62,6 +62,50 @@
           }
         ];
       }
+      {
+        name = "resource-usage";
+        rules = [
+          {
+            # forgejo's qemu-ga sat in an unthrottled EAGAIN retry loop (~22k
+            # failed write()s/sec against a virtio-serial channel the host had
+            # stopped draining) from 2026-08-19 to 08-31, pinning most of one
+            # of that VM's 2 vCPUs for twelve days. Nothing caught it: the
+            # process never exits, so Restart=always does not help, and a
+            # busy-loop looks perfectly healthy to systemd.
+            #
+            # iowait is excluded deliberately. These guests live on zfs_pool
+            # (two HDDs, ~78 IOPS shared cluster-wide) and sit at 50-75%
+            # iowait while doing almost no real I/O, which swamps any CPU
+            # signal -- see todo/ssd-tier-for-vm-storage.md. What is left is
+            # real work, normalized per core so the threshold means the same
+            # thing on a 2 vCPU guest as on the hypervisor.
+            #
+            # Measured 2026-08-31: forgejo read 0.455 while spinning (0.513 at
+            # the sample this expr was validated against) and 0.018 once
+            # restarted. Idle guests sit at 0.02-0.08, so 0.35 clears both by
+            # a wide margin.
+            #
+            # database and pve-gigabyte are excluded because they genuinely run
+            # at this level around the clock (0.50 and 0.37). No threshold
+            # separates them from a spin -- their 6h *minimum* does not drop
+            # below 0.25 either, so min_over_time does not help. Without the
+            # exclusion this rule fires on them permanently and gets tuned out,
+            # which is the failure mode this whole file exists to prevent.
+            # Revisit if either host is ever right-sized or investigated.
+            alert = "SustainedHighCPU";
+            expr = "sum by (instance) (rate(node_cpu_seconds_total{mode!~\"idle|iowait|steal\",instance!~\"homelab-database|pve-gigabyte\"}[15m])) / on(instance) count by (instance) (node_cpu_seconds_total{mode=\"idle\"}) > 0.35";
+            # Long on purpose: this is a slow burn, not an outage. Nothing
+            # breaks in the first hour, and 6h keeps nix builds on
+            # `development` and the nightly backup window from paging.
+            for = "6h";
+            labels.severity = "warning";
+            annotations = {
+              summary = "{{ $labels.instance }} has burned {{ $value | printf \"%.2f\" }} CPU per core for 6 hours";
+              description = "Sustained non-iowait CPU with no let-up, which usually means a process stuck in a syscall retry loop rather than doing real work. Confirm on the host with: ps -eo pid,%cpu,stat,comm --sort=-%cpu | head, then strace -c -p <pid> -- a spin shows tens of thousands of calls per second, nearly all erroring. Restarting the offending unit clears it.";
+            };
+          }
+        ];
+      }
     ];
   };
 in {
