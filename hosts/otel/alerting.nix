@@ -32,13 +32,20 @@
             };
           }
           {
+            # warning, not critical: blackbox.nix now labels every probe target
+            # with the `instance` of the node-exporter job for the host it lives
+            # on, so when that host is entirely down, TargetDown (critical) fires
+            # for the same instance and the inhibit_rule below swallows this one.
+            # A ProbeFailed alert that still gets through therefore means the
+            # host is up but the specific service on it is not -- real news, but
+            # one severity level down from a whole host being gone.
             alert = "ProbeFailed";
             expr = "probe_success == 0";
             for = "5m";
-            labels.severity = "critical";
+            labels.severity = "warning";
             annotations = {
-              summary = "{{ $labels.instance }} is failing its health probe";
-              description = "The blackbox probe for {{ $labels.instance }} has failed for 5 minutes. Note this can fire while the host itself is perfectly up -- it checks that the service still does its job, not that a process is listening.";
+              summary = "{{ $labels.instance }} is failing its health probe ({{ $labels.probe_target }})";
+              description = "The blackbox probe for {{ $labels.probe_target }} on {{ $labels.instance }} has failed for 5 minutes. Note this can fire while the host itself is perfectly up -- it checks that the service still does its job, not that a process is listening.";
             };
           }
         ];
@@ -172,13 +179,19 @@ in {
         ];
 
         # A host that is entirely down will trip TargetDown *and* every probe of
-        # a service on it. Only the first is news.
+        # a service on it. Only the first is news, so this suppresses the rest.
         #
-        # Caveat worth knowing: `equal` matches on identical label values, and
-        # blackbox labels `instance` with the probed URL while node jobs label it
-        # with a host name. So this only suppresses same-instance duplicates, not
-        # "host down therefore its services are down" -- that would need a shared
-        # label the two job families do not currently have.
+        # This depends on `instance` meaning the same thing in both job
+        # families. It didn't used to: blackbox labelled `instance` with the
+        # probed URL while node jobs labelled it with a host name, so `equal`
+        # here matched nothing and every host outage paged twice. Fixed by
+        # having blackbox.nix set each probe target's `instance` explicitly to
+        # the node-exporter `instance` of the host it lives on (the raw URL is
+        # preserved separately as `probe_target`, since several probes now
+        # intentionally share one instance). ProbeFailed is also `warning` for
+        # the same reason -- inhibit_rules only ever suppress a target severity
+        # given a firing source severity, and TargetDown/ProbeFailed used to be
+        # the same severity, so this rule never actually fired either.
         inhibit_rules = [
           {
             source_matchers = ["severity = critical"];
