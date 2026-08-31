@@ -29,29 +29,14 @@
       hofvarpnir.url = "https://hofvarpnir.homelab.internal";
       quick_links = [
         {
-          name = "UniFi";
-          url = "https://192.168.2.142:8443";
-          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/ubiquiti-unifi.svg";
+          name = "Alertmanager";
+          url = "https://alertmanager.homelab.internal";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/alertmanager.svg";
         }
         {
-          name = "Proxmox";
-          url = "https://pve-gigabyte.dropbear-butterfly.ts.net/";
-          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/proxmox.svg";
-        }
-        {
-          name = "Open WebUI";
-          url = "https://homelab-containers.dropbear-butterfly.ts.net/";
-          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/open-webui.svg";
-        }
-        {
-          name = "Grafana";
-          url = "https://homelab-otel.dropbear-butterfly.ts.net/grafana";
-          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/grafana.svg";
-        }
-        {
-          name = "Prometheus";
-          url = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
-          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/prometheus.svg";
+          name = "Axon Gateway";
+          url = "https://axon.homelab.internal";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/home-assistant.svg";
         }
         {
           name = "Forgejo";
@@ -59,19 +44,14 @@
           icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/forgejo.svg";
         }
         {
-          name = "Woodpecker CI";
-          url = "https://ci.homelab.internal";
-          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/woodpecker-ci.svg";
+          name = "Grafana";
+          url = "https://homelab-otel.dropbear-butterfly.ts.net/grafana";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/grafana.svg";
         }
         {
           name = "Harbor";
           url = "https://homelab-harbor.dropbear-butterfly.ts.net/";
           icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/harbor.svg";
-        }
-        {
-          name = "Jellyfin";
-          url = "https://jellyfin.homelab.internal/web/#/home";
-          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/jellyfin.svg";
         }
         {
           name = "Home Assistant";
@@ -82,6 +62,36 @@
           name = "Hofvarpnir";
           url = "https://hofvarpnir.homelab.internal/dashboard";
           icon = "https://raw.githubusercontent.com/Mozart409/hofvarpnir/refs/heads/main/crates/hof-web/assets/logo.png";
+        }
+        {
+          name = "Jellyfin";
+          url = "https://jellyfin.homelab.internal/web/#/home";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/jellyfin.svg";
+        }
+        {
+          name = "Open WebUI";
+          url = "https://homelab-containers.dropbear-butterfly.ts.net/";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/open-webui.svg";
+        }
+        {
+          name = "Prometheus";
+          url = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/prometheus.svg";
+        }
+        {
+          name = "Proxmox";
+          url = "https://pve-gigabyte.dropbear-butterfly.ts.net/";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/proxmox.svg";
+        }
+        {
+          name = "UniFi";
+          url = "https://192.168.2.142:8443";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/ubiquiti-unifi.svg";
+        }
+        {
+          name = "Woodpecker CI";
+          url = "https://ci.homelab.internal";
+          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/woodpecker-ci.svg";
         }
       ];
       health_checks = [
