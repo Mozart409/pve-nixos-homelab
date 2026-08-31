@@ -96,56 +96,6 @@
       ];
       health_checks = [
         {
-          name = "Router";
-          url = "http://192.168.2.1";
-        }
-        {
-          name = "step-ca";
-          url = "https://ca.homelab.local:8443/health";
-        }
-        {
-          name = "Forgejo";
-          url = "https://forgejo.homelab.local";
-        }
-        {
-          name = "Woodpecker CI";
-          url = "https://ci.homelab.local";
-        }
-        {
-          name = "Harbor";
-          url = "https://harbor.homelab.local";
-        }
-        {
-          name = "SearXNG";
-          url = "https://searxng.homelab.local";
-        }
-        {
-          name = "Open WebUI";
-          url = "https://containers.homelab.local";
-        }
-        {
-          name = "Uptime Forge";
-          # Served under base_path = "/uptime-forge" (forge.toml), fronted by
-          # Caddy on containers.homelab.local (step-ca cert, trusted here).
-          url = "https://containers.homelab.local/uptime-forge";
-        }
-        {
-          name = "Grafana";
-          url = "https://homelab-otel.dropbear-butterfly.ts.net/grafana/api/health";
-        }
-        {
-          name = "Hermes";
-          url = "https://hermes.homelab.local/health";
-        }
-        {
-          name = "RomM";
-          url = "https://romm.homelab.local";
-        }
-        {
-          name = "Axon Gateway";
-          url = "https://axon.homelab.local/health";
-        }
-        {
           name = "Attic Cache";
           # NOT /health — that path is answered by Caddy itself (a `respond "OK"
           # 200` block in hosts/cache/configuration.nix), so it stays green even
@@ -154,6 +104,44 @@
           # no unauthenticated root route and exposes no /metrics, so this is the
           # only endpoint that proves liveness end to end.
           url = "https://cache.homelab.local/homelab/nix-cache-info";
+        }
+        {
+          name = "Axon Gateway";
+          url = "https://axon.homelab.local/health";
+        }
+        {
+          name = "Forgejo";
+          url = "https://forgejo.homelab.local";
+        }
+        {
+          name = "Grafana";
+          url = "https://homelab-otel.dropbear-butterfly.ts.net/grafana/api/health";
+        }
+        {
+          name = "Open WebUI";
+          url = "https://containers.homelab.local";
+        }
+        {
+          name = "RomM";
+          url = "https://romm.homelab.local";
+        }
+        {
+          name = "Router";
+          url = "http://192.168.2.1";
+        }
+        {
+          name = "SearXNG";
+          url = "https://searxng.homelab.local";
+        }
+        {
+          name = "step-ca";
+          url = "https://ca.homelab.local:8443/health";
+        }
+        {
+          name = "Uptime Forge";
+          # Served under base_path = "/uptime-forge" (forge.toml), fronted by
+          # Caddy on containers.homelab.local (step-ca cert, trusted here).
+          url = "https://containers.homelab.local/uptime-forge";
         }
       ];
     };
