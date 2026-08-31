@@ -19,6 +19,14 @@
   # restartTriggers -> the unit definition -> a restart on the next colmena apply.
   secretNonce = "2026-08-06-wpmcp-token";
 
+  # Both private zones are served for every name (see hosts/dns/configuration.nix):
+  # Apple clients force *.local to mDNS and never ask a unicast resolver, so
+  # homelab.internal is the reachable one from macOS/iOS over Tailscale split DNS.
+  # The Caddy vhost key lists both, so one cert carries both SANs; allowedHosts
+  # must list both too or the MCP server rejects the Host header Caddy passes on.
+  vhostKey = base: "${base}.homelab.local ${base}.homelab.internal";
+  vhostNames = base: ["${base}.homelab.local" "${base}.homelab.internal"];
+
   # Caddy vhost template: step-ca TLS + reverse proxy to a loopback MCP server.
   mkMcpVhost = port: {
     extraConfig = ''
@@ -27,7 +35,11 @@
       }
 
       handle {
-        reverse_proxy http://localhost:${toString port}
+        # 127.0.0.1, never "localhost": Caddy resolves proxy upstreams through
+        # the system resolver, and a `localhost` lookup here has timed out
+        # against unbound ("dial tcp: lookup localhost: i/o timeout" -> 502 or a
+        # hung request). A literal IP is dialed directly, with no DNS at all.
+        reverse_proxy http://127.0.0.1:${toString port}
       }
     '';
   };
@@ -55,7 +67,7 @@
     hofvarpnir = 8090;
   };
 
-  pgVhostName = db: "pg-${db}-mcp.homelab.local";
+  pgVhostBase = db: "pg-${db}-mcp";
   pgUnitName = db: "pgmcp-${db}-server";
   pgSecretName = db: "pg-mcp-${db}-url";
 
@@ -121,24 +133,24 @@ in {
             }
 
             handle {
-              reverse_proxy http://localhost:8084
+              reverse_proxy http://127.0.0.1:8084
             }
           '';
         };
 
         # Home Assistant MCP keeps the historical mcp.homelab.local name so the
         # axon-gateway "hamcp" backend URL stays valid.
-        "mcp.homelab.local" = mkMcpVhost 8084;
-        "pbs-mcp.homelab.local" = mkMcpVhost 8080;
+        ${vhostKey "mcp"} = mkMcpVhost 8084;
+        ${vhostKey "pbs-mcp"} = mkMcpVhost 8080;
         # Renamed from pg-mcp.homelab.local now that several Postgres MCP
         # instances exist; this one is the uptime-forge TimescaleDB.
-        "pg-uptime-mcp.homelab.local" = mkMcpVhost 8081;
-        "prom-mcp.homelab.local" = mkMcpVhost 8082;
-        "loki-mcp.homelab.local" = mkMcpVhost 8083;
-        "wp-mcp.homelab.local" = mkMcpVhost 8091;
+        ${vhostKey "pg-uptime-mcp"} = mkMcpVhost 8081;
+        ${vhostKey "prom-mcp"} = mkMcpVhost 8082;
+        ${vhostKey "loki-mcp"} = mkMcpVhost 8083;
+        ${vhostKey "wp-mcp"} = mkMcpVhost 8091;
       }
       # One vhost per database on the `database` host.
-      // lib.mapAttrs' (db: port: lib.nameValuePair (pgVhostName db) (mkMcpVhost port)) homelabDatabases;
+      // lib.mapAttrs' (db: port: lib.nameValuePair (vhostKey (pgVhostBase db)) (mkMcpVhost port)) homelabDatabases;
   };
 
   age.secrets =
@@ -176,7 +188,7 @@ in {
         host = "https://pbs.dropbear-butterfly.ts.net/";
         tokenFile = config.age.secrets.pbs-mcp-token.path;
         bind = "127.0.0.1:8080";
-        allowedHosts = ["pbs-mcp.homelab.local" "localhost" "127.0.0.1"];
+        allowedHosts = vhostNames "pbs-mcp" ++ ["localhost" "127.0.0.1"];
       };
 
       # uptime-forge TimescaleDB (on the containers host).
@@ -187,7 +199,7 @@ in {
         # PG_DATABASE_URL; no host option needed.
         tokenFile = config.age.secrets.pg-mcp-uptime-url.path;
         bind = "127.0.0.1:8081";
-        allowedHosts = ["pg-uptime-mcp.homelab.local" "localhost" "127.0.0.1"];
+        allowedHosts = vhostNames "pg-uptime-mcp" ++ ["localhost" "127.0.0.1"];
       };
 
       prommcp-server = {
@@ -196,7 +208,7 @@ in {
         # Prometheus on the otel host; port 9090 is opened in its firewall.
         host = "http://otel.homelab.local:9090";
         bind = "127.0.0.1:8082";
-        allowedHosts = ["prom-mcp.homelab.local" "localhost" "127.0.0.1"];
+        allowedHosts = vhostNames "prom-mcp" ++ ["localhost" "127.0.0.1"];
       };
 
       lokimcp-server = {
@@ -204,7 +216,7 @@ in {
         package = mcpPackages.lokimcp-server;
         host = "http://otel.homelab.local:3100";
         bind = "127.0.0.1:8083";
-        allowedHosts = ["loki-mcp.homelab.local" "localhost" "127.0.0.1"];
+        allowedHosts = vhostNames "loki-mcp" ++ ["localhost" "127.0.0.1"];
       };
 
       hamcp-server = {
@@ -213,12 +225,13 @@ in {
         host = "https://homeassistant.dropbear-butterfly.ts.net";
         tokenFile = config.age.secrets.homeassistant-token.path;
         bind = "127.0.0.1:8084";
-        allowedHosts = [
-          "mcp.homelab.local"
-          "homelab-mcp.dropbear-butterfly.ts.net"
-          "localhost"
-          "127.0.0.1"
-        ];
+        allowedHosts =
+          vhostNames "mcp"
+          ++ [
+            "homelab-mcp.dropbear-butterfly.ts.net"
+            "localhost"
+            "127.0.0.1"
+          ];
       };
 
       # Woodpecker CI, which runs on its own host. `ci.homelab.local` is baked
@@ -232,7 +245,7 @@ in {
         # wpmcp's own default is 8085, but that port is already the appdb pgmcp
         # instance here, so this one takes the next free port instead.
         bind = "127.0.0.1:8091";
-        allowedHosts = ["wp-mcp.homelab.local" "localhost" "127.0.0.1"];
+        allowedHosts = vhostNames "wp-mcp" ++ ["localhost" "127.0.0.1"];
       };
     }
     # One pgmcp instance per database on the `database` host. serverType pins the
@@ -245,7 +258,7 @@ in {
         package = mcpPackages.pgmcp-server;
         tokenFile = config.age.secrets.${pgSecretName db}.path;
         bind = "127.0.0.1:${toString port}";
-        allowedHosts = [(pgVhostName db) "localhost" "127.0.0.1"];
+        allowedHosts = vhostNames (pgVhostBase db) ++ ["localhost" "127.0.0.1"];
       })
     homelabDatabases;
 

@@ -134,6 +134,22 @@ lib.mkIf (config.networking.hostName != "homelab-dns") {
     };
   };
 
+  # `resolveLocalQueries` (nixpkgs default true) sets
+  # `networking.resolvconf.useLocalResolver`, which writes BOTH `nameserver
+  # 127.0.0.1` and `nameserver ::1` into /etc/resolv.conf. This unbound binds
+  # `interface = ["127.0.0.1"]` with `do-ip6 = false`, so the ::1 entry is a
+  # black hole -- confirmed with `dig @::1` ("no servers could be reached")
+  # while `dig @127.0.0.1` answers NOERROR. glibc tries 127.0.0.1 first so most
+  # lookups are unaffected, but anything that falls through to the second
+  # nameserver waits out the full resolver timeout. That is the
+  # `dial tcp: lookup localhost: i/o timeout` Caddy logged on the mcp host on
+  # 2026-08-31, which hung every MCP vhost behind it.
+  #
+  # `networking.nameservers` below already points resolv.conf at the local
+  # cache, so this option is redundant as well as harmful -- turning it off
+  # leaves a resolv.conf with only the address unbound actually listens on.
+  services.unbound.resolveLocalQueries = false;
+
   # Override modules/common.nix's `lib.mkDefault` -- resolve through the local
   # cache, not the `dns` host directly.
   networking.nameservers = ["127.0.0.1"];
