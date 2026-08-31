@@ -69,6 +69,7 @@ deploy host ip:
 alias ca := colmena-apply
 alias cah := colmena-apply-host
 alias cb := colmena-build
+alias cbh := colmena-build-host
 alias cs := colmena-current-system
 
 colmena-apply: clear
@@ -238,4 +239,3 @@ ci-image-push: clear
   podman tag pve-nixos-homelab-ci:latest harbor.homelab.local/ci/pve-nixos-homelab:latest
   podman push harbor.homelab.local/ci/pve-nixos-homelab:latest
   echo "==> pushed harbor.homelab.local/ci/pve-nixos-homelab:latest"
-
