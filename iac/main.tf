@@ -392,9 +392,9 @@ resource "proxmox_virtual_environment_vm" "harbor_vm" {
     timeout = "60s"
   }
 
-  started = true
+  started = false
 
-  on_boot = true
+  on_boot = false
 }
 
 # Container VM
@@ -589,9 +589,9 @@ resource "proxmox_virtual_environment_vm" "hermes_vm" {
     timeout = "60s"
   }
 
-  started = true
+  started = false
 
-  on_boot = true
+  on_boot = false
 }
 
 # Fleet (osquery management) VM
@@ -656,9 +656,9 @@ resource "proxmox_virtual_environment_vm" "fleet_vm" {
     timeout = "60s"
   }
 
-  started = true
+  started = false
 
-  on_boot = true
+  on_boot = false
 }
 
 # Certificate Authority (step-ca) VM
@@ -820,7 +820,7 @@ resource "proxmox_virtual_environment_vm" "cache_vm" {
 
   memory {
     dedicated = 1024
-    floating  = 512
+    floating  = 1024
   }
 
   disk {
@@ -892,7 +892,7 @@ resource "proxmox_virtual_environment_vm" "jellyfin_vm" {
 
   memory {
     dedicated = 4096
-    floating  = 2048
+    floating  = 4096
   }
 
   # OS disk (scsi0 -> /dev/sda): btrfs root via disko-jellyfin.nix
@@ -1223,9 +1223,9 @@ resource "proxmox_virtual_environment_vm" "woodpecker_vm" {
     timeout = "60s"
   }
 
-  started = true
+  started = false
 
-  on_boot = true
+  on_boot = false
 }
 
 # Scratchpad VM (Fedora cloud image, ad-hoc testing)
@@ -1290,9 +1290,9 @@ resource "proxmox_virtual_environment_vm" "scratchpad_vm" {
     timeout = "60s"
   }
 
-  started = true
+  started = false
 
-  on_boot = true
+  on_boot = false
 }
 
 # K3s Control Plane VM (cluster-init, embedded etcd -- see
@@ -1367,9 +1367,9 @@ resource "proxmox_virtual_environment_vm" "k3s_cntrl_1_vm" {
     timeout = "60s"
   }
 
-  started = true
+  started = false
 
-  on_boot = true
+  on_boot = false
 }
 
 # # K3s Server (Control Plane) VM
