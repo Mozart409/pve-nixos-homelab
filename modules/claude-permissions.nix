@@ -4,14 +4,17 @@
 
   perms = import ./claude-permissions-data.nix;
 
-  # Only the permissions block and the WebSearch restriction hook, as JSON.
-  # Merged into settings.json rather than written as the whole file:
-  # modules/herdr.nix and modules/moshi-hook-user.nix own the rest of the
-  # `hooks` key there, and Claude Code itself writes UI state into it.
+  # The permissions block, the top-level includeCoAuthoredBy setting, and the
+  # WebSearch restriction hook, as JSON. Merged into settings.json rather than
+  # written as the whole file: modules/herdr.nix and modules/moshi-hook-user.nix
+  # own the rest of the `hooks` key there, and Claude Code itself writes UI
+  # state into it.
   permsJson = builtins.toJSON {
     permissions = {
       inherit (perms) allow deny defaultMode;
     };
+    # Don't append "Co-Authored-By: Claude" to commits made from this host.
+    includeCoAuthoredBy = false;
   };
 
   # WebSearch is all-or-nothing at the permission level (bare `WebSearch` is the
@@ -117,6 +120,7 @@
       # appended, while the groups herdr and moshi-hook write are preserved.
       jq --argjson p '${permsJson}' --argjson h '${hooksJson}' \
         '.permissions = ((.permissions // {}) + $p.permissions)
+         | .includeCoAuthoredBy = $p.includeCoAuthoredBy
          | .hooks.PreToolUse = ([((.hooks.PreToolUse // [])[] | select(.matcher != "WebSearch"))] + $h.hooks.PreToolUse)' \
         "$SETTINGS" > "$tmp"
 

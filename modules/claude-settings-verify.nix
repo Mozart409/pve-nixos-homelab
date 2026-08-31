@@ -67,6 +67,9 @@
         mode=$(jq -r '.permissions.defaultMode // "unset"' "$SETTINGS")
         [ "$mode" = "dontAsk" ] || problems+=("defaultMode is '$mode', expected 'dontAsk'")
 
+        coauthor=$(jq -r '.includeCoAuthoredBy // "unset"' "$SETTINGS")
+        [ "$coauthor" = "false" ] || problems+=("includeCoAuthoredBy is '$coauthor', expected 'false'")
+
         # Redundant while the mode above holds — dontAsk denies AskUserQuestion
         # outright, so nothing ever waits on this timeout. It matters in exactly
         # the case this module exists to catch: the mode has already drifted, and
