@@ -36,7 +36,7 @@
         {
           name = "Axon Gateway";
           url = "https://axon.homelab.internal";
-          icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/home-assistant.svg";
+          icon = "https://raw.githubusercontent.com/Mozart409/axon-gateway/refs/heads/main/static/favicon.svg";
         }
         {
           name = "Forgejo";
