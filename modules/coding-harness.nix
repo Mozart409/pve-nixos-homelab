@@ -56,7 +56,16 @@
   # subagent-driven-development) plus the shared skill library copied here from
   # the global ~/.agents/skills on the workstation (cue-kind-definition,
   # grill-with-docs, kubernetes-specialist, postgres, postgresql-table-design,
-  # rust-async-patterns, rust-best-practices).
+  # rust-async-patterns, rust-best-practices) plus a text/md-only subset of the
+  # upstream "superpowers" plugin skills copied from the workstation's Claude
+  # Code plugin cache (brainstorming, dispatching-parallel-agents,
+  # executing-plans, finishing-a-development-branch, receiving-code-review,
+  # requesting-code-review, systematic-debugging, test-driven-development,
+  # using-git-worktrees, using-superpowers, verification-before-completion,
+  # writing-plans, writing-skills) -- their non-md assets (hooks, node/shell
+  # scripts, tests) were dropped since nothing here can run npx/node, and
+  # subagent-driven-development was skipped since this repo already ships its
+  # own opencode-tailored version of that skill under the same name.
   repoSkillsDir = ../.opencode/skills;
 
   # Agent slash-commands shipped from this repo's .opencode/command/ (this
