@@ -168,11 +168,17 @@
         url = "https://cache.homelab.internal/homelab/nix-cache-info";
         instance = "homelab-cache";
       }
-      # Stays on .local: forgejo's caddy has no usable cert for its .internal name
-      # and aborts the TLS handshake for that SNI (probe_http_ssl 0, no HTTP
-      # response at all, 6ms failure) even though DNS resolves and 443 is open.
-      # The vhost lists both names, so this is an ACME/cert gap on that host, not
-      # a config error -- and it predates this file. Fix the cert, then switch.
+      # Stays on .local, but no longer for the original reason. This entry used
+      # to carry a note that forgejo's caddy had no usable cert for its
+      # .internal name and aborted the handshake for that SNI, ending "fix the
+      # cert, then switch". That cert has since been fixed:
+      # `curl https://forgejo.homelab.internal` returned 200 with
+      # ssl_verify_result=0 on 2026-09-07.
+      #
+      # Not switching anyway. Changing this URL rewrites the `probe_target`
+      # label and orphans the existing series for no gain, and since 2026-09-07
+      # BOTH names are covered for cert expiry by the tls_cert job above, which
+      # is what the switch was originally meant to achieve.
       {
         url = "https://forgejo.homelab.local";
         instance = "homelab-forgejo";
@@ -233,10 +239,22 @@
     # still answers axon-gateway (see hosts/containers/axon-gateway/default.nix
     # for the backend list this mirrors).
     #
-    # Stays on .homelab.local, not .internal: mcp_vm's Caddy vhosts only
-    # register the .local names with step-ca (see virtualHosts in
-    # hosts/mcp_vm/configuration.nix), so an .internal SNI would abort the TLS
-    # handshake -- the same gap documented on the forgejo entry above.
+    # Stays on .homelab.local: an .internal SNI here still fails TLS
+    # verification (curl ssl_verify_result=1 for prom-mcp and mcp on
+    # 2026-09-07), so the symptom this comment always described is real.
+    #
+    # Its stated CAUSE was wrong, though, and the wrong cause sends you to the
+    # wrong file: the vhosts do NOT "only register the .local names". They list
+    # both -- hosts/mcp_vm/configuration.nix:27 builds every vhost key as
+    # "${base}.homelab.local ${base}.homelab.internal". So this is a cert that
+    # was never successfully obtained or has gone bad for the .internal subject,
+    # not a name missing from the Caddy config. Caddy issues one cert per
+    # subject name rather than one multi-SAN cert per vhost, which is what makes
+    # that possible -- proven by the per-identifier ACME orders in caddy's
+    # journal on homelab-jellyfin, 2026-09-07.
+    #
+    # Consequence: all 11 .internal names are excluded from the tls_cert job
+    # above. Fix them and add them there.
     mcp_probe = [
       {
         url = "https://mcp.homelab.local/mcp"; # Home Assistant (hamcp)
