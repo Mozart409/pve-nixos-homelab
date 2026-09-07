@@ -269,6 +269,77 @@
     # That is what keeps this addressing change free of series churn -- do not
     # drop those labels, or every existing series is orphaned.
     scrapeConfigs = [
+      # comin's own exporter (:4243, opened fleet-wide in modules/comin.nix).
+      # One job with a static_config per host rather than the job-per-host shape
+      # used for the node exporters below: every target here runs the identical
+      # exporter, so `instance` is the only thing that differs and N job names
+      # would add nothing but N places to forget to edit.
+      #
+      # This closes the gap that made the 2026-09-07 otel incident so hard to
+      # see -- comin had deployed nothing for 7.34 days while comin.service sat
+      # `active`, and nothing scraped the metrics that would have said so.
+      # comin_deployment_* / comin_fetch_* now make a stalled or failing host
+      # visible the same way any other target is.
+      #
+      # Hosts absent on purpose: fleet, harbor, hermes and woodpecker (VMs shut
+      # off, 2026-08-31..09-07), zeroclaw and wotan (down since 2026-08-15, see
+      # the removed node jobs below), k3s-cntrl-1 (DNS record gone).
+      {
+        job_name = "comin";
+        static_configs = [
+          # dns is addressed by IP, matching dns-node below: this host IS the
+          # resolver, so a name lookup for it is circular at exactly the moment
+          # it is broken and worth scraping.
+          {
+            targets = ["192.168.2.145:4243"];
+            labels.instance = "homelab-dns";
+          }
+          {
+            targets = ["localhost:4243"];
+            # Deliberately homelab-otel, not the `localhost:9100` that otel-node
+            # carries: that job predates the explicit-instance convention above
+            # and is the fleet's one outlier. Matching the majority spelling
+            # here keeps this job's series joinable with every other host's.
+            labels.instance = "homelab-otel";
+          }
+          {
+            targets = ["ca.homelab.local:4243"];
+            labels.instance = "homelab-ca";
+          }
+          {
+            targets = ["cache.homelab.local:4243"];
+            labels.instance = "homelab-cache";
+          }
+          {
+            targets = ["containers.homelab.local:4243"];
+            labels.instance = "homelab-containers";
+          }
+          {
+            targets = ["database.homelab.local:4243"];
+            labels.instance = "homelab-database";
+          }
+          {
+            targets = ["development.homelab.local:4243"];
+            labels.instance = "homelab-development";
+          }
+          {
+            targets = ["forgejo.homelab.local:4243"];
+            labels.instance = "homelab-forgejo";
+          }
+          {
+            targets = ["jellyfin.homelab.local:4243"];
+            labels.instance = "homelab-jellyfin";
+          }
+          {
+            targets = ["mcp.homelab.local:4243"];
+            labels.instance = "homelab-mcp";
+          }
+          {
+            targets = ["unifi.homelab.local:4243"];
+            labels.instance = "homelab-unifi";
+          }
+        ];
+      }
       {
         job_name = "prometheus";
         static_configs = [

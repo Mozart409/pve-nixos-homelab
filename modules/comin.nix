@@ -48,6 +48,25 @@ in {
   services.comin = {
     enable = true;
     inherit hostname;
+
+    # comin already serves its own metrics (deploy/fetch/eval/build outcomes)
+    # on :4243 of every interface -- listen_address defaults to "" -- but
+    # openFirewall defaults to false, so nothing could ever reach them and
+    # `{__name__=~"comin.*"}` was empty fleet-wide.
+    #
+    # That gap is not academic. On 2026-09-07 comin on otel had deployed
+    # nothing for 7.34 days while comin.service sat `active` and the host was
+    # healthy; with no comin metrics and no SSH (tailnet ACL) the stall was
+    # only detectable by inferring it from
+    # prometheus_config_last_reload_success_timestamp_seconds. comin_* makes
+    # that a first-class signal instead of a deduction.
+    #
+    # Opened here rather than in each host's allowedTCPPorts -- where port 9100
+    # is repeated in 15 separate host files -- because this module is the one
+    # import point every comin host shares, so running comin now implies
+    # exporting comin metrics, with no per-host step to forget.
+    exporter.openFirewall = true;
+
     remotes = [
       {
         name = "origin";
