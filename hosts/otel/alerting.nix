@@ -51,6 +51,44 @@
         ];
       }
       {
+        name = "certificates";
+        rules = [
+          {
+            # On 2026-09-07 hofvarpnir.homelab.local served a cert that had been
+            # expired for 3.3 days. Nothing here noticed: the metric below was
+            # scraped the whole time with no rule attached to it, and the only
+            # alert that ever fired was TargetDown -- i.e. after the expiry had
+            # already broken the scrape. This rule is the "before" half.
+            #
+            # Caddy renews step-ca's 30-day certs at 2/3 life, with ~10 days
+            # left. Firing at 7 means a renewal has already failed at least
+            # once, while a week of slack remains. `for = 1h` because this value
+            # slides down continuously rather than flipping -- there is no such
+            # thing as a one-scrape blip worth waking up for.
+            #
+            # homelab-ca is excluded, not overlooked: step-ca gives its own TLS
+            # leaf a 24h lifetime and rotates it continuously, so it sits
+            # permanently below any multi-day threshold and would flap forever.
+            #
+            # LIMIT, and it is a big one: probe_ssl_earliest_cert_expiry only
+            # exists for names blackbox.nix actually probes, and Caddy manages a
+            # separate certificate per subject name. Every service there is
+            # probed on exactly one of its two names, so ~51 of the fleet's ~72
+            # step-ca subjects -- including the hofvarpnir.homelab.local that
+            # caused this -- are still invisible to this rule. See the audit
+            # note in blackbox.nix before trusting a green board.
+            alert = "CertificateExpiringSoon";
+            expr = "(probe_ssl_earliest_cert_expiry{instance!=\"homelab-ca\"} - time()) / 86400 < 7";
+            for = "1h";
+            labels.severity = "warning";
+            annotations = {
+              summary = "{{ $labels.probe_target }} certificate expires in {{ $value | printf \"%.1f\" }} days";
+              description = "ACME renewal against ca.homelab.local has most likely wedged -- the backoff is in-process and does not recover on its own. Restart caddy on the serving host and allow ~2.5 minutes for renewal to finish before rechecking.";
+            };
+          }
+        ];
+      }
+      {
         name = "monitoring-self";
         rules = [
           {

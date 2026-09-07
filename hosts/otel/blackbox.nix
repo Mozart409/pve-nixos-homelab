@@ -26,6 +26,125 @@
   # probed URL. That is what lets alerting.nix's inhibit_rules actually
   # collapse a ProbeFailed alert into the TargetDown alert for the same host --
   # see the comment there for why they used to be two unrelated label spaces.
+  #
+  # CERT COVERAGE (audited 2026-09-07). Every https entry below also yields
+  # probe_ssl_earliest_cert_expiry for free, which alerting.nix's
+  # CertificateExpiringSoon now consumes -- but only for the exact SNI probed,
+  # and Caddy manages a separate certificate per subject name. Counting every
+  # vhost across hosts/ and modules/ (excluding .ts.net, which uses Tailscale
+  # certs, and the http:// redirect vhosts): 72 step-ca subjects exist, 21 are
+  # probed, 51 are not. Every service is probed on exactly ONE of its two
+  # names, never both.
+  #
+  # That is not a cosmetic gap. hofvarpnir.homelab.internal is probed and was
+  # green throughout 2026-09-04..07 while hofvarpnir.homelab.local -- same
+  # vhost, same host, different cert -- sat expired for 3.3 days.
+  #
+  # Adding 51 http_2xx targets would violate the rule above -- many of these
+  # names have no known-good 2xx path. Hence the `tls_cert` module below: a tcp
+  # prober with tls, which completes a handshake and exports
+  # probe_ssl_earliest_cert_expiry while speaking no HTTP at all. That
+  # distinction is load-bearing, not theoretical: loki (404), tempo (502) and
+  # pgadmin.homelab.internal (backend hangs past 8s) every one of them verified
+  # clean at the TLS layer on 2026-09-07 while being useless as http_2xx
+  # targets.
+  #
+  # Every name in certSubjects was curl-verified ssl_verify_result=0 on
+  # 2026-09-07 before being added, per the rule above. Verified BROKEN that day
+  # and therefore deliberately absent -- add each back when it is fixed, that is
+  # the whole point of having found them:
+  #   pgadmin.homelab.local        verify=10, CERT EXPIRED (host: database)
+  #   unifi.homelab.internal       verify=1
+  #   *-mcp.homelab.internal (11)  verify=1 -- the same .internal gap already
+  #                                described on the mcp_probe list below, whose
+  #                                cause is NOT that the vhost omits the name
+  #                                (mcp_vm/configuration.nix:27 lists both)
+  #
+  # Hosts deliberately absent: fleet, harbor, hermes and woodpecker (VMs shut
+  # off, 2026-08-31..09-07), zeroclaw and wotan (down since 2026-08-15, see the
+  # removed scrape jobs in ./configuration.nix), k3s-cntrl-1 (DNS record gone).
+  #
+  # Keyed by the node-exporter `instance` of the host serving the vhost, so a
+  # whole-host outage still collapses into one TargetDown rather than N
+  # ProbeFailed -- the same dedup contract as the lists below.
+  certSubjects = {
+    homelab-cache = [
+      "cache.homelab.local"
+      "cache.homelab.internal"
+    ];
+    homelab-containers = [
+      "containers.homelab.local"
+      "containers.homelab.internal"
+      "axon.homelab.local"
+      "axon.homelab.internal"
+      "albyhub.homelab.local"
+      "albyhub.homelab.internal"
+      "dashboard.homelab.local"
+      "dashboard.homelab.internal"
+      "notes.homelab.local"
+      "notes.homelab.internal"
+      "romm.homelab.local"
+      "romm.homelab.internal"
+      "searxng.homelab.local"
+      "searxng.homelab.internal"
+    ];
+    homelab-database = [
+      "database.homelab.local"
+      "database.homelab.internal"
+      "pgadmin.homelab.internal"
+    ];
+    homelab-dns = [
+      "dns.homelab.local"
+      "dns.homelab.internal"
+    ];
+    homelab-forgejo = [
+      "forgejo.homelab.local"
+      "forgejo.homelab.internal"
+    ];
+    homelab-jellyfin = [
+      "jellyfin.homelab.local"
+      "jellyfin.homelab.internal"
+      "hofvarpnir.homelab.local"
+      "hofvarpnir.homelab.internal"
+    ];
+    homelab-otel = [
+      "otel.homelab.local"
+      "otel.homelab.internal"
+      "alertmanager.homelab.local"
+      "alertmanager.homelab.internal"
+      "loki.homelab.local"
+      "loki.homelab.internal"
+      "tempo.homelab.local"
+      "tempo.homelab.internal"
+      "prometheus.homelab.local"
+      "prometheus.homelab.internal"
+    ];
+    homelab-unifi = [
+      "unifi.homelab.local"
+    ];
+    homelab-mcp = [
+      "mcp.homelab.local"
+      "pbs-mcp.homelab.local"
+      "pg-uptime-mcp.homelab.local"
+      "pg-appdb-mcp.homelab.local"
+      "pg-terraform-mcp.homelab.local"
+      "pg-forgejo-mcp.homelab.local"
+      "pg-romm-mcp.homelab.local"
+      "pg-hofvarpnir-mcp.homelab.local"
+      "prom-mcp.homelab.local"
+      "loki-mcp.homelab.local"
+      "wp-mcp.homelab.local"
+    ];
+  };
+
+  certTargets = lib.concatLists (lib.mapAttrsToList (instance: names:
+    map (n: {
+      url = "${n}:443";
+      inherit instance;
+    })
+    names)
+  certSubjects);
+
   probeTargets = {
     http_2xx = [
       # The lesson above, encoded. Of the app's three health endpoints this is the
@@ -165,6 +284,9 @@
       }
     ];
 
+    # Generated from certSubjects above -- 49 subjects across 9 live hosts.
+    tls_cert = certTargets;
+
     tcp_connect = [
       # The router redirects :80 to a self-signed HTTPS vhost. An HTTP prober
       # would mark that down for certificate reasons that say nothing about
@@ -214,6 +336,26 @@
         prober = "tcp";
         timeout = "5s";
         tcp.preferred_ip_protocol = "ip4";
+      };
+
+      # Certificate surveillance, not service health. The tcp prober derives SNI
+      # from the target hostname, so `name:443` handshakes against exactly that
+      # subject's certificate -- which is what makes per-subject coverage
+      # possible at all, since Caddy issues one cert per name rather than one
+      # multi-SAN cert per vhost (proven by the per-identifier renewal orders in
+      # caddy's journal on homelab-jellyfin, 2026-09-07).
+      #
+      # probe_success here means "the handshake completed against a cert this
+      # host trusts", so an expired or untrusted cert fails it. Combined with
+      # probe_ssl_earliest_cert_expiry that gives both halves: ProbeFailed once
+      # a cert is already bad, CertificateExpiringSoon a week before it is.
+      tls_cert = {
+        prober = "tcp";
+        timeout = "10s";
+        tcp = {
+          tls = true;
+          preferred_ip_protocol = "ip4";
+        };
       };
     };
   };
