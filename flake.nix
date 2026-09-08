@@ -17,10 +17,6 @@
       url = "github:zhaofengli/colmena";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    comin = {
-      url = "github:nlewo/comin";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     # MCP-server monorepo (pbs/pg/prom/loki/ha). Lives on the homelab Forgejo.
     # Fetched over HTTPS (repo is public + step-ca trusted everywhere) so no SSH
     # key is needed by CI or build hosts; the old git+ssh ts.net URL needed a
@@ -88,7 +84,6 @@
     agenix,
     disko,
     colmena,
-    comin,
     homelab-mcp,
     hermes-agent,
     homelab-dashboard,
@@ -196,7 +191,7 @@
 
     # Home-manager + Mozart409 nixvim + tmux for the amadeus user. Applied to every
     # colmena node via `colmenaHive.defaults`, and baked into every
-    # nixosConfiguration via mkHost so comin (which builds nixosConfigurations)
+    # nixosConfiguration via mkHost so a plain `nix build`
     # and colmena (which builds the hive) produce the SAME closure — without this
     # parity the two tools would flip-flop nixvim/tmux on every poll/apply.
     homeManagerNixvim = {
@@ -228,14 +223,10 @@
       ];
     };
 
-    # Comin module parameterized by the FLAKE ATTRIBUTE name (comin derives
-    # nixosConfigurations.<hostname> from it; networking.hostName is
-    # "homelab-<name>" everywhere and would not match).
-    cominFor = hostname: import ./modules/comin.nix {inherit comin hostname;};
-
     # Function to create a NixOS system configuration. Every mkHost host gets
-    # home-manager/nixvim (hive parity, see above) and comin. Hosts that must
-    # NOT (bootstrap/installer images like `minimal` and `iso`) are explicit
+    # home-manager/nixvim (hive parity, see above) and modules/attic-push.nix
+    # (which also pulls in modules/loki-logs.nix). Hosts that must NOT
+    # (bootstrap/installer images like `minimal` and `iso`) are explicit
     # nixosSystem entries instead.
     mkHost = hostname:
       nixpkgs.lib.nixosSystem {
@@ -251,7 +242,7 @@
           disko.nixosModules.disko
           agenix.nixosModules.default
           homeManagerNixvim
-          (cominFor hostname)
+          ./modules/attic-push.nix
           ./modules/container-registries.nix
           ./hosts/${hostname}/configuration.nix
         ];
@@ -267,7 +258,7 @@
         containers = mkHost "containers";
         # Bootstrap image for nixos-anywhere (`just deploy-minimal`). Explicit
         # (not mkHost) because it must NOT get home-manager/nixvim (slows the
-        # install) or comin (a bootstrap host should not self-deploy).
+        # install). A bootstrap host also gets no attic-push.
         minimal = nixpkgs.lib.nixosSystem {
           specialArgs = {inherit homelab-dashboard;};
           modules = [
@@ -303,7 +294,7 @@
             homelab-mcp.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            (cominFor "mcp")
+            ./modules/attic-push.nix
             ./hosts/mcp_vm/configuration.nix
           ];
         };
@@ -327,7 +318,7 @@
             agenix.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            (cominFor "development")
+            ./modules/attic-push.nix
             ./hosts/development/configuration.nix
           ];
         };
@@ -349,7 +340,7 @@
             agenix.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            (cominFor "jellyfin")
+            ./modules/attic-push.nix
             ./hosts/jellyfin/configuration.nix
           ];
         };
@@ -393,7 +384,7 @@
             hermes-agent.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            (cominFor "hermes")
+            ./modules/attic-push.nix
             ./hosts/hermes/configuration.nix
           ];
         };
@@ -434,7 +425,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "database")
+            ./modules/attic-push.nix
             ./hosts/database/configuration.nix
           ];
         };
@@ -449,7 +440,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "otel")
+            ./modules/attic-push.nix
             ./hosts/otel/configuration.nix
           ];
         };
@@ -464,7 +455,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "dns")
+            ./modules/attic-push.nix
             ./hosts/dns/configuration.nix
           ];
         };
@@ -479,7 +470,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "unifi")
+            ./modules/attic-push.nix
             ./hosts/unifi/configuration.nix
           ];
         };
@@ -493,7 +484,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "containers")
+            ./modules/attic-push.nix
             ./hosts/containers/configuration.nix
           ];
         };
@@ -509,7 +500,7 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             homelab-mcp.nixosModules.default
-            (cominFor "mcp")
+            ./modules/attic-push.nix
             ./hosts/mcp_vm/configuration.nix
           ];
         };
@@ -528,7 +519,7 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             hermes-agent.nixosModules.default
-            (cominFor "hermes")
+            ./modules/attic-push.nix
             ./hosts/hermes/configuration.nix
           ];
         };
@@ -543,7 +534,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "ca")
+            ./modules/attic-push.nix
             ./hosts/ca/configuration.nix
           ];
         };
@@ -558,7 +549,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "fleet")
+            ./modules/attic-push.nix
             ./hosts/fleet/configuration.nix
           ];
         };
@@ -573,7 +564,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "harbor")
+            ./modules/attic-push.nix
             ./hosts/harbor/configuration.nix
           ];
         };
@@ -588,7 +579,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "cache")
+            ./modules/attic-push.nix
             ./hosts/cache/configuration.nix
           ];
         };
@@ -612,7 +603,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "forgejo")
+            ./modules/attic-push.nix
             ./hosts/forgejo/configuration.nix
           ];
         };
@@ -627,7 +618,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "woodpecker")
+            ./modules/attic-push.nix
             ./hosts/woodpecker/configuration.nix
           ];
         };
@@ -642,7 +633,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "development")
+            ./modules/attic-push.nix
             ./hosts/development/configuration.nix
           ];
         };
@@ -657,7 +648,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "jellyfin")
+            ./modules/attic-push.nix
             ./hosts/jellyfin/configuration.nix
           ];
         };
@@ -672,7 +663,7 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            (cominFor "k3s-cntrl-1")
+            ./modules/attic-push.nix
             ./hosts/k3s-cntrl-1/configuration.nix
           ];
         };

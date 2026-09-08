@@ -12,7 +12,7 @@
   # switch` inherits sudo's sanitized `secure_path`, not
   # /run/current-system/sw/bin. Surfaced live as "sed: command not found"
   # during a manual activation on 2026-08-20 (uncertain whether a normal
-  # comin/colmena-driven apply, running as root without going through sudo,
+  # colmena-driven apply, running as root without going through sudo,
   # would hit this the same way -- but referencing the store path directly is
   # the standard, unconditionally-correct pattern for anything invoked from
   # system.activationScripts regardless).

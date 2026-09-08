@@ -6,21 +6,28 @@
 }: let
   # See the comment on attic-login's restartTriggers below: bump this
   # whenever attic-push-token.age is intentionally rotated so the next
-  # colmena/comin deploy re-applies it instead of silently keeping a stale
+  # colmena deploy re-applies it instead of silently keeping a stale
   # token on hosts where the login unit already succeeded once.
   secretNonce = "2026-08-20-attic-push-token-rekey";
 in {
-  # loki-logs.nix is already imported transitively via modules/comin.nix (the
-  # only importer of this file), but imported again here too so this module
-  # stays self-contained if that ever changes — duplicate imports of the same
-  # path are deduplicated by the module system.
+  # This module is now the per-host common import (it replaced modules/comin.nix
+  # in that role when comin was removed on 2026-09-08 — see flake.nix's mkHost
+  # and the explicit nixosSystem entries). It is imported by every real host, so
+  # it is also where the Loki shipper gets switched on.
   imports = [./loki-logs.nix];
+
+  # comin.nix used to be the thing that set this, and removing it silently
+  # turned log shipping OFF on every host that does not enable it itself
+  # (otel, ca, dns, unifi, ... all evaluated to false before this line was
+  # added). Hosts that also set it are unaffected: mkEnableOption is a plain
+  # bool and multiple `true` definitions merge without conflict.
+  services.loki-logs.enable = true;
 
   # Attic push token for the `homelab` cache (plain JWT, NOT KEY=value — it is
   # passed as a positional argument to `attic login`, not sourced as env).
   # Pulling needs no credential (modules/attic-cache.nix, public cache); this
   # is only what lets a host UPLOAD what it builds. Shared admin token minted
-  # once via `just attic-init` — every comin host reuses the same secret file,
+  # once via `just attic-init` — every host reuses the same secret file,
   # so giving a new host push access is a secrets.nix recipient change plus
   # `just reencrypt`, not a new token.
   age.secrets.attic-push-token = {
@@ -61,17 +68,17 @@ in {
     '';
   };
 
-  # Push this host's closure after every successful activation — comin's
-  # `nixos-rebuild switch` included, since activation scripts run regardless
-  # of what triggered the switch. Every comin host ends up pushing every
-  # generation it builds, so the next host that shares a derivation (nixpkgs,
+  # Push this host's closure after every successful activation, since
+  # activation scripts run regardless of what triggered the switch. Every host
+  # ends up pushing every generation it builds, so the next host that shares a
+  # derivation (nixpkgs,
   # a common module, a flake input) substitutes it from the LAN cache instead
   # of building it from source or pulling it over WAN from cache.nixos.org.
   #
   # Runs detached (`--no-block`) so a slow or unreachable cache never delays
   # or fails the activation that triggered it; failures are visible in
-  # `systemctl status attic-push-system` / the unit's journal, not in comin's
-  # own deploy result.
+  # `systemctl status attic-push-system` / the unit's journal, not in the
+  # deploy result of whatever triggered it.
   systemd.services.attic-push-system = {
     description = "Push the current system closure to the homelab attic cache";
     after = ["attic-login.service" "network-online.target"];

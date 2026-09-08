@@ -243,9 +243,10 @@ in {
   };
 
   # Attic push token + login + auto-push-on-activation now come from
-  # modules/attic-push.nix, pulled in fleet-wide via cominFor (modules/comin.nix)
-  # since this host is comin-managed. Used to be defined here inline; moved out
-  # so every comin host gets the same push setup instead of just this one.
+  # modules/attic-push.nix, imported fleet-wide from flake.nix's mkHost. Used to
+  # be defined here inline; moved out so every host gets the same push setup
+  # instead of just this one. (It reached hosts via modules/comin.nix until comin
+  # was removed on 2026-09-08.)
 
   # Forgejo API token for the `developmentbot` account (env-file:
   # FORGEJO_TOKEN=...). Needed ONLY to create repos over the REST API — git

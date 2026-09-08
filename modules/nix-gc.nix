@@ -7,7 +7,7 @@
 
   # Pressure-triggered GC alongside the weekly calendar job above. The weekly
   # job only prunes generations older than 7 days, so it does nothing about
-  # garbage produced *today* — comin (pull-based GitOps, modules/comin.nix)
+  # garbage produced *today* — repeated colmena applies
   # rebuilds every host on each poll where main has moved, which can pile up
   # same-day garbage far faster than a weekly job reacts to. min-free/max-free
   # make Nix run GC mid-build whenever free space drops below min-free, and
