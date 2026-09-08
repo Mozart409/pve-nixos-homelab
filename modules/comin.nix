@@ -67,28 +67,34 @@ in {
     # exporting comin metrics, with no per-host step to forget.
     exporter.openFirewall = true;
 
-    # Eval budget. The default 1800s was already marginal: comin's own record
-    # of otel's last SUCCESSFUL deployment (2026-08-17, in
-    # /var/lib/comin/store.json) shows eval_started_at 17:31:31 ->
-    # eval_ended_at 17:55:42, i.e. 1451s, 80% of the budget. The flake has only
-    # grown since, and by 2026-09-08 comin had deployed nothing on otel since
-    # 2026-08-19 or on cache since 2026-08-20 while still fetching every poll,
-    # with comin_last_eval_failed = 1 on otel and ca.
+    # Eval budget, raised from the 1800s default for the two hosts that need
+    # it. Scope matters here: comin is NOT broken fleet-wide. On 2026-09-08
+    # containers, jellyfin and unifi were all on the same recent commit with
+    # comin_last_eval_failed = 0, having self-deployed normally. Only otel
+    # (stuck on e25e70a0 from 2026-08-17) and ca had the eval flag set.
     #
-    # These hosts are small VMs on an IOPS-starved pool -- the same disk
-    # contention behind the attic outage -- so an eval that takes 83s on the
-    # development host takes tens of minutes here. Raising the ceiling is a
-    # mitigation, not a cure; the cure is the ssd_pool migration.
+    # What justifies the raise is otel's own record in
+    # /var/lib/comin/store.json: its last successful deployment shows
+    # eval_started_at 17:31:31 -> eval_ended_at 17:55:42, i.e. 1451s, already
+    # 80% of the 1800s budget, on a flake that has grown since. Since most
+    # hosts evaluate the same flake well inside the budget, slow eval is a
+    # per-host resource problem -- otel and ca being the constrained ones --
+    # not a property of the flake. Raising the ceiling costs nothing on hosts
+    # that never approach it.
+    #
+    # Treat this as a mitigation whose premise is unconfirmed: the debug flag
+    # below is what will actually name the cause.
     evalTimeout = 3600;
     buildTimeout = 3600;
 
-    # Comin logs NOTHING at info level when an eval fails -- the journal on a
-    # stalled host shows only "New commits have been fetched", repeatedly, for
-    # weeks. That silence is why this went undiagnosed for three weeks and had
-    # to be inferred from store.json. Debug logging makes the next failure say
-    # what it was. comin is very low-volume, and its journal now ships to Loki
-    # (see services.loki-logs below), so this is cheap. Turn it off once the
-    # stall is understood.
+    # Comin logs NOTHING at info level when an eval fails -- otel's journal
+    # shows only "New commits have been fetched", repeatedly, since 2026-08-19
+    # while comin_last_eval_failed stayed 1. That silence is why the stall went
+    # undiagnosed and had to be reconstructed from store.json. Debug logging
+    # makes the next failure name itself. comin is very low-volume and its
+    # journal now ships to Loki (see services.loki-logs below), so enabling
+    # this everywhere is cheap -- narrow it to otel/ca or drop it once the
+    # cause is known.
     debug = true;
 
     remotes = [
