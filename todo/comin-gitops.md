@@ -4,7 +4,9 @@ Add [comin](https://github.com/nlewo/comin) so every NixOS host polls this repo'
 `main` branch on Forgejo and deploys itself, while keeping colmena available for
 manual pushes.
 
-**Status — plan for review (2026-08-17), not started.**
+**Status — SUPERSEDED. Comin was adopted, then removed on 2026-09-08.**
+See `todo/comin-removal-cleanup.md` for the leftover on-disk state. This file is
+kept for the reasoning behind adopting it, not as work to do.
 
 ## Corrections to the initial assumptions
 
