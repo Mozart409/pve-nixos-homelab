@@ -73,7 +73,7 @@ in {
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
-    ../../modules/loki-logs.nix
+    ../../modules/fluent-bit.nix
     ../../modules/caddy-http3.nix
   ];
 

@@ -1,3 +1,14 @@
+# The fluent-bit journald -> Loki shipper. Owns the `services.loki-logs`
+# option and every piece of fluent-bit configuration; nothing else in the repo
+# should touch services.fluent-bit.
+#
+# Imported once, fleet-wide, from modules/common.nix. It used to be reached
+# transitively through modules/comin.nix, which was also the module that turned
+# it on -- so deleting comin on 2026-09-08 silently disabled log shipping on
+# every host that did not enable it itself. A log shipper has no business
+# depending on a GitOps agent, or on modules/attic-push.nix, which briefly
+# inherited the same job. Hence: one owner, imported from the one module every
+# host already has.
 {
   config,
   lib,

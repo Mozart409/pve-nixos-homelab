@@ -57,7 +57,7 @@
   systemd.services.garage.wantedBy = lib.mkForce [];
 
   # Ship the garage journal to the central Loki. The fluent-bit shipper itself
-  # is enabled in ../attic/default.nix (modules/loki-logs.nix); the units list
+  # is enabled in ../attic/default.nix (modules/fluent-bit.nix); the units list
   # merges across modules, so garage's entry lives here with the rest of its
   # config. Logs land in Loki under job="garage". Idles to zero while garage
   # is disabled below, and resumes by itself when garage is re-enabled.

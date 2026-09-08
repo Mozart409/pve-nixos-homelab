@@ -14,6 +14,10 @@
     # rate-limits (429) unauthenticated tarball downloads, so the inputs are
     # pushed to attic and substituted from there instead.
     ./attic-cache.nix
+    # The journald -> Loki shipper. Imported here because common.nix is the one
+    # module every host already has, so the shipper does not hang off an
+    # unrelated module the way it hung off comin.nix (and briefly attic-push).
+    ./fluent-bit.nix
     ./nixos-version-metrics.nix
     ./dns-client-cache.nix
   ];
@@ -137,6 +141,11 @@
   # default in the node_exporter binary and need no flag. Host-specific
   # exporters (postgres, etc.) stay declared in their own host files; this only
   # covers the node exporter every host shares.
+  # On by default fleet-wide: mkDefault so the two bootstrap images
+  # (hosts/iso, hosts/minimal) can switch it off without 17 other hosts having
+  # to opt in and one of them eventually being forgotten.
+  services.loki-logs.enable = lib.mkDefault true;
+
   services.prometheus.exporters.node = {
     enable = true;
     enabledCollectors = ["systemd" "processes" "interrupts" "ntp"];

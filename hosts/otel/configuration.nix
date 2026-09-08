@@ -12,6 +12,7 @@
     ../../modules/osquery.nix
     ./alerting.nix
     ./blackbox.nix
+    ../../modules/loki.nix
     ../../modules/caddy-http3.nix
   ];
 
@@ -101,54 +102,6 @@
       RestartSec = 5;
       CapabilityBoundingSet = "CAP_NET_BIND_SERVICE";
       AmbientCapabilities = "CAP_NET_BIND_SERVICE";
-    };
-  };
-
-  # Loki for log aggregation
-  services.loki = {
-    enable = true;
-    configuration = {
-      auth_enabled = false;
-      server = {
-        http_listen_port = 3100;
-        grpc_listen_port = 9096;
-      };
-      common = {
-        path_prefix = "/var/lib/loki";
-        storage.filesystem = {
-          chunks_directory = "/var/lib/loki/chunks";
-          rules_directory = "/var/lib/loki/rules";
-        };
-        replication_factor = 1;
-        ring = {
-          instance_addr = "127.0.0.1";
-          kvstore.store = "inmemory";
-        };
-      };
-      schema_config.configs = [
-        {
-          from = "2024-01-01";
-          store = "tsdb";
-          object_store = "filesystem";
-          schema = "v13";
-          index = {
-            prefix = "index_";
-            period = "24h";
-          };
-        }
-      ];
-      limits_config = {
-        retention_period = "168h"; # 7 days
-        allow_structured_metadata = true;
-        volume_enabled = true;
-      };
-      compactor = {
-        working_directory = "/var/lib/loki/compactor";
-        compaction_interval = "10m";
-        retention_enabled = true;
-        retention_delete_delay = "2h";
-        delete_request_store = "filesystem";
-      };
     };
   };
 

@@ -5,7 +5,7 @@
   ...
 }: {
   imports = [
-    ../../../modules/loki-logs.nix
+    ../../../modules/fluent-bit.nix
   ];
 
   # Run atticd as a STATIC user instead of the upstream module's
@@ -168,7 +168,7 @@
     };
   };
 
-  # Ship the atticd journal to the central Loki. modules/loki-logs.nix runs a
+  # Ship the atticd journal to the central Loki. modules/fluent-bit.nix runs a
   # fluent-bit shipper that tails journald for the listed units and pushes to
   # https://loki.homelab.local/loki/api/v1/push; the step-ca TLS chain is
   # already trusted via ../../modules/step-ca-trust.nix in

@@ -224,8 +224,9 @@
     };
 
     # Function to create a NixOS system configuration. Every mkHost host gets
-    # home-manager/nixvim (hive parity, see above) and modules/attic-push.nix
-    # (which also pulls in modules/loki-logs.nix). Hosts that must NOT
+    # home-manager/nixvim (hive parity, see above) and modules/attic-push.nix.
+    # The Loki shipper is NOT here -- it is owned by modules/fluent-bit.nix and
+    # imported from modules/common.nix, which every host has. Hosts that must NOT
     # (bootstrap/installer images like `minimal` and `iso`) are explicit
     # nixosSystem entries instead.
     mkHost = hostname:

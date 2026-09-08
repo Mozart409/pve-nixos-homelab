@@ -3,6 +3,11 @@
   modulesPath,
   ...
 }: {
+  # Bootstrap image: no central log shipping. It has no route to
+  # loki.homelab.local and no step-ca trust, so fluent-bit would only fail in a
+  # loop. common.nix sets this with mkDefault precisely so images can opt out.
+  services.loki-logs.enable = false;
+
   imports = [
     # Verified present in the pinned nixpkgs. Reached via modulesPath, the same
     # way hosts/rpi/configuration.nix imports the sd-card installer module --

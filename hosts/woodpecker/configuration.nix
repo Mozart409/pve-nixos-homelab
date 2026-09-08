@@ -36,7 +36,7 @@ in {
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
     ../../modules/podman.nix
-    ../../modules/loki-logs.nix
+    ../../modules/fluent-bit.nix
     ../../modules/caddy-http3.nix
   ];
 

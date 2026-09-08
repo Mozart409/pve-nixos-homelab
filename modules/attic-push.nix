@@ -10,18 +10,12 @@
   # token on hosts where the login unit already succeeded once.
   secretNonce = "2026-08-20-attic-push-token-rekey";
 in {
-  # This module is now the per-host common import (it replaced modules/comin.nix
-  # in that role when comin was removed on 2026-09-08 — see flake.nix's mkHost
-  # and the explicit nixosSystem entries). It is imported by every real host, so
-  # it is also where the Loki shipper gets switched on.
-  imports = [./loki-logs.nix];
-
-  # comin.nix used to be the thing that set this, and removing it silently
-  # turned log shipping OFF on every host that does not enable it itself
-  # (otel, ca, dns, unifi, ... all evaluated to false before this line was
-  # added). Hosts that also set it are unaffected: mkEnableOption is a plain
-  # bool and multiple `true` definitions merge without conflict.
-  services.loki-logs.enable = true;
+  # No loki-logs import and no `enable` here. This module contributes its two
+  # units to services.loki-logs.units below and nothing more -- the shipper is
+  # owned by modules/fluent-bit.nix and imported fleet-wide from
+  # modules/common.nix. It briefly enabled the shipper on 2026-09-08, inherited
+  # from modules/comin.nix, which was the wrong home for exactly the same
+  # reason comin was.
 
   # Attic push token for the `homelab` cache (plain JWT, NOT KEY=value — it is
   # passed as a positional argument to `attic login`, not sourced as env).

@@ -10,7 +10,7 @@
     ../../modules/disko-jellyfin.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
-    ../../modules/loki-logs.nix
+    ../../modules/fluent-bit.nix
     # Podman + oci-containers backend for the hofvarpnir container below.
     ../../modules/podman.nix
     ../../modules/caddy-http3.nix
