@@ -27,8 +27,13 @@
     }
 
     # Everything else is atticd: /api/* plus every per-cache binary-cache path.
+    #
+    # 127.0.0.1, never "localhost": Caddy resolves proxy upstreams through the
+    # system resolver, and resolv.conf here lists a dead `nameserver ::1`, so a
+    # `localhost` lookup can stall the request rather than dialing. Same fix as
+    # hosts/mcp_vm/configuration.nix's mkMcpVhost.
     handle {
-      reverse_proxy localhost:8080
+      reverse_proxy 127.0.0.1:8080
     }
   '';
 in {

@@ -87,12 +87,33 @@
         path = "/var/lib/atticd/storage";
       };
 
-      # Chunking settings for deduplication
+      # Chunking settings for deduplication.
+      #
+      # Raised ~64x on 2026-09-08. Every chunk costs a Postgres round trip, and
+      # the database host's disk is IOPS-starved, not bandwidth-starved: sda
+      # measured 94% busy while moving 0.48 MiB/s, with the attic DB only
+      # 0.09 GiB and doing 18 tup/s. Under that, each attic query took ~1.26s,
+      # atticd's connection pool sat permanently saturated, and every upload
+      # died on the 30s pool-acquire timeout with
+      # `Failed to acquire connection from pool` (upload_path.rs:84) -- which is
+      # why attic-push-system was failed on all 11 hosts simultaneously.
+      #
+      # At the old avg-size a 100 MB NAR became ~1600 chunks and ~1600 round
+      # trips against that disk. These values make it ~25. Measured context:
+      # the network is NOT the constraint (131 MB/s development -> cache) and
+      # neither is the cache host's own disk (0.18 busy), so chunk count was the
+      # only lever available in software.
+      #
+      # The trade is coarser deduplication for far less database I/O. That is
+      # the right way round here -- the cache host has 92.7% of its filesystem
+      # free, so bytes are cheap and IOPS are not. Existing chunks are
+      # unaffected; this only changes how new uploads are split. Lower these
+      # again if Postgres ever moves to an SSD.
       chunking = {
-        nar-size-threshold = 65536;
-        min-size = 16384;
-        avg-size = 65536;
-        max-size = 262144;
+        nar-size-threshold = 4194304; # 4 MiB: below this, store the NAR whole
+        min-size = 1048576; # 1 MiB
+        avg-size = 4194304; # 4 MiB
+        max-size = 16777216; # 16 MiB
       };
 
       # Compression settings
