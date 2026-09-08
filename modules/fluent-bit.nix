@@ -29,7 +29,7 @@
   # confirming that a host's shipper actually came back after a change.
   #
   # Bump this when you want every loki-logs host to restart its shipper.
-  restartNonce = "2026-09-08-ship-fluent-bit-self";
+  restartNonce = "2026-09-08-single-loki-output";
 
   # fluent-bit ships its own journal, on every host, always.
   #
@@ -66,9 +66,36 @@
     read_from_tail = true;
   };
 
-  mkOutput = u: {
-    name = "loki";
+  # One `modify` filter per input, stamping the unit's Loki job name onto every
+  # record as a `job` field. That is what lets a SINGLE output below label each
+  # stream correctly, instead of needing one output per unit.
+  mkFilter = u: {
+    name = "modify";
     match = u.job;
+    add = "job ${u.job}";
+  };
+
+  # ONE Loki output for the whole host, not one per unit.
+  #
+  # Why: each output plugin instance keeps its own upstream connection pool, so
+  # the old one-output-per-unit shape opened N concurrent TLS connections to the
+  # single Caddy in front of Loki -- 15 of them on mcp alone, times ~15 hosts.
+  # fluent-bit's own journal (shipped since 2026-09-08) showed the result:
+  #   [error] [output:loki:loki.4] no upstream connections available
+  #   [error] [upstream] connection #252 to tcp://192.168.2.135:443 timed out
+  #           after 10 seconds (connection timeout)
+  #   [ warn] [engine] failed to flush chunk ... retry in 10 seconds
+  # Records were not lost -- the retries succeeded -- but every host was
+  # generating avoidable connection churn and delayed delivery.
+  #
+  # `$job` is a record accessor resolved per record from the field mkFilter
+  # added, and remove_keys drops it from the body afterwards so it appears only
+  # as a label. Verified before deploying with `fluent-bit --dry-run` on the
+  # generated config and a dummy-input smoke test confirming each tag comes out
+  # carrying its own job value.
+  lokiOutput = {
+    name = "loki";
+    match = "*";
     # loki.homelab.local is a Caddy vhost on the otel host that reverse-proxies
     # at root to Loki's localhost:3100. Its TLS cert comes from step-ca, which
     # is trusted on every host importing modules/step-ca-trust.nix — so any
@@ -78,12 +105,14 @@
     tls = "on";
     "tls.verify" = "on";
     uri = "/loki/api/v1/push";
-    # Static labels only (job, host). Journal fields (_SYSTEMD_UNIT, PRIORITY,
-    # MESSAGE, ...) stay in the JSON body rather than becoming per-message Loki
-    # labels — label cardinality is Loki's scarcest resource, and an unbounded
-    # set of journal fields as labels would blow it up. Query the body fields
-    # with LogQL `| json` instead (e.g. `{job="atticd"} | json PRIORITY="3"`).
-    labels = "job=${u.job},host=${config.networking.hostName}";
+    # Static host label + per-record job label. Journal fields (_SYSTEMD_UNIT,
+    # PRIORITY, MESSAGE, ...) stay in the JSON body rather than becoming
+    # per-message Loki labels — label cardinality is Loki's scarcest resource,
+    # and an unbounded set of journal fields as labels would blow it up. Query
+    # the body fields with LogQL `| json` instead (e.g.
+    # `{job="attic"} | json PRIORITY="3"`).
+    labels = "job=$job,host=${config.networking.hostName}";
+    remove_keys = "job";
     line_format = "json";
   };
 in {
@@ -145,7 +174,8 @@ in {
 
         pipeline = {
           inputs = map mkInput shippedUnits;
-          outputs = map mkOutput shippedUnits;
+          filters = map mkFilter shippedUnits;
+          outputs = [lokiOutput];
         };
       };
     };
