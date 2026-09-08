@@ -153,6 +153,24 @@
   };
 
   # Tempo for distributed tracing
+  # Ship tempo's journal to the central Loki (the shipper itself is enabled
+  # transitively via modules/comin.nix -> modules/loki-logs.nix; the units list
+  # merges across modules, which is why there is no `enable` here).
+  #
+  # tempo.service has been in `failed` on this host for some time -- it is what
+  # makes every colmena apply to otel exit 4, and what serves the 502 on
+  # tempo.homelab.local. The comment on services.tempo below says a 3.0 schema
+  # mismatch meant it "never started", and the fix attempted there was
+  # evidently incomplete. Diagnosing that needs the unit's own log, and otel is
+  # unreachable by SSH from the development host (tailnet ACL), so the journal
+  # has to come out through Loki.
+  services.loki-logs.units = [
+    {
+      unit = "tempo.service";
+      job = "tempo";
+    }
+  ];
+
   services.tempo = {
     enable = true;
     settings = {
