@@ -45,6 +45,32 @@
 in {
   imports = [comin.nixosModules.comin ./attic-push.nix ./loki-logs.nix];
 
+  # ── comin never restarts itself on a deploy ───────────────────────────────
+  # The upstream module sets restartIfChanged = false on comin.service (visible
+  # as X-RestartIfChanged=false in the generated unit), deliberately: comin runs
+  # switch-to-configuration itself, and a unit that restarts mid-switch would
+  # kill the deploy it is performing.
+  #
+  # The cost is that NOTHING in this block takes effect from a deploy alone.
+  # comin keeps running its old process with its old /nix/store/...-comin.yaml
+  # until someone restarts it by hand. On 2026-09-08 otel was found still
+  # running the process started 2026-08-19 -- 20 days and many applies later --
+  # with comin_last_eval_failed stuck at 1 and its journal showing nothing but
+  # "New commits have been fetched". A plain `systemctl restart comin` loaded
+  # the new config and cleared the flag immediately; no eval had to run. So the
+  # stall was a wedged long-lived process, the same failure mode as caddy's
+  # in-process ACME backoff and fluent-bit's dropped streams.
+  #
+  # NOTE the restartTriggers/nonce trick used in modules/caddy-http3.nix and
+  # hosts/hermes/configuration.nix does NOT work here: restartTriggers are only
+  # consulted when restartIfChanged is true, so they are silently ignored on
+  # this unit. Forcing restartIfChanged = true would reintroduce exactly the
+  # mid-deploy self-kill upstream is avoiding.
+  #
+  # AFTER CHANGING ANYTHING BELOW, run `systemctl restart comin` on the affected
+  # hosts, or the change is inert. Verify with the builder line in its journal,
+  # which prints the values actually in use:
+  #   builder: initialization with ... evalTimeout=..., buildTimeout=...
   services.comin = {
     enable = true;
     inherit hostname;
