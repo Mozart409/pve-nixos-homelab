@@ -67,6 +67,30 @@ in {
     # exporting comin metrics, with no per-host step to forget.
     exporter.openFirewall = true;
 
+    # Eval budget. The default 1800s was already marginal: comin's own record
+    # of otel's last SUCCESSFUL deployment (2026-08-17, in
+    # /var/lib/comin/store.json) shows eval_started_at 17:31:31 ->
+    # eval_ended_at 17:55:42, i.e. 1451s, 80% of the budget. The flake has only
+    # grown since, and by 2026-09-08 comin had deployed nothing on otel since
+    # 2026-08-19 or on cache since 2026-08-20 while still fetching every poll,
+    # with comin_last_eval_failed = 1 on otel and ca.
+    #
+    # These hosts are small VMs on an IOPS-starved pool -- the same disk
+    # contention behind the attic outage -- so an eval that takes 83s on the
+    # development host takes tens of minutes here. Raising the ceiling is a
+    # mitigation, not a cure; the cure is the ssd_pool migration.
+    evalTimeout = 3600;
+    buildTimeout = 3600;
+
+    # Comin logs NOTHING at info level when an eval fails -- the journal on a
+    # stalled host shows only "New commits have been fetched", repeatedly, for
+    # weeks. That silence is why this went undiagnosed for three weeks and had
+    # to be inferred from store.json. Debug logging makes the next failure say
+    # what it was. comin is very low-volume, and its journal now ships to Loki
+    # (see services.loki-logs below), so this is cheap. Turn it off once the
+    # stall is understood.
+    debug = true;
+
     remotes = [
       {
         name = "origin";
