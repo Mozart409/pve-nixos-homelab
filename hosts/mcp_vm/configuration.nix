@@ -82,6 +82,7 @@
       "lokimcp-server"
       "hamcp-server"
       "wpmcp-server"
+      "alertmanagermcp-server"
     ]
     ++ map (db: {
       unit = "${pgUnitName db}.service";
@@ -148,6 +149,7 @@ in {
         ${vhostKey "prom-mcp"} = mkMcpVhost 8082;
         ${vhostKey "loki-mcp"} = mkMcpVhost 8083;
         ${vhostKey "wp-mcp"} = mkMcpVhost 8091;
+        ${vhostKey "alertmanager-mcp"} = mkMcpVhost 8086;
       }
       # One vhost per database on the `database` host.
       // lib.mapAttrs' (db: port: lib.nameValuePair (vhostKey (pgVhostBase db)) (mkMcpVhost port)) homelabDatabases;
@@ -242,10 +244,16 @@ in {
         package = mcpPackages.wpmcp-server;
         host = "https://ci.homelab.local";
         tokenFile = config.age.secrets.woodpecker-mcp-token.path;
-        # wpmcp's own default is 8085, but that port is already the appdb pgmcp
-        # instance here, so this one takes the next free port instead.
         bind = "127.0.0.1:8091";
         allowedHosts = vhostNames "wp-mcp" ++ ["localhost" "127.0.0.1"];
+      };
+
+      alertmanagermcp-server = {
+        enable = true;
+        package = mcpPackages.alertmanagermcp-server;
+        extraEnv.ALERTMANAGER_HOST = "https://alertmanager.homelab.internal";
+        bind = "127.0.0.1:8086";
+        allowedHosts = vhostNames "alertmanager-mcp" ++ ["localhost" "127.0.0.1"];
       };
     }
     # One pgmcp instance per database on the `database` host. serverType pins the
