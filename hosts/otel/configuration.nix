@@ -196,12 +196,40 @@
       # encoding entirely; compaction is now driven by the backend
       # worker, so retention moved to `backend_worker.compaction.*`
       # (tempodb.CompactorConfig), and the `v2_index_downsample_bytes` /
-      # `v2_encoding` block settings no longer exist. Config predates the
-      # 3.0.2 package bump and Tempo's strict decoder rejects unknown
-      # fields, so it never started.
+      # `v2_encoding` block settings no longer exist.
+      #
+      # This block is correct and was never the reason tempo stayed down --
+      # `tempo -config.verify` accepts it (checked 2026-09-08, with a
+      # deliberately bogus key as a control to prove verify really does reject
+      # unknown fields). The actual cause is the read-only path problem
+      # described below.
       backend_worker.compaction = {
         block_retention = "720h"; # 30 days
       };
+
+      # Tempo 3.x split ingestion into new modules -- live-store, block-builder
+      # and backend-scheduler -- and every one of them defaults its paths under
+      # /var/tempo. That directory is unwritable here: the unit runs with
+      # DynamicUser = true, which implies ProtectSystem = strict, so the only
+      # writable location is the StateDirectory at /var/lib/tempo. Result was
+      #   module=live-store err="... failed to create shutdown marker
+      #   directory: mkdir /var/tempo: read-only file system"
+      # and distributor/querier/metrics-generator/backend-scheduler all
+      # cascade-failing off it, leaving tempo.service in `failed` -- which is
+      # what made every `colmena apply --on otel` exit 4, and what served the
+      # 502 on tempo.homelab.local.
+      #
+      # NB the older comment above blamed a 3.0 schema mismatch. That was
+      # wrong: the previous config passes `tempo -config.verify` cleanly
+      # (checked 2026-09-08). The decoder was never the problem; the read-only
+      # path was. storage.trace.wal.path below was already redirected, which is
+      # why only the NEW modules broke.
+      live_store = {
+        shutdown_marker_dir = "/var/lib/tempo/live-store/shutdown-marker";
+        wal.path = "/var/lib/tempo/live-store/traces";
+      };
+      block_builder.wal.path = "/var/lib/tempo/block-builder/traces";
+      backend_scheduler.local_work_path = "/var/lib/tempo/backend-scheduler";
       metrics_generator = {
         registry.external_labels = {
           source = "tempo";
