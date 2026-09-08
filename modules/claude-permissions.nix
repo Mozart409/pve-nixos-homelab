@@ -15,6 +15,11 @@
     };
     # Don't append "Co-Authored-By: Claude" to commits made from this host.
     includeCoAuthoredBy = false;
+    # Don't append "Claude-Session: https://claude.ai/code/session_…" trailers
+    # to commits or PR bodies created from web/Remote Control sessions.
+    attribution = {
+      sessionUrl = false;
+    };
   };
 
   # WebSearch is all-or-nothing at the permission level (bare `WebSearch` is the
@@ -121,6 +126,7 @@
       jq --argjson p '${permsJson}' --argjson h '${hooksJson}' \
         '.permissions = ((.permissions // {}) + $p.permissions)
          | .includeCoAuthoredBy = $p.includeCoAuthoredBy
+         | .attribution.sessionUrl = $p.attribution.sessionUrl
          | .hooks.PreToolUse = ([((.hooks.PreToolUse // [])[] | select(.matcher != "WebSearch"))] + $h.hooks.PreToolUse)' \
         "$SETTINGS" > "$tmp"
 
