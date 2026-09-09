@@ -2,7 +2,15 @@
   lib,
   modulesPath,
   ...
-}: {
+}: let
+  # The ONE key this installer accepts, for amadeus and for root alike. Change
+  # it here and both accounts follow.
+  #
+  # Deliberately not the full list from modules/common.nix: an installer only
+  # ever needs the key of the machine driving nixos-anywhere, and every extra
+  # key is one more authentication attempt against sshd's MaxAuthTries.
+  installerKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan";
+in {
   # Bootstrap image: no central log shipping. It has no route to
   # loki.homelab.local and no step-ca trust, so fluent-bit would only fail in a
   # loop. common.nix sets this with mkDefault precisely so images can opt out.
@@ -34,6 +42,26 @@
   # limit on the installer is the fix that actually sticks. This is a live
   # medium with no persistent state, so a higher limit costs nothing.
   services.openssh.settings.MaxAuthTries = 20;
+
+  # nixos-anywhere connects to the target as ROOT -- it has no --sudo option,
+  # and normally does not need one, because its kexec image boots a root shell
+  # with the install keys already in place. Booting this ISO instead and running
+  # `--phases disko,install,reboot` skips that step, so the install lands on
+  # THIS sshd, where only the amadeus account has keys and root has none. The
+  # symptom is a confusing "root@<ip>: Permission denied (publickey...)" after
+  # everything else already worked.
+  #
+  # sshd here is already PermitRootLogin = "prohibit-password", so a key is all
+  # that is missing.
+  #
+  # Safe on a live medium with no persistent state: the installed system is
+  # built from hosts/<host>/configuration.nix and never inherits this.
+  users.users.root.openssh.authorizedKeys.keys = [installerKey];
+
+  # mkForce, because modules/common.nix gives amadeus four keys and listOf
+  # options concatenate rather than replace. On an installer the extra three are
+  # dead weight that only burn authentication attempts.
+  homelab.users.amadeus.sshKeys = lib.mkForce [installerKey];
 
   networking = {
     hostName = lib.mkForce "homelab-iso";
