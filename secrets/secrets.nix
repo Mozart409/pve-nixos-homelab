@@ -5,7 +5,7 @@ let
   amadeusMacbook = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/HCRJuzlIbgcWk68ehApZl6kN+7PnKIgYSLRZ5IjzQ amadeus@Amadeuss-MacBook-Pro.local";
   hostBuildBotMaster = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIwy8ohPS5E6ElmFvYoNYNBfbiYjAfFQBVtBA5hePSiN root@homelab-buildbot-master";
   hostBuildBotWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIIZK5rnXUBhINU4lzEWkhxhdRWsLR7IxLeQID8HqLKF root@homelab-buildbot-worker-1";
-  hostCa = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP8qC6ErJ2PUjNlIwchBMyAWeRDVB6to2cNSnnDqmD+x root@homelab-ca";
+  hostCa = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF8i5IfaebQeFqqmZnIKrFNFNfnEvCIsnRamVnO/YyWx root@homelab-ca";
   hostCache = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3zPdNuF7/Xwxxhs6isTeG1K3fodO+lbQdWcfZUid4k root@homelab-cache";
   hostContainers = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKHmDtkEG9WNd6bvbEM3+HhdfnSu29o5bYskujiM6VdF root@homelab-containers";
   hostDatabase = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMOzKKGEVZy4w556Y3n1KQQrWVJUxU7XfHULii9W1qTr amadeus@homelab-database";
