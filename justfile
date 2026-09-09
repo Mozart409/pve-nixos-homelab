@@ -37,24 +37,28 @@ nixos-test-vm host: clear
   @echo "Running nixosTest VM for {{host}}..."
   nix build .#nixosTests.x86_64-linux.{{host}} -L
 
-# SSH identity for every nixos-anywhere install, pinned with IdentitiesOnly so
-# ssh offers ONLY this key.
+# "Too many authentication failures" during an install is a CLIENT problem, not
+# a broken target. ssh offers every key in the agent (4 here: amadeus@wotan,
+# radicle, two hermes-bot) plus the throwaway key nixos-anywhere generates, and
+# sshd's MaxAuthTries defaults to 6, so the server hangs up first.
 #
-# Without it, ssh offers every key in the agent (there are typically 4 here:
-# amadeus@wotan, radicle, two hermes-bot) plus the throwaway key nixos-anywhere
-# generates for itself. sshd's MaxAuthTries defaults to 6, so the server hangs up
-# before the right key is necessarily reached and the install dies with
-# "Received disconnect ... Too many authentication failures" — which looks like a
-# broken or unreachable target, but the target is fine. This bit the dns install
-# on 2026-09-09. Same fix the forgejo colmena node already carries in flake.nix.
-anywhere_ssh := "-i $HOME/.ssh/id_ed25519 --ssh-option IdentitiesOnly=yes"
+# Pinning `-i ... --ssh-option IdentitiesOnly=yes` here does NOT fix it: the
+# option never reaches the `ssh-copy-id` call nixos-anywhere uses to plant its
+# temp key, and the `-i` makes ssh prompt for that temp key's passphrase
+# instead. Tried and reverted on 2026-09-09. Nor can the agent simply be
+# disabled -- ~/.ssh/id_ed25519 is passphrase-protected, so agent-less auth
+# fails outright.
+#
+# Two things that DO work: prune the agent to one key for the run
+# (`ssh-add -D && ssh-add ~/.ssh/id_ed25519`), or raise MaxAuthTries on the
+# target -- which is why hosts/iso/configuration.nix now sets it.
 
 # DESTRUCTIVE: reinstalls the OS from scratch via nixos-anywhere (disko wipes ALL
 # disks) — only for turning a bare VM into minimal NixOS. Never run against an
 # already-provisioned host; for config changes use colmena-apply-host instead.
 deploy-minimal ip:
   @echo "Deploying minimal to {{ip}}..."
-  nixos-anywhere {{anywhere_ssh}} --flake .#minimal amadeus@{{ip}}
+  nixos-anywhere --flake .#minimal amadeus@{{ip}}
 
 # DESTRUCTIVE: reinstalls the OS from scratch via nixos-anywhere (disko wipes ALL
 # disks). For a config change to an already-installed host use colmena-apply-host.
@@ -84,7 +88,7 @@ deploy host ip *ARGS:
     [ "$reply" = "{{host}}" ] || { echo "Aborted."; exit 1; }
   fi
   echo "Deploying {{host}} to {{ip}}..."
-  nixos-anywhere {{anywhere_ssh}} {{ARGS}} --flake .#{{host}} amadeus@{{ip}}
+  nixos-anywhere {{ARGS}} --flake .#{{host}} amadeus@{{ip}}
 
 # Shorthands. `cah <host>` takes the same argument as colmena-apply-host.
 alias ca := colmena-apply

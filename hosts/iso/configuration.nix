@@ -19,6 +19,22 @@
     ../../modules/common.nix
   ];
 
+  # sshd's MaxAuthTries default of 6 is too low for this image's whole purpose.
+  # nixos-anywhere is driven from a workstation whose ssh-agent typically holds
+  # several keys (amadeus@wotan, radicle, two hermes-bot), ssh offers them one
+  # at a time, and nixos-anywhere adds a throwaway key of its own -- so the
+  # server hangs up before the right key is necessarily reached. The install
+  # then dies with "Received disconnect ... Too many authentication failures",
+  # which reads like an unreachable or broken target even though the machine is
+  # perfectly healthy. Cost a long diagnosis on 2026-09-09.
+  #
+  # Client-side workarounds do not hold: `--ssh-option IdentitiesOnly=yes` never
+  # reaches the ssh-copy-id call nixos-anywhere makes, and the agent cannot just
+  # be turned off because the key it holds is passphrase-protected. Raising the
+  # limit on the installer is the fix that actually sticks. This is a live
+  # medium with no persistent state, so a higher limit costs nothing.
+  services.openssh.settings.MaxAuthTries = 20;
+
   networking = {
     hostName = lib.mkForce "homelab-iso";
     # The ISO boots on whatever is in front of it, so DHCP rather than
