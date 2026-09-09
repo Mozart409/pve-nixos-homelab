@@ -47,7 +47,16 @@ deploy-minimal ip:
 # DESTRUCTIVE: reinstalls the OS from scratch via nixos-anywhere (disko wipes ALL
 # disks). For a config change to an already-installed host use colmena-apply-host.
 # Guarded: type the host name to proceed, or set CONFIRM=<host> for scripted runs.
-deploy host ip:
+#
+# Trailing arguments are passed straight to nixos-anywhere. The one you actually
+# need is --phases: it defaults to `kexec,disko,install,reboot`, and the kexec
+# step is both the slowest and the most fragile part (it loads a NixOS installer
+# into RAM, so it needs ~1.5 GB free and a target with room on disk to stage it).
+# When the target is ALREADY booted into an installer -- e.g. the ISO from
+# `just iso-build`, which carries the amadeus SSH key -- skip it:
+#
+#   just deploy dns 192.168.2.145 --phases disko,install,reboot
+deploy host ip *ARGS:
   #!/usr/bin/env bash
   set -euo pipefail
   echo ""
@@ -63,7 +72,7 @@ deploy host ip:
     [ "$reply" = "{{host}}" ] || { echo "Aborted."; exit 1; }
   fi
   echo "Deploying {{host}} to {{ip}}..."
-  nixos-anywhere --flake .#{{host}} amadeus@{{ip}}
+  nixos-anywhere {{ARGS}} --flake .#{{host}} amadeus@{{ip}}
 
 # Shorthands. `cah <host>` takes the same argument as colmena-apply-host.
 alias ca := colmena-apply
