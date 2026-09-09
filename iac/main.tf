@@ -749,6 +749,11 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
   }
 
   # Same installer ISO as dns_vm -- rebuild it and both file_id strings change.
+  #
+  # Do NOT add `enabled` here: bpg 0.91.0 deprecates it ("no longer used"), and
+  # `file_id` alone is what attaches the drive. The `enabled = false` that shows
+  # up in a plan diff is vestigial state, not a disabled drive. Set `file_id` to
+  # `none` if you ever want the drive empty.
   cdrom {
     file_id   = "local:iso/nixos-homelab-26.11.20260907.dc5d91f-x86_64-linux.iso"
     interface = "ide0"
