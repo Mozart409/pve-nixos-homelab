@@ -217,39 +217,24 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
     floating  = 1536
   }
 
-  # ssd_pool, not zfs_pool: this guest is the resolver every other host and
-  # every colmena deploy depends on, and zfs_pool is a single 2-HDD mirror
-  # (~78 IOPS shared cluster-wide) that stalls every guest together under load.
-  # The bpg provider updates datastore_id IN PLACE via Proxmox's online
-  # move-disk API -- it does not replace the resource -- so this relocates the
-  # existing zvol rather than discarding it. (The guest is being reinstalled
-  # anyway to swap btrfs for XFS, since disko only runs under nixos-anywhere;
-  # see todo/dns-ssd-xfs-migration.md.)
-  #
-  # size was 16 here while the live disk had already been grown to 20 GB, so a
-  # plan would have tried to shrink it and failed -- the provider cannot shrink.
-  # 32 both corrects that drift and gives headroom: the btrfs root was at 89%
-  # (14G of 15G), which is what the recent journal-cap and GC-aggression commits
-  # were fighting. The XFS layout spends 1G on /boot and 4G on swap, so this
-  # leaves ~27G of root.
-  #
-  # discard = "on" is what lets the weekly services.fstrim in disko-xfs.nix
-  # reach ZFS; without it the guest frees blocks and the zvol stays inflated.
-  # file_format = "raw" is REQUIRED here. ssd_pool is ZFS, which only stores raw
-  # volumes; the provider otherwise defaults to qcow2 when importing from
-  # file_id, and creation dies with "format 'qcow2' is not supported by the
-  # target storage" followed by "unable to parse volume ID 'ssd_pool:'" (the
-  # volume was never created, so its ID is empty). The other ssd_pool guests
-  # never hit this because they were created on zfs_pool and moved afterwards --
-  # dns is the first one created there directly. Same reason jellyfin's ZFS data
-  # disk sets it explicitly.
+  # ssd_pool: this guest is the resolver every host and every colmena deploy
+  # depends on, and zfs_pool is a 2-HDD mirror (~78 IOPS) that stalls every guest
+  # together. 32 GB leaves ~27 G of root after the XFS layout's 1 G /boot + 4 G
+  # swap. `file_format = "raw"` is required -- ssd_pool is a zfspool and stores
+  # only raw volumes; without it the import fails as qcow2. See
+  # todo/dns-cache-ssd-xfs-migration.md.
   disk {
     datastore_id = "ssd_pool"
-    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
-    interface    = "scsi0"
-    size         = 32
-    discard      = "on"
-    file_format  = "raw"
+    # Fedora rather than the shared debian_cloud_image: the Debian import left
+    # the guest hanging at boot. Only the pre-NixOS scratch image is affected --
+    # nixos-anywhere reformats the disk regardless, so nothing downstream cares
+    # which distro seeds it. (Fedora's image is qcow2; the provider converts it
+    # to raw on import, which is what ssd_pool requires.)
+    file_id     = proxmox_virtual_environment_download_file.fedora_cloud_image.id
+    interface   = "scsi0"
+    size        = 32
+    discard     = "on"
+    file_format = "raw"
   }
 
   network_device {
