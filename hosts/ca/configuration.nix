@@ -6,7 +6,10 @@
 }: {
   imports = [
     ../../modules/common.nix
-    ../../modules/disko-config.nix
+    # XFS, not btrfs: `ca` ran btrfs on a zvol (CoW on CoW) and reached 89 % of a
+    # 19 G root, the same state that wedged `dns`. Swapped 2026-09-09 alongside
+    # the move to ssd_pool -- see todo/dns-cache-ssd-xfs-migration.md Part C.
+    ../../modules/disko-xfs.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix

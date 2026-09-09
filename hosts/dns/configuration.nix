@@ -6,7 +6,14 @@
 }: {
   imports = [
     ../../modules/common.nix
-    ../../modules/disko-config.nix
+    # XFS root on ssd_pool, not the old btrfs-on-zfs_pool layout
+    # (modules/disko-config.nix). Two reasons, both covered in disko-xfs.nix:
+    # the guest disk is a zvol, so btrfs stacked a second CoW+compression layer
+    # on ZFS's; and this root is the resolver every other host depends on, so it
+    # has no business sharing the ~78 IOPS 2-HDD zfs_pool. Switching the format
+    # needs a nixos-anywhere reinstall -- disko never runs during `colmena
+    # apply`. See todo/dns-ssd-xfs-migration.md.
+    ../../modules/disko-xfs.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
@@ -114,8 +121,6 @@
           ''"ca.homelab.internal. A 192.168.2.160"''
           # Homelab services with step-ca certificates
           ''"ca.homelab.local. A 192.168.2.160"''
-          ''"cache.homelab.internal. A 192.168.2.175"''
-          ''"cache.homelab.local. A 192.168.2.175"''
           ''"ci.homelab.internal. A 192.168.2.182"''
           # WOODPECKER_HOST -- the name baked into OAuth redirects and webhooks.
           ''"ci.homelab.local. A 192.168.2.182"''
@@ -150,8 +155,6 @@
           ''"loki.homelab.local. A 192.168.2.135"''
           ''"mcp.homelab.internal. A 192.168.2.152"''
           ''"mcp.homelab.local. A 192.168.2.152"''
-          ''"notes.homelab.internal. A 192.168.2.149"''
-          ''"notes.homelab.local. A 192.168.2.149"''
           ''"otel.homelab.internal. A 192.168.2.135"''
           ''"otel.homelab.local. A 192.168.2.135"''
           ''"pbs-mcp.homelab.internal. A 192.168.2.152"''
@@ -212,7 +215,6 @@
           ''"192.168.2.149 axon.homelab.local"''
           ''"192.168.2.149 containers.homelab.local"''
           ''"192.168.2.149 dashboard.homelab.local"''
-          ''"192.168.2.149 notes.homelab.local"''
           ''"192.168.2.149 romm.homelab.local"''
           ''"192.168.2.149 searxng.homelab.local"''
           ''"192.168.2.152 loki-mcp.homelab.local"''
@@ -230,7 +232,6 @@
           ''"192.168.2.160 ca.homelab.local"''
           ''"192.168.2.164 fleet.homelab.local"''
           ''"192.168.2.174 harbor.homelab.local"''
-          ''"192.168.2.175 cache.homelab.local"''
           ''"192.168.2.178 forgejo.homelab.local"''
           ''"192.168.2.180 hofvarpnir.homelab.local"''
           ''"192.168.2.180 jellyfin.homelab.local"''

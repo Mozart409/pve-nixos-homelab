@@ -107,8 +107,8 @@
 
   # Tempo for distributed tracing
   # Ship tempo's journal to the central Loki (the shipper itself is enabled by
-  # modules/attic-push.nix, imported for every host from flake.nix; the units
-  # list merges across modules, which is why there is no `enable` here).
+  # modules/fluent-bit.nix, imported for every host from modules/common.nix; the
+  # units list merges across modules, which is why there is no `enable` here).
   #
   # tempo.service has been in `failed` on this host for some time -- it is what
   # makes every colmena apply to otel exit 4, and what serves the 502 on
@@ -417,18 +417,10 @@
           }
         ];
       }
-      # Cache host exporters (Garage + Attic)
-      {
-        job_name = "cache-node";
-        static_configs = [
-          {
-            targets = ["cache.homelab.local:9100"];
-            labels = {
-              instance = "homelab-cache";
-            };
-          }
-        ];
-      }
+      # (The cache-node job lived here until 2026-09-09, when the cache VM was
+      # decommissioned -- see iac/main.tf. Removing the target is what silences
+      # its alerting: alerting.nix has no cache-specific rules, only generic
+      # up/cert ones driven by the targets in this file and blackbox.nix.)
       # Forgejo host exporters
       {
         job_name = "forgejo-node";

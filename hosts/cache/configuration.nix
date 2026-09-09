@@ -39,7 +39,14 @@
 in {
   imports = [
     ../../modules/common.nix
-    ../../modules/disko-config.nix
+    # XFS root, not the old btrfs layout (modules/disko-config.nix). The disk is
+    # a zvol on ssd_pool, so btrfs was stacking a second CoW+compression layer
+    # on ZFS's -- and atticd's chunk store is exactly the write-heavy workload
+    # that pays for it twice. Switching the format needs a nixos-anywhere
+    # reinstall (disko never runs during `colmena apply`), and this host holds
+    # ~4 GB of local NAR storage whose index lives in Postgres on the `database`
+    # host -- read todo/dns-cache-ssd-xfs-migration.md before wiping it.
+    ../../modules/disko-xfs.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix

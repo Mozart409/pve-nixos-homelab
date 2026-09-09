@@ -9,11 +9,14 @@
     ./homelab-users.nix
     ./just-completions.nix
     ./nh.nix
-    # Homelab attic binary cache. Needed wherever the flake is evaluated on the
-    # host itself, which fetches every locked flake input — GitHub
-    # rate-limits (429) unauthenticated tarball downloads, so the inputs are
-    # pushed to attic and substituted from there instead.
-    ./attic-cache.nix
+    # The homelab attic binary cache was retired 2026-09-09 with the cache VM
+    # (iac/main.tf). It was imported here to spare hosts that evaluate the flake
+    # locally from GitHub's 429 rate-limit on unauthenticated tarball downloads
+    # — but comin, which made every host evaluate locally, is gone (6a387b2),
+    # and colmena builds on the deploy host and pushes closures over SSH. Only
+    # `development` and `hermes` still evaluate locally; if they start hitting
+    # 429s, a GitHub token in `nix.settings.access-tokens` is the direct fix,
+    # not a VM. modules/attic-cache.nix is kept on disk, imported nowhere.
     # The journald -> Loki shipper. Imported here because common.nix is the one
     # module every host already has, so the shipper does not hang off an
     # unrelated module the way it hung off comin.nix (and briefly attic-push).

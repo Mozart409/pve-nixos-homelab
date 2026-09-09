@@ -5,65 +5,99 @@ default:
     just --choose
 
 fmt:
-  alejandra .
+    alejandra .
 
 clear:
-  clear 2>/dev/null || true
+    clear 2>/dev/null || true
 
 shell:
-  nix develop . --command zsh
+    nix develop . --command zsh
 
 # Sync main against both git remotes: fetch, fast-forward/merge, then push
 # origin (Forgejo, canonical) first and github second. See scripts/sync-remotes.sh.
 sync-remotes:
-  @./scripts/sync-remotes.sh
+    @./scripts/sync-remotes.sh
 
 check: clear
-  nix flake check --all-systems
+    nix flake check --all-systems
 
 # NixOS configuration commands
 nixos-check:
-  @echo "Checking all NixOS configurations..."
-  nix flake check
+    @echo "Checking all NixOS configurations..."
+    nix flake check
 
 nixos-test host:
-  @echo "Dry building {{host}} configuration..."
-  nix build .#nixosConfigurations.{{host}}.config.system.build.toplevel --dry-run
+    @echo "Dry building {{ host }} configuration..."
+    nix build .#nixosConfigurations.{{ host }}.config.system.build.toplevel --dry-run
 
 # Boots a real QEMU VM from hosts/<host>/configuration.nix and checks its
 # primary services come up. Heavier than `nixos-test` (a dry-run eval) --
 # see AGENTS.md's "nixosTest Integration Tests" section for scope/limits.
 nixos-test-vm host: clear
-  @echo "Running nixosTest VM for {{host}}..."
-  nix build .#nixosTests.x86_64-linux.{{host}} -L
+    @echo "Running nixosTest VM for {{ host }}..."
+    nix build .#nixosTests.x86_64-linux.{{ host }} -L
+
+# "Too many authentication failures" during an install is a CLIENT problem, not
+# a broken target. ssh offers every key in the agent (4 here: amadeus@wotan,
+# radicle, two hermes-bot) plus the throwaway key nixos-anywhere generates, and
+# sshd's MaxAuthTries defaults to 6, so the server hangs up first.
+#
+# Pinning `-i ... --ssh-option IdentitiesOnly=yes` here does NOT fix it: the
+# option never reaches the `ssh-copy-id` call nixos-anywhere uses to plant its
+# temp key, and the `-i` makes ssh prompt for that temp key's passphrase
+# instead. Tried and reverted on 2026-09-09. Nor can the agent simply be
+# disabled -- ~/.ssh/id_ed25519 is passphrase-protected, so agent-less auth
+# fails outright.
+#
+# Pruning the agent does NOT work either, because the agent here is gpg-agent
+# with ssh support (SSH_AUTH_SOCK=/run/user/1000/gnupg/S.gpg-agent.ssh), which
+# serves keys from its own keyring: `ssh-add -D` clears the cache and all four
+# keys are back immediately. Nor can the agent be dropped -- the key is
+# passphrase-protected, so agent-less auth just fails.
+#
+# What DOES work is a private, throwaway agent holding exactly one key:
+#
+#   ssh-agent bash -c 'ssh-add ~/.ssh/id_ed25519 && just deploy dns <ip> --phases disko,install,reboot'
+#
+# The durable fix is server-side, which is why hosts/iso/configuration.nix now
+# sets MaxAuthTries = 20 -- it applies from the next `just iso-build` onward.
 
 # DESTRUCTIVE: reinstalls the OS from scratch via nixos-anywhere (disko wipes ALL
 # disks) — only for turning a bare VM into minimal NixOS. Never run against an
 # already-provisioned host; for config changes use colmena-apply-host instead.
 deploy-minimal ip:
-  @echo "Deploying minimal to {{ip}}..."
-  nixos-anywhere --flake .#minimal amadeus@{{ip}}
+    @echo "Deploying minimal to {{ ip }}..."
+    nixos-anywhere --flake .#minimal amadeus@{{ ip }}
 
 # DESTRUCTIVE: reinstalls the OS from scratch via nixos-anywhere (disko wipes ALL
 # disks). For a config change to an already-installed host use colmena-apply-host.
 # Guarded: type the host name to proceed, or set CONFIRM=<host> for scripted runs.
-deploy host ip:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  echo ""
-  echo "⚠️  DESTRUCTIVE: 'just deploy' runs nixos-anywhere and REINSTALLS the OS on"
-  echo "   {{host}} ({{ip}}) — disko reformats ALL disks. Everything on the target is"
-  echo "   destroyed: /var/lib app data, ZFS pools, the host SSH key (breaks agenix)."
-  echo ""
-  echo "   Only meant to turn a bare/minimal VM into {{host}}. To apply a CONFIG change"
-  echo "   to an already-running host, cancel and use:  just colmena-apply-host {{host}}"
-  echo ""
-  if [ "${CONFIRM:-}" != "{{host}}" ]; then
-    read -rp "   Type the host name '{{host}}' to REINSTALL it (anything else aborts): " reply
-    [ "$reply" = "{{host}}" ] || { echo "Aborted."; exit 1; }
-  fi
-  echo "Deploying {{host}} to {{ip}}..."
-  nixos-anywhere --flake .#{{host}} amadeus@{{ip}}
+#
+# Trailing arguments are passed straight to nixos-anywhere. The one you actually
+# need is --phases: it defaults to `kexec,disko,install,reboot`, and the kexec
+# step is both the slowest and the most fragile part (it loads a NixOS installer
+# into RAM, so it needs ~1.5 GB free and a target with room on disk to stage it).
+# When the target is ALREADY booted into an installer -- e.g. the ISO from
+# `just iso-build`, which carries the amadeus SSH key -- skip it:
+#
+# just deploy dns 192.168.2.145 --phases disko,install,reboot
+deploy host ip *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo ""
+    echo "⚠️  DESTRUCTIVE: 'just deploy' runs nixos-anywhere and REINSTALLS the OS on"
+    echo "   {{ host }} ({{ ip }}) — disko reformats ALL disks. Everything on the target is"
+    echo "   destroyed: /var/lib app data, ZFS pools, the host SSH key (breaks agenix)."
+    echo ""
+    echo "   Only meant to turn a bare/minimal VM into {{ host }}. To apply a CONFIG change"
+    echo "   to an already-running host, cancel and use:  just colmena-apply-host {{ host }}"
+    echo ""
+    if [ "${CONFIRM:-}" != "{{ host }}" ]; then
+      read -rp "   Type the host name '{{ host }}' to REINSTALL it (anything else aborts): " reply
+      [ "$reply" = "{{ host }}" ] || { echo "Aborted."; exit 1; }
+    fi
+    echo "Deploying {{ host }} to {{ ip }}..."
+    nixos-anywhere {{ ARGS }} --flake .#{{ host }} amadeus@{{ ip }}
 
 # Shorthands. `cah <host>` takes the same argument as colmena-apply-host.
 alias ca := colmena-apply
@@ -73,36 +107,36 @@ alias cbh := colmena-build-host
 alias cs := colmena-current-system
 
 colmena-apply: clear
-  @echo "Deploying to all hosts..."
-  colmena apply
+    @echo "Deploying to all hosts..."
+    colmena apply
 
 colmena-apply-host host: clear
-  @echo "Deploying to {{host}}..."
-  colmena apply --on {{host}}
+    @echo "Deploying to {{ host }}..."
+    colmena apply --on {{ host }}
 
 colmena-apply-tag tag: clear
-  @echo "Deploying to hosts tagged with {{tag}}..."
-  colmena apply --on @{{tag}}
+    @echo "Deploying to hosts tagged with {{ tag }}..."
+    colmena apply --on @{{ tag }}
 
 colmena-build-host host: clear
-  @echo "Building {{host}} configurations..."
-  colmena build --on {{host}}
+    @echo "Building {{ host }} configurations..."
+    colmena build --on {{ host }}
 
 colmena-build: clear
-  @echo "Building all configurations..."
-  colmena build
+    @echo "Building all configurations..."
+    colmena build
 
 colmena-reboot host: clear
-  @echo "Rebooting {{host}}..."
-  colmena exec --on {{host}} -- sudo reboot
+    @echo "Rebooting {{ host }}..."
+    colmena exec --on {{ host }} -- sudo reboot
 
 colmena-current-system host: clear
-  @echo "Current system on {{host}}:"
-  ssh amadeus@{{host}}.homelab.internal readlink -f /run/current-system
+    @echo "Current system on {{ host }}:"
+    ssh amadeus@{{ host }}.homelab.internal readlink -f /run/current-system
 
 colmena-status: clear
-  @echo "Checking host status..."
-  colmena exec -- uptime
+    @echo "Checking host status..."
+    colmena exec -- uptime
 
 # Deploy the CURRENT host without SSH: builds into the local nix store and
 # switches in place. Run this ON the host itself — e.g. from development, where
@@ -110,120 +144,126 @@ colmena-status: clear
 # not resolve from itself. Runs the same agenix + home-manager activation as
 # colmena-apply-host.
 self-deploy host="development":
-  @echo "Self-deploying {{host}} with nixos-rebuild switch (no SSH)..."
-  sudo nixos-rebuild switch --flake .#{{host}}
+    @echo "Self-deploying {{ host }} with nixos-rebuild switch (no SSH)..."
+    sudo nixos-rebuild switch --flake .#{{ host }}
 
 # OpenTofu/IaC commands (run in iac/ directory)
-[working-directory: 'iac']
+[working-directory('iac')]
 iac-init: clear
-  tofu init
-[working-directory: 'iac']
+    tofu init
+[working-directory('iac')]
 iac-fmt: clear
-  tofu fmt
+    tofu fmt
 
-[working-directory: 'iac']
+[working-directory('iac')]
 iac-validate: iac-fmt
-  tofu validate
+    tofu validate
 
-[working-directory: 'iac']
+[working-directory('iac')]
 iac-plan: iac-fmt
-  tofu plan
+    tofu plan
 
-[working-directory: 'iac']
-iac-apply: iac-validate iac-plan
-  tofu apply
+[working-directory('iac')]
+iac-apply: iac-validate
+    tofu apply
 
-[working-directory: 'iac']
+[working-directory('iac')]
 iac-destroy: clear
-  tofu destroy
+    tofu destroy
 
 # Get SSH host key from a remote host (for agenix secrets.nix)
 get-host-key ip:
-  @echo "Getting SSH host key from {{ip}}..."
-  ssh amadeus@{{ip}} "cat /etc/ssh/ssh_host_ed25519_key.pub"
+    @echo "Getting SSH host key from {{ ip }}..."
+    ssh amadeus@{{ ip }} "cat /etc/ssh/ssh_host_ed25519_key.pub"
 
-
-[working-directory: 'secrets']
+[working-directory('secrets')]
 reencrypt: clear
-  agenix -r -i ~/.config/age/keys.txt
+    agenix -r -i ~/.config/age/keys.txt
 
 # Raspberry Pi SD image build (specify model: rpi4 or rpi5)
 rpi-build model: clear
-  @echo "Building Raspberry Pi {{model}} SD image (aarch64)..."
-  nix build '.#nixosConfigurations.{{model}}.config.system.build.sdImage' --show-trace
+    @echo "Building Raspberry Pi {{ model }} SD image (aarch64)..."
+    nix build '.#nixosConfigurations.{{ model }}.config.system.build.sdImage' --show-trace
 
 rpi-flash device: clear
-  @echo "Flashing SD image to {{device}}..."
-  @echo "WARNING: This will overwrite all data on {{device}}"
-  @read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
-  sudo dd if=result/sd-image/*.img of={{device}} bs=4096 conv=fsync status=progress
+    @echo "Flashing SD image to {{ device }}..."
+    @echo "WARNING: This will overwrite all data on {{ device }}"
+    @read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+    sudo dd if=result/sd-image/*.img of={{ device }} bs=4096 conv=fsync status=progress
 
 # Build a bootable minimal installer ISO. Output lands at result/iso/*.iso.
 # Not a deployable host -- just an image you can dd to a USB stick and boot.
 iso-build: clear
-  @echo "Building minimal installer ISO..."
-  nix build '.#nixosConfigurations.iso.config.system.build.isoImage' --show-trace
+    @echo "Building minimal installer ISO..."
+    nix build '.#nixosConfigurations.iso.config.system.build.isoImage' --show-trace
 
-# --- Attic binary cache (hosts/cache) -------------------------------------
-
-# ONE-TIME bootstrap: mint an admin token from the atticd signing secret, create
-# the `homelab` cache, and mark it public. Public means pulls need no
-# credentials, so consumers only need the public key in
-# modules/attic-cache.nix — no netrc or agenix secret on every host. Pushing
-# still requires the token this prints.
-attic-init:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  host=amadeus@192.168.2.175
-  echo "==> minting admin token on cache host"
-  # Heredoc via `sudo sh -s` so the token-minting script is not mangled by
-  # nested shell quoting. atticd-atticadm needs the RS256 secret that the
-  # systemd unit gets from environmentFile, hence sourcing it explicitly.
-  token=$(ssh "$host" 'sudo sh -s' <<'REMOTE' | tail -1
-  set -eu
-  set -a
-  . /run/agenix/attic-server-token
-  set +a
-  atticd-atticadm make-token --sub admin --validity 1y \
-    --pull '*' --push '*' --delete '*' \
-    --create-cache '*' --configure-cache '*' \
-    --configure-cache-retention '*' --destroy-cache '*'
-  REMOTE
-  )
-  echo "==> logging in and creating the 'homelab' cache"
-  ssh "$host" "attic login homelab https://cache.homelab.local '$token'"
-  ssh "$host" "attic cache create homelab || echo '(cache already exists)'"
-  ssh "$host" "attic cache configure homelab --public"
-  echo
-  echo "==> push token (store it; needed by any host that pushes):"
-  echo "$token"
-  echo
-  just attic-info
-
-# Print the cache's public signing key — the value that belongs in
-# modules/attic-cache.nix's `publicKey`.
-attic-info:
-  @ssh amadeus@192.168.2.175 "attic cache info homelab"
-
-# Push a closure to the cache. Defaults to this machine's current system.
-# Builds land in the local store first; this uploads them for everyone else.
+# --- Attic binary cache (hosts/cache) -- RETIRED 2026-09-09 ----------------
 #
-# `jobs` was pinned to 1 while atticd kept its index in SQLite: one writer at a
-# time on the 2-HDD zfs_pool (~78 IOPS cluster-wide) meant five parallel uploads
-# queued behind each other until the pool gave up, killing the push with
-# `Connection pool timed out` and `database is locked`. Since the index moved to
-# Postgres on the database host, attic's own default of 5 completes — the same
-# 15-minute window went from 19 pool timeouts to 1. Lower it again if a push
-# ever starts starving the other VMs of IO; the disks are still the ceiling.
-attic-push path="/run/current-system" jobs="5":
-  attic push -j {{jobs}} homelab {{path}}
+# The cache VM was decommissioned (see the note in iac/main.tf): comin's removal
+# left nothing that builds on a target, so over 14 days the cache took 2999
+# uploads and served 11 organic reads. hosts/cache/ and modules/attic-*.nix are
+# kept on disk, wired to nothing; these recipes are commented out because they
+# SSH to 192.168.2.175, which no longer exists. Uncomment if the cache is ever
+# revived.
+#
+# # ONE-TIME bootstrap: mint an admin token from the atticd signing secret, create
+# # the `homelab` cache, and mark it public. Public means pulls need no
+# # credentials, so consumers only need the public key in
+# # modules/attic-cache.nix — no netrc or agenix secret on every host. Pushing
+# # still requires the token this prints.
+# attic-init:
+#   #!/usr/bin/env bash
+#   set -euo pipefail
+#   host=amadeus@192.168.2.175
+#   echo "==> minting admin token on cache host"
+#   # Heredoc via `sudo sh -s` so the token-minting script is not mangled by
+#   # nested shell quoting. atticd-atticadm needs the RS256 secret that the
+#   # systemd unit gets from environmentFile, hence sourcing it explicitly.
+#   token=$(ssh "$host" 'sudo sh -s' <<'REMOTE' | tail -1
+#   set -eu
+#   set -a
+#   . /run/agenix/attic-server-token
+#   set +a
+#   atticd-atticadm make-token --sub admin --validity 1y \
+#     --pull '*' --push '*' --delete '*' \
+#     --create-cache '*' --configure-cache '*' \
+#     --configure-cache-retention '*' --destroy-cache '*'
+#   REMOTE
+#   )
+#   echo "==> logging in and creating the 'homelab' cache"
+#   ssh "$host" "attic login homelab https://cache.homelab.local '$token'"
+#   ssh "$host" "attic cache create homelab || echo '(cache already exists)'"
+#   ssh "$host" "attic cache configure homelab --public"
+#   echo
+#   echo "==> push token (store it; needed by any host that pushes):"
+#   echo "$token"
+#   echo
+#   just attic-info
+#
+# # Print the cache's public signing key — the value that belongs in
+# # modules/attic-cache.nix's `publicKey`.
+# attic-info:
+#   @ssh amadeus@192.168.2.175 "attic cache info homelab"
+#
+# # Push a closure to the cache. Defaults to this machine's current system.
+# # Builds land in the local store first; this uploads them for everyone else.
+# #
+# # `jobs` was pinned to 1 while atticd kept its index in SQLite: one writer at a
+# # time on the 2-HDD zfs_pool (~78 IOPS cluster-wide) meant five parallel uploads
+# # queued behind each other until the pool gave up, killing the push with
+# # `Connection pool timed out` and `database is locked`. Since the index moved to
+# # Postgres on the database host, attic's own default of 5 completes — the same
+# # 15-minute window went from 19 pool timeouts to 1. Lower it again if a push
+# # ever starts starving the other VMs of IO; the disks are still the ceiling.
+# attic-push path="/run/current-system" jobs="5":
+#   attic push -j {{jobs}} homelab {{path}}
 
 # --- Woodpecker CI image (pulled by .woodpecker/static.yml + .woodpecker/iac.yml) ---
 
 # Build the CI image. Prints the store path of the image tarball (dockerTools
 # output); load it with podman for local testing or use ci-image-push.
 ci-image-build: clear
-  nix build '.#ci-image' --print-out-paths
+    nix build '.#ci-image' --print-out-paths
 
 # Load the freshly built CI image into podman and push it to Harbor so the
 # Woodpecker agent can pull it. The public `ci` project is provisioned
@@ -232,10 +272,10 @@ ci-image-build: clear
 # the Forgejo webhook on. Re-run whenever the toolset in flake.nix's
 # ci-image changes.
 ci-image-push: clear
-  #!/usr/bin/env bash
-  set -euo pipefail
-  out=$(nix build '.#ci-image' --print-out-paths)
-  podman load -i "$out"
-  podman tag pve-nixos-homelab-ci:latest harbor.homelab.local/ci/pve-nixos-homelab:latest
-  podman push harbor.homelab.local/ci/pve-nixos-homelab:latest
-  echo "==> pushed harbor.homelab.local/ci/pve-nixos-homelab:latest"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out=$(nix build '.#ci-image' --print-out-paths)
+    podman load -i "$out"
+    podman tag pve-nixos-homelab-ci:latest harbor.homelab.local/ci/pve-nixos-homelab:latest
+    podman push harbor.homelab.local/ci/pve-nixos-homelab:latest
+    echo "==> pushed harbor.homelab.local/ci/pve-nixos-homelab:latest"

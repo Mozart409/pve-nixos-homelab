@@ -214,15 +214,53 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
 
   memory {
     dedicated = 1536
-    floating  = 768
+    floating  = 1536
   }
 
+  # ssd_pool: this guest is the resolver every host and every colmena deploy
+  # depends on, and zfs_pool is a 2-HDD mirror (~78 IOPS) that stalls every guest
+  # together. 32 GB leaves ~27 G of root after the XFS layout's 1 G /boot + 4 G
+  # swap. `file_format = "raw"` is required -- ssd_pool is a zfspool and stores
+  # only raw volumes; without it the import fails as qcow2. See
+  # todo/dns-cache-ssd-xfs-migration.md.
+  # BLANK disk -- deliberately no file_id. Importing a cloud image onto this
+  # zfspool kept failing with "timeout: no zvol device link for
+  # 'vm-4326-disk-0' found after 10 sec", leaving a VM with no bootable disk
+  # that just hangs at SeaBIOS. The pool was idle at the time, so it is the
+  # import path itself, not contention. A blank volume is a plain `zfs create
+  # -V` and avoids it entirely; the installer comes from the CD-ROM below.
   disk {
-    datastore_id = "zfs_pool"
-    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    datastore_id = "ssd_pool"
     interface    = "scsi0"
-    size         = 16
+    size         = 32
+    discard      = "on"
+    file_format  = "raw"
   }
+
+  # The repo's own installer ISO (`just iso-build`, hosts/iso/configuration.nix).
+  # It already carries the amadeus SSH key via modules/common.nix, so no
+  # cloud-init datasource is needed to get in -- and because it boots straight
+  # into a NixOS installer there is nothing to kexec, which sidesteps both the
+  # ~1.5 GB kexec RAM floor and the need for scratch space on the target.
+  # Deploy with:  just deploy dns <dhcp-ip> --phases disko,install,reboot
+  #
+  # The name is whatever `just iso-build` produced and you uploaded to the
+  # `local` datastore -- it carries the nixpkgs revision, so it changes every
+  # time the ISO is rebuilt after a flake update. Rebuilt the ISO? Re-upload and
+  # update this string, or the next apply fails on a missing volume.
+  # ide0, not ide2: the initialization block below claims ide2 for its
+  # cloud-init drive.
+  cdrom {
+    file_id   = "local:iso/nixos-homelab-26.11.20260907.dc5d91f-x86_64-linux.iso"
+    interface = "ide0"
+  }
+
+  # Disk FIRST, CD second. A freshly created zvol is all zeroes with no MBR
+  # signature, so SeaBIOS skips it and falls through to the ISO -- but once
+  # nixos-anywhere has installed, the disk boots and the still-attached ISO is
+  # ignored. Ordering it the other way round would reboot into the installer
+  # forever unless you remembered to detach the CD by hand.
+  boot_order = ["scsi0", "ide0"]
 
   network_device {
     bridge = "vmbr0"
@@ -235,9 +273,16 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   initialization {
     datastore_id = "local-lvm"
 
+    # Static, not dhcp: this guest is the resolver, and after a recreate the
+    # Debian phase would otherwise come up on a lease you have to go hunting
+    # for before nixos-anywhere can target it. The NixOS config pins the same
+    # address (hosts/dns/configuration.nix, networking.interfaces.ens18), so
+    # this only governs the pre-install image -- but it means
+    # `just deploy dns 192.168.2.145` works immediately after `tofu apply`.
     ip_config {
       ipv4 {
-        address = "dhcp"
+        address = "192.168.2.145/24"
+        gateway = "192.168.2.1"
       }
     }
 
@@ -680,16 +725,42 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
   }
 
   memory {
-    dedicated = 768
-    floating  = 384
+    dedicated = 2048
+    floating  = 2048
   }
 
+  # ssd_pool, same reasoning as dns_vm above -- and here it is measured, not
+  # assumed. On 2026-09-09 this guest needed ~500 ms for a single 4 KiB O_DSYNC
+  # write (20 of them took 10.04 s, i.e. ~2 IOPS) while /proc/pressure/io sat at
+  # full avg60=67 with CPU pressure at 0.00. step-ca's badgerv2 store writes and
+  # deletes a record per ACME anti-replay nonce, so four concurrent issuances on
+  # that disk turned into a badNonce storm that Caddy could not retry its way
+  # out of. The CA was never CPU- or RAM-starved; it was starved on the spindles.
+  #
+  # 32 GB (was 20) because the old root ran at 89 % -- the same figure dns sat at
+  # before btrfs wedged. Blank disk + `file_format = "raw"`: see the dns_vm block
+  # for why a cloud-image import onto a zfspool cannot work.
   disk {
-    datastore_id = "zfs_pool"
-    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    datastore_id = "ssd_pool"
     interface    = "scsi0"
-    size         = 16
+    size         = 32
+    discard      = "on"
+    file_format  = "raw"
   }
+
+  # Same installer ISO as dns_vm -- rebuild it and both file_id strings change.
+  #
+  # Do NOT add `enabled` here: bpg 0.91.0 deprecates it ("no longer used"), and
+  # `file_id` alone is what attaches the drive. The `enabled = false` that shows
+  # up in a plan diff is vestigial state, not a disabled drive. Set `file_id` to
+  # `none` if you ever want the drive empty.
+  cdrom {
+    file_id   = "local:iso/nixos-homelab-26.11.20260907.dc5d91f-x86_64-linux.iso"
+    interface = "ide0"
+  }
+
+  # Disk first, CD second -- see dns_vm.
+  boot_order = ["scsi0", "ide0"]
 
   network_device {
     bridge = "vmbr0"
@@ -702,6 +773,10 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
   initialization {
     datastore_id = "local-lvm"
 
+    # The NixOS config pins the same address
+    # (hosts/ca/configuration.nix, networking.interfaces.ens18), so this governs
+    # only the pre-install image -- but it means the installer comes up on a
+    # known address instead of a lease you have to hunt for.
     ip_config {
       ipv4 {
         address = "192.168.2.160/24"
@@ -790,78 +865,6 @@ resource "proxmox_virtual_environment_vm" "forgejo_vm" {
 
   serial_device {}
 
-  agent {
-    enabled = true
-    timeout = "60s"
-  }
-
-  started = true
-
-  on_boot = true
-}
-
-# Cache VM (Garage S3 + Attic Nix Binary Cache)
-resource "proxmox_virtual_environment_vm" "cache_vm" {
-  name        = "cache"
-  description = "Garage S3 + Attic Nix Binary Cache - Debian base for NixOS installation via nixos-anywhere"
-  tags        = ["terraform", "debian", "nixos-target", "cache", "s3", "nix"]
-
-  node_name = "pve-gigabyte"
-  vm_id     = 4340
-
-  bios = "seabios"
-
-  keyboard_layout = "de"
-
-  cpu {
-    cores = 2
-    type  = "host"
-  }
-
-  memory {
-    dedicated = 1024
-    floating  = 1024
-  }
-
-  disk {
-    # Moved from zfs_pool to ssd_pool on 2026-08-19 (manual `qm move-disk`,
-    # outside tofu) — the shared 2-HDD zfs_pool caps out around ~78 IOPS
-    # cluster-wide and was the root cause of attic's earlier SQLite lock
-    # contention (see hosts/cache/attic/default.nix). datastore_id here just
-    # documents where the disk now lives; it does not itself trigger a move.
-    datastore_id = "ssd_pool"
-    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
-    interface    = "scsi0"
-    size         = 200
-  }
-
-  network_device {
-    bridge = "vmbr0"
-  }
-
-  operating_system {
-    type = "l26"
-  }
-
-  initialization {
-    datastore_id = "local-lvm"
-
-    ip_config {
-      ipv4 {
-        address = "192.168.2.175/24"
-        gateway = "192.168.2.1"
-      }
-    }
-
-    user_account {
-      username = "amadeus"
-      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
-    }
-  }
-
-  serial_device {}
-
-  # Enable QEMU Guest Agent
   agent {
     enabled = true
     timeout = "60s"
@@ -1533,7 +1536,6 @@ output "vm_ipv4_addresses" {
     ca          = proxmox_virtual_environment_vm.ca_vm.ipv4_addresses
     fleet       = proxmox_virtual_environment_vm.fleet_vm.ipv4_addresses
     harbor      = proxmox_virtual_environment_vm.harbor_vm.ipv4_addresses
-    cache       = proxmox_virtual_environment_vm.cache_vm.ipv4_addresses
     forgejo     = proxmox_virtual_environment_vm.forgejo_vm.ipv4_addresses
     development = proxmox_virtual_environment_vm.development_vm.ipv4_addresses
     jellyfin    = proxmox_virtual_environment_vm.jellyfin_vm.ipv4_addresses

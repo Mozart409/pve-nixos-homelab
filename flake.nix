@@ -145,10 +145,12 @@
         local = "harbor.homelab.local";
         tailscale = "homelab-harbor";
       };
-      cache = {
-        local = "cache.homelab.local";
-        tailscale = "homelab-cache";
-      };
+      # Cache VM decommissioned 2026-09-09 (see the note in iac/main.tf). The
+      # NixOS config is kept under hosts/cache/ but is wired to nothing.
+      # cache = {
+      #   local = "cache.homelab.local";
+      #   tailscale = "homelab-cache";
+      # };
       development = {
         local = "development.homelab.local";
         tailscale = "homelab-development";
@@ -224,7 +226,9 @@
     };
 
     # Function to create a NixOS system configuration. Every mkHost host gets
-    # home-manager/nixvim (hive parity, see above) and modules/attic-push.nix.
+    # home-manager/nixvim (hive parity, see above). The fleet-wide attic push
+    # was retired 2026-09-09 with the cache VM: modules/attic-push.nix is kept
+    # on disk but imported nowhere.
     # The Loki shipper is NOT here -- it is owned by modules/fluent-bit.nix and
     # imported from modules/common.nix, which every host has. Hosts that must NOT
     # (bootstrap/installer images like `minimal` and `iso`) are explicit
@@ -243,7 +247,6 @@
           disko.nixosModules.disko
           agenix.nixosModules.default
           homeManagerNixvim
-          ./modules/attic-push.nix
           ./modules/container-registries.nix
           ./hosts/${hostname}/configuration.nix
         ];
@@ -259,7 +262,7 @@
         containers = mkHost "containers";
         # Bootstrap image for nixos-anywhere (`just deploy-minimal`). Explicit
         # (not mkHost) because it must NOT get home-manager/nixvim (slows the
-        # install). A bootstrap host also gets no attic-push.
+        # install).
         minimal = nixpkgs.lib.nixosSystem {
           specialArgs = {inherit homelab-dashboard;};
           modules = [
@@ -295,14 +298,13 @@
             homelab-mcp.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            ./modules/attic-push.nix
             ./hosts/mcp_vm/configuration.nix
           ];
         };
         ca = mkHost "ca";
         fleet = mkHost "fleet";
         harbor = mkHost "harbor";
-        cache = mkHost "cache";
+        # cache = mkHost "cache"; # decommissioned 2026-09-09
         forgejo = mkHost "forgejo";
         # Explicit (not mkHost) so `herdr`/`nix-ai-tools` can be passed via specialArgs.
         development = nixpkgs.lib.nixosSystem {
@@ -319,7 +321,6 @@
             agenix.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            ./modules/attic-push.nix
             ./hosts/development/configuration.nix
           ];
         };
@@ -341,7 +342,6 @@
             agenix.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            ./modules/attic-push.nix
             ./hosts/jellyfin/configuration.nix
           ];
         };
@@ -385,7 +385,6 @@
             hermes-agent.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            ./modules/attic-push.nix
             ./hosts/hermes/configuration.nix
           ];
         };
@@ -413,6 +412,19 @@
         # Applied to every node in the hive
         defaults = {
           imports = [homeManagerNixvim ./modules/container-registries.nix];
+
+          # NOTE: there is no `deployment.substituteOnDestination` in this
+          # colmena. It was added here on 2026-09-09 to stop targets pulling from
+          # the retired `cache.homelab.local` substituter and broke evaluation of
+          # EVERY node ("The option `deployment.substituteOnDestination' does not
+          # exist"). The valid deployment options are buildOnTarget, sshOptions,
+          # targetHost/Port/User, tags, keys, and friends -- check
+          # src/nix/hive/options.nix in the colmena source before adding another.
+          #
+          # The problem it was meant to solve went away on its own: `dns` no
+          # longer serves an A record for cache.homelab.local, so lookups
+          # NXDOMAIN immediately instead of hanging on a dead IP for
+          # `stalled-download-timeout` (300s) per path.
         };
 
         # Host definitions
@@ -426,7 +438,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/database/configuration.nix
           ];
         };
@@ -441,7 +452,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/otel/configuration.nix
           ];
         };
@@ -456,7 +466,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/dns/configuration.nix
           ];
         };
@@ -471,7 +480,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/unifi/configuration.nix
           ];
         };
@@ -485,7 +493,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/containers/configuration.nix
           ];
         };
@@ -501,29 +508,31 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             homelab-mcp.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/mcp_vm/configuration.nix
           ];
         };
 
-        hermes = {
-          deployment = {
-            # Not routed through hostAddrs/targetHost like the other nodes --
-            # hermes has no hostAddrs entry, so DEPLOY_NET=tailscale does not
-            # switch it over.
-            targetHost = "hermes.homelab.local";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["ai" "hermes"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            hermes-agent.nixosModules.default
-            ./modules/attic-push.nix
-            ./hosts/hermes/configuration.nix
-          ];
-        };
+        # Inactive 2026-09-09: unreachable during `just colmena-apply`
+        # ("No route to host"). Only the hive entry is commented out --
+        # nixosConfigurations still evaluates the config and `just deploy`
+        # still works. Same treatment as the zeroclaw node below.
+        # hermes = {
+        #   deployment = {
+        #     # Not routed through hostAddrs/targetHost like the other nodes --
+        #     # hermes has no hostAddrs entry, so DEPLOY_NET=tailscale does not
+        #     # switch it over.
+        #     targetHost = "hermes.homelab.local";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["ai" "hermes"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     hermes-agent.nixosModules.default
+        #     ./hosts/hermes/configuration.nix
+        #   ];
+        # };
 
         ca = {
           deployment = {
@@ -535,55 +544,55 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/ca/configuration.nix
           ];
         };
 
-        fleet = {
-          deployment = {
-            targetHost = targetHost "fleet";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["security" "fleet"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./modules/attic-push.nix
-            ./hosts/fleet/configuration.nix
-          ];
-        };
+        # Inactive 2026-09-09 (see the note on hermes above).
+        # fleet = {
+        #   deployment = {
+        #     targetHost = targetHost "fleet";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["security" "fleet"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/fleet/configuration.nix
+        #   ];
+        # };
 
-        harbor = {
-          deployment = {
-            targetHost = targetHost "harbor";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["registry" "harbor"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./modules/attic-push.nix
-            ./hosts/harbor/configuration.nix
-          ];
-        };
+        # Inactive 2026-09-09 (see the note on hermes above).
+        # harbor = {
+        #   deployment = {
+        #     targetHost = targetHost "harbor";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["registry" "harbor"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/harbor/configuration.nix
+        #   ];
+        # };
 
-        cache = {
-          deployment = {
-            targetHost = targetHost "cache";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["cache" "s3" "nix"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./modules/attic-push.nix
-            ./hosts/cache/configuration.nix
-          ];
-        };
+        # Decommissioned 2026-09-09 along with the VM (iac/main.tf). Kept
+        # commented rather than deleted, like the zeroclaw node below.
+        # cache = {
+        #   deployment = {
+        #     targetHost = targetHost "cache";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["cache" "s3" "nix"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/cache/configuration.nix
+        #   ];
+        # };
 
         forgejo = {
           deployment = {
@@ -604,25 +613,24 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/forgejo/configuration.nix
           ];
         };
 
-        woodpecker = {
-          deployment = {
-            targetHost = targetHost "woodpecker";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["ci" "woodpecker"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./modules/attic-push.nix
-            ./hosts/woodpecker/configuration.nix
-          ];
-        };
+        # Inactive 2026-09-09 (see the note on hermes above).
+        # woodpecker = {
+        #   deployment = {
+        #     targetHost = targetHost "woodpecker";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["ci" "woodpecker"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/woodpecker/configuration.nix
+        #   ];
+        # };
 
         development = {
           deployment = {
@@ -634,7 +642,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/development/configuration.nix
           ];
         };
@@ -649,25 +656,24 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/jellyfin/configuration.nix
           ];
         };
 
-        "k3s-cntrl-1" = {
-          deployment = {
-            targetHost = targetHost "k3s-cntrl-1";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["kubernetes" "k3s"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./modules/attic-push.nix
-            ./hosts/k3s-cntrl-1/configuration.nix
-          ];
-        };
+        # Inactive 2026-09-09 (see the note on hermes above).
+        # "k3s-cntrl-1" = {
+        #   deployment = {
+        #     targetHost = targetHost "k3s-cntrl-1";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["kubernetes" "k3s"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/k3s-cntrl-1/configuration.nix
+        #   ];
+        # };
 
         # zeroclaw = {
         #   deployment = {

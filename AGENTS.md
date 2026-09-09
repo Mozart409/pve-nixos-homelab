@@ -217,12 +217,61 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
     ```bash
     git status --short                       # working tree clean? anything unstaged?
     git fetch github                         # refresh the mirror's ref
-    git log --oneline github/main..main      # commits GitHub is missing
+    git rev-list --count github/main..main   # SHAs on main that GitHub lacks
+    git rev-list --count main..github/main   # SHAs on GitHub that main lacks
     ```
 
-    If `github/main..main` is non-empty, end the task with an explicit nudge,
-    e.g. *"GitHub is 3 commits behind Forgejo — run `just sync-remotes` to
-    sync it."* Report the count and let the user run it.
+    **Check BOTH directions, and do not report the first number as "commits
+    GitHub is missing".** It counts commits whose *SHAs* are absent, which is
+    only the same thing as missing work when the two histories share a tip. If
+    the second number is also non-zero the histories have **diverged**, and the
+    first number is inflated by every commit that exists on both sides with a
+    different SHA — which is what any history rewrite (a rebase, a filter, an
+    author or signature change) produces for every descendant commit.
+
+    When both are non-zero, compare by **content**, not SHA:
+
+    ```bash
+    git log --format='%s' github/main..main | sort > /tmp/a
+    git log --format='%s' main..github/main | sort > /tmp/b
+    comm -12 /tmp/a /tmp/b | wc -l    # same subject both sides => rewritten, not missing
+    comm -23 /tmp/a /tmp/b | wc -l    # genuinely absent from GitHub  <- report THIS
+    comm -13 /tmp/a /tmp/b | wc -l    # genuinely absent from main
+    ```
+
+    Confirm a suspected rewrite by diffing GitHub's tip against its twin on
+    `main` (find the twin by subject); an **empty** diff proves the content is
+    identical and only the SHAs differ:
+
+    ```bash
+    git diff --stat github/main <twin-sha>
+    ```
+
+    Then nudge with the honest number, e.g. *"GitHub is 3 commits behind
+    Forgejo — run `just sync-remotes` to sync it."* Report the count and let the
+    user run it.
+
+    **This cost a wrong report on 2026-09-09.** `github/main..main` said **819**
+    and was reported as "819 commits behind". The real gap was **45**: the
+    histories had diverged at `febfeb3` (2026-03-19), 774 subjects were
+    identical on both sides, **0** existed only on GitHub, and GitHub's tip
+    (`211f596`) was byte-identical to `580cf156` on `main`. The user was right
+    to disbelieve the number.
+
+    **A diverged mirror cannot be fixed by `just sync-remotes`.** That script
+    merges commits that exist only on `github`, so under a rewrite-divergence it
+    grafts hundreds of duplicate-content commits into `main` as a merge, and a
+    plain `git push github main` is rejected as non-fast-forward. When the
+    content check shows GitHub holds **nothing** `main` lacks, the repair is for
+    the user to overwrite the mirror:
+
+    ```bash
+    git push --force-with-lease github main
+    ```
+
+    Only after verifying `comm -13` is 0 — that check is what makes discarding
+    GitHub's history safe. This is a **user** action: force-push is in the deny
+    list (§8) and agents never push to `github`.
 
     For syncing by hand, `just sync-remotes` (`scripts/sync-remotes.sh`) is the
     supported path: it fetches both remotes, fast-forwards `main` onto whatever
@@ -231,6 +280,10 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
     sequential pushes, never a multi-URL remote. It aborts instead of guessing
     on diverged history with `origin`, merge conflicts, or a dirty tree. This
     is for the user; agents still push to Forgejo only.
+
+    Note it guards divergence against `origin`, **not** against `github` — a
+    rewrite-divergence on the mirror is exactly the case it will happily merge
+    and should not. See the content check above before reaching for it.
 
     **Never add GitHub as a second push URL on `origin`.** It looks like free
     mirroring and instead produces split-brain, because git does not push to
