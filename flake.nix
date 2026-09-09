@@ -512,23 +512,27 @@
           ];
         };
 
-        hermes = {
-          deployment = {
-            # Not routed through hostAddrs/targetHost like the other nodes --
-            # hermes has no hostAddrs entry, so DEPLOY_NET=tailscale does not
-            # switch it over.
-            targetHost = "hermes.homelab.local";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["ai" "hermes"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            hermes-agent.nixosModules.default
-            ./hosts/hermes/configuration.nix
-          ];
-        };
+        # Inactive 2026-09-09: unreachable during `just colmena-apply`
+        # ("No route to host"). Only the hive entry is commented out --
+        # nixosConfigurations still evaluates the config and `just deploy`
+        # still works. Same treatment as the zeroclaw node below.
+        # hermes = {
+        #   deployment = {
+        #     # Not routed through hostAddrs/targetHost like the other nodes --
+        #     # hermes has no hostAddrs entry, so DEPLOY_NET=tailscale does not
+        #     # switch it over.
+        #     targetHost = "hermes.homelab.local";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["ai" "hermes"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     hermes-agent.nixosModules.default
+        #     ./hosts/hermes/configuration.nix
+        #   ];
+        # };
 
         ca = {
           deployment = {
@@ -544,33 +548,35 @@
           ];
         };
 
-        fleet = {
-          deployment = {
-            targetHost = targetHost "fleet";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["security" "fleet"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/fleet/configuration.nix
-          ];
-        };
+        # Inactive 2026-09-09 (see the note on hermes above).
+        # fleet = {
+        #   deployment = {
+        #     targetHost = targetHost "fleet";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["security" "fleet"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/fleet/configuration.nix
+        #   ];
+        # };
 
-        harbor = {
-          deployment = {
-            targetHost = targetHost "harbor";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["registry" "harbor"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/harbor/configuration.nix
-          ];
-        };
+        # Inactive 2026-09-09 (see the note on hermes above).
+        # harbor = {
+        #   deployment = {
+        #     targetHost = targetHost "harbor";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["registry" "harbor"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/harbor/configuration.nix
+        #   ];
+        # };
 
         # Decommissioned 2026-09-09 along with the VM (iac/main.tf). Kept
         # commented rather than deleted, like the zeroclaw node below.
@@ -611,19 +617,20 @@
           ];
         };
 
-        woodpecker = {
-          deployment = {
-            targetHost = targetHost "woodpecker";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["ci" "woodpecker"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/woodpecker/configuration.nix
-          ];
-        };
+        # Inactive 2026-09-09 (see the note on hermes above).
+        # woodpecker = {
+        #   deployment = {
+        #     targetHost = targetHost "woodpecker";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["ci" "woodpecker"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/woodpecker/configuration.nix
+        #   ];
+        # };
 
         development = {
           deployment = {
@@ -653,19 +660,20 @@
           ];
         };
 
-        "k3s-cntrl-1" = {
-          deployment = {
-            targetHost = targetHost "k3s-cntrl-1";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["kubernetes" "k3s"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./hosts/k3s-cntrl-1/configuration.nix
-          ];
-        };
+        # Inactive 2026-09-09 (see the note on hermes above).
+        # "k3s-cntrl-1" = {
+        #   deployment = {
+        #     targetHost = targetHost "k3s-cntrl-1";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["kubernetes" "k3s"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/k3s-cntrl-1/configuration.nix
+        #   ];
+        # };
 
         # zeroclaw = {
         #   deployment = {
