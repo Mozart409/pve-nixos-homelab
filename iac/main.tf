@@ -729,12 +729,33 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
     floating  = 2048
   }
 
+  # ssd_pool, same reasoning as dns_vm above -- and here it is measured, not
+  # assumed. On 2026-09-09 this guest needed ~500 ms for a single 4 KiB O_DSYNC
+  # write (20 of them took 10.04 s, i.e. ~2 IOPS) while /proc/pressure/io sat at
+  # full avg60=67 with CPU pressure at 0.00. step-ca's badgerv2 store writes and
+  # deletes a record per ACME anti-replay nonce, so four concurrent issuances on
+  # that disk turned into a badNonce storm that Caddy could not retry its way
+  # out of. The CA was never CPU- or RAM-starved; it was starved on the spindles.
+  #
+  # 32 GB (was 20) because the old root ran at 89 % -- the same figure dns sat at
+  # before btrfs wedged. Blank disk + `file_format = "raw"`: see the dns_vm block
+  # for why a cloud-image import onto a zfspool cannot work.
   disk {
-    datastore_id = "zfs_pool"
-    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    datastore_id = "ssd_pool"
     interface    = "scsi0"
-    size         = 20
+    size         = 32
+    discard      = "on"
+    file_format  = "raw"
   }
+
+  # Same installer ISO as dns_vm -- rebuild it and both file_id strings change.
+  cdrom {
+    file_id   = "local:iso/nixos-homelab-26.11.20260907.dc5d91f-x86_64-linux.iso"
+    interface = "ide0"
+  }
+
+  # Disk first, CD second -- see dns_vm.
+  boot_order = ["scsi0", "ide0"]
 
   network_device {
     bridge = "vmbr0"
@@ -747,6 +768,10 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
   initialization {
     datastore_id = "local-lvm"
 
+    # The NixOS config pins the same address
+    # (hosts/ca/configuration.nix, networking.interfaces.ens18), so this governs
+    # only the pre-install image -- but it means the installer comes up on a
+    # known address instead of a lease you have to hunt for.
     ip_config {
       ipv4 {
         address = "192.168.2.160/24"

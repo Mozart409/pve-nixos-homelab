@@ -104,10 +104,11 @@ Repo:
 - ✅ `iac/main.tf` `dns_vm`: `ssd_pool`, 32 GB, `discard = "on"`, cloud-init
       pinned to the static `192.168.2.145` (it was `dhcp`, which would have made
       a recreated guest come up on a lease you had to go hunting for)
-- ✅ `iac/main.tf` `ca_vm`: stale `size = 16` corrected to the live `20`
+- ✅ `iac/main.tf` `ca_vm`: `ssd_pool`, 32 GB, blank disk + installer ISO,
+      `discard`/`raw`, memory `2048/2048` (was: stale `size = 16` → live `20`)
 - ✅ `cache` decommissioned in the repo — Part B lists exactly what was unwired
 - ✅ `dns` closure pre-built on wotan
-- ⬜ `hosts/ca/configuration.nix` still on btrfs **deliberately** — see C1
+- ⬜ `hosts/ca/configuration.nix` still on btrfs **deliberately** — see C1b
 
 Infrastructure:
 
@@ -141,10 +142,20 @@ Infrastructure:
 - ✅ `homelab-cache` already gone from the tailnet (B.6)
 - ✅ Monitoring quiet (B.7) — no `cache`/`futo`/`notes` target, probe or cert
       subject left in Prometheus, and no alert fired for the disappearance
-- ⬜ B.5 PBS/PVE backup job — **blocked**: Tailscale SSH to `pve-gigabyte` wants
-      an interactive browser check. Note the VMID list lives in PVE's
-      `/etc/pve/jobs.cfg`, not on PBS.
-- ⬜ Part C (`ca` → XFS)
+- ✅ **CA state backed up and verified** (2026-09-09 22:14) —
+      `~/backups/step-ca-state-2026-09-09-2214.tar.gz` (57 M) plus an
+      identity-only copy in `~/backups/step-ca-identity-2026-09-09/`. Both
+      outside the repo. This is the C0 gate for Part C.
+- ✅ **`database` certs rescued** — `database.homelab.{local,internal}` and
+      `pgadmin.homelab.internal` went from **0.98 days** to **29.99 days**. A
+      plain `systemctl restart caddy` cleared the DNS-outage backoff but then hit
+      the badNonce storm; the D.5 sequence (stop Caddy → restart step-ca → start
+      Caddy) is what actually fixed it.
+- ✅ B.5 PBS/PVE backup job — checked, **no job references VM 4340**; Part B is
+      closed
+- ⬜ Part C (`ca` → XFS **on `ssd_pool`** — scope widened 2026-09-09 after the
+      sync-write measurement; `iac/main.tf` already updated, disko import
+      deliberately not yet)
 
 ---
 
@@ -483,82 +494,175 @@ drops its backup with it — no second edit, and no stale backup unit left behin
 
 ---
 
-## Part C — `ca` to XFS (staying on `zfs_pool`)
+## Part C — `ca` to XFS **on `ssd_pool`**
 
-`ca` gets the filesystem change **only** — no pool move. It is a small,
-low-traffic guest whose problem today was btrfs's data/metadata chunk split, not
-IOPS, and `ssd_pool` capacity is better spent elsewhere. So: XFS, still
-`zfs_pool`, same 20 GB.
+> **Scope changed 2026-09-09.** This section used to read "XFS only, no pool
+> move", on the reasoning that `ca` is "a small, low-traffic guest whose problem
+> today was btrfs's data/metadata chunk split, not IOPS". **That reasoning was
+> wrong, and it was measured wrong.** See C-why below. amadeus approved the pool
+> move after seeing the numbers.
 
-The urgency is gone (the `sfdisk` rescue above bought it 3.5 GiB of unallocated
-space and dropped metadata to 61.9 %), so this is planned work, not a fire.
+### C-why · the measurement that changed the plan
 
-### ⚠️ Do the config swap LAST, not now
+Taken on the live host while it was otherwise idle:
 
-`hosts/ca/configuration.nix` still imports `modules/disko-config.nix` **on
-purpose**. Swapping it to `disko-xfs.nix` makes the config describe partlabels
-the live btrfs disk does not have — Ordering hazard 1 — and `ca` would then be
-poisoned for every `colmena apply` until it is reinstalled. That is exactly the
-state `dns` is in now, and it is why `dns` has to be excluded from fleet
-deploys. **Change the import immediately before C2, not before.**
+```
+20 × 4 KiB O_DSYNC writes   10.04 s   →  ~500 ms/write, ~2 IOPS, 8.2 kB/s
+/proc/pressure/io    full   avg10=54  avg60=67  avg300=59    ← no test running
+/proc/pressure/cpu   full   avg10=0.00 avg60=0.00 avg300=0.00
+load 1.55 on an idle CPU
+```
 
-- [ ] **C0 · Pre-flight**
-  - [ ] Confirm the rescue held: `sudo btrfs filesystem usage /` should still
-        show ~3.5 GiB unallocated and metadata well under 90 %.
-  - [ ] Check RAM against the kexec floor (~1.5 GB). `ca_vm` is
-        `dedicated 768 / floating 384` — **well under**, so raise it first:
-        `qm set 4337 --memory 2048 --balloon 2048`, or bump `memory` in
-        `iac/main.tf` and apply. This is the single most likely thing to fail.
-  - [ ] `nix build --no-link '.#nixosConfigurations.ca.config.system.build.toplevel'`
-        so the install needs nothing fetched.
-  - [ ] Note what is stateful: **step-ca's `/var/lib/step-ca`** — the CA root key,
-        intermediate, and its database. Unlike `dns`, this host is **NOT**
-        disposable. Losing the CA root means re-issuing trust on every host that
-        imports `modules/step-ca-trust.nix`. **Back it up and verify the copy
-        before wiping**, and do not rely on the backup landing in `/tmp`.
-- [ ] **C1 · Swap the disko import** in `hosts/ca/configuration.nix`:
-      `../../modules/disko-config.nix` → `../../modules/disko-xfs.nix`.
-      Optionally add `discard = "on"` to the `ca_vm` disk in `iac/main.tf` — the
-      XFS module enables a weekly `services.fstrim`, and without `discard` those
-      TRIMs never reach ZFS. Leave `datastore_id = "zfs_pool"` alone.
-- [ ] **C2 · Reinstall.** `ssh-keygen -R 192.168.2.160`, then
-      `just deploy ca 192.168.2.160` (static IP, so the full-config path as in
-      A2.2). Confirm afterwards with
-      `findmnt -no FSTYPE,SIZE /` → `xfs`, ~15 G root, 4 G swap partition.
-- [ ] **C3 · Restore step-ca state**, then verify a real issuance end to end —
-      not just that the unit is green.
+A durable 4 KiB write costs **half a second**. Not the pool's nominal ~78 IOPS —
+about **2**. CPU and RAM are untouched; the guest is IO-stalled well over half of
+its wall clock at rest.
 
-      ⚠️ **Stop step-ca cleanly before the wipe, and expect to repair its Badger
-      DB if you don't.** An ungraceful stop leaves a torn tail in the value log
-      and step-ca then refuses to start at all:
+That is the whole explanation for the `badNonce` storm on `database` earlier the
+same evening. ACME anti-replay nonces are single-use by design (RFC 8555 §6.5):
+the server *must* reject a stale one and the client retries with a fresh one.
+Let's Encrypt emits them constantly and nobody notices, because the retry
+succeeds. Here every retry needed another durable write on a 2-IOPS disk, so all
+11 attempts missed. step-ca's `badgerv2` store writes **and deletes** a record
+per nonce, on top of order/authz/challenge/cert records — it write-amplifies
+precisely the workload a CA has. Four concurrent issuances is enough.
+
+Corroborating: in the 2026-09-09 fleet apply, `ca` took **10 minutes** to
+activate while SSD-backed `dns` took **16 seconds**.
+
+Two things worth keeping straight:
+
+- **`ca` being "on its own VM" isolates nothing that mattered.** The VM boundary
+  gives it its own CPU and RAM — both idle — but its disk is a zvol on the same
+  2-HDD mirror as every other guest. The bottleneck is *under* the VM.
+- **XFS alone would not have fixed this.** The filesystem swap addresses the
+  btrfs ENOSPC failure class (real — `ca` was at 89 % of a 19 G root, the same
+  figure `dns` sat at before it wedged). It does nothing for a 500 ms sync write,
+  because it is the same spindles. Both changes are needed, which is why this
+  section now does both.
+
+Still open, deliberately not done here: **`badgerv2` is a poor default for a
+CA.** Its value log is 216 MB for a CA issuing a handful of 30-day certs, so
+value-log GC is not keeping up, and that is the same file that needed truncating
+on the 2026-09-09 reboot after badger's classic "Truncate Needed". smallstep
+steer people to SQL backends now. Moving `db.type` to `postgresql` would remove
+badger entirely — but it couples CA issuance to the `database` host, whose *own*
+cert comes from this CA, so the bootstrap ordering needs thought first. SSD
+first; revisit if badger still misbehaves on fast storage.
+
+### ⚠️ Ordering hazard 3 — the CA is down for the whole reinstall
+
+Unlike `dns` (whose loss stalled deploys) or `cache` (whose loss was harmless),
+a `ca` outage means **no host in the fleet can issue or renew a certificate**
+for the duration. Existing certs keep working — nothing breaks immediately — but
+any Caddy that happens to hit its renewal window during the window fails and
+falls into the **6-hour in-process backoff** documented in D.5, which does not
+recover when the CA comes back.
+
+So:
+
+- **Check the runway first.** Certs are 720 h (30 days) and Caddy renews at 2/3
+  life, i.e. at ~10 days remaining. As of 2026-09-09 22:00 the nearest are
+  `loki`/`tempo`/`otel`/`prometheus` at ~15 days — they do not renew for another
+  ~5 days. That is the window.
+  ```bash
+  ssh amadeus@otel.homelab.local \
+    'curl -sG http://localhost:9090/api/v1/query \
+       --data-urlencode "query=sort((probe_ssl_earliest_cert_expiry - time())/86400)"'
+  ```
+- **Ignore `ca.homelab.local:8443/health` sitting at ~1 day.** step-ca
+  self-issues a 24 h leaf and rotates it. It read 0.90 days five days before the
+  incident too. It is not a casualty.
+- **Afterwards**, if any host did try to renew mid-window, clear it with the
+  D.5 sequence (stop Caddy → restart step-ca → start Caddy — a Caddy restart
+  alone does *not* clear a badNonce storm).
+
+### Steps
+
+- [x] **C0 · Back up the CA state.** Done 2026-09-09 22:14, verified:
+      - `~/backups/step-ca-state-2026-09-09-2214.tar.gz` (57 M, `gzip -t` clean)
+        — full tree including the badger db
+      - `~/backups/step-ca-identity-2026-09-09/` — just the irreplaceable part
+      Both outside the repo. **Never commit these.**
+
+      The irreplaceable material is **16 KB**, not 239 MB:
+      `certs/root_ca.crt` (635 B), `certs/intermediate_ca.crt` (688 B),
+      `secrets/root_ca_key` (314 B), `secrets/intermediate_ca_key` (314 B),
+      `ca.json` (1697 B). Everything else is the badger database.
+
+      ⚠️ **`/var/lib/step-ca` is a symlink to `private/step-ca`** (systemd
+      `DynamicUser`/`StateDirectory`). `tar -C /var/lib step-ca` archives the
+      *symlink* and silently produces a 117-byte "backup" that looks like it
+      worked. Archive `-C /var/lib/private step-ca` instead, and always list the
+      result before trusting it.
+
+      Stop step-ca cleanly before archiving (an ungraceful stop tears badger's
+      value log — see C3), and stream it off-host rather than writing to that
+      89 %-full disk:
+      ```bash
+      ssh amadeus@ca.homelab.local '
+        sudo systemctl stop step-ca >&2
+        sudo tar cz -C /var/lib/private step-ca
+        rc=$?; sudo systemctl start step-ca >&2; exit $rc
+      ' > ~/backups/step-ca-state-$(date +%F-%H%M).tar.gz
       ```
-      badger WARNING: Truncate Needed. File …/db/000000.vlog size: 214233088 Endoffset: 214233040
-      Error opening database of Type badgerv2: … Value log truncate required to run DB
+      Take a **fresh** copy immediately before C2 — the db moves, even if the
+      identity never does.
+- [x] **C1a · `iac/main.tf`** — `ca_vm` now: `ssd_pool`, **32 GB** (was 20),
+      blank disk (no `file_id`), `discard = "on"`, `file_format = "raw"`, plus
+      the installer `cdrom` on `ide0` and `boot_order = ["scsi0", "ide0"]`.
+      Memory was already raised to `2048/2048`.
+- [ ] **C1b · Swap the disko import — LAST, not now.**
+      `hosts/ca/configuration.nix` still imports `modules/disko-config.nix`
+      **on purpose**. Swapping it to `disko-xfs.nix` makes the config describe
+      partlabels the live disk does not have (Ordering hazard 1), which poisons
+      `ca` for every `colmena apply` until it is reinstalled — exactly the state
+      `dns` was stuck in. **Change it immediately before C2.**
+- [ ] **C2 · Recreate the VM.** ⚠️ This **destroys the existing 20 G disk**;
+      the `datastore_id` change forces replacement. Confirm the plan touches
+      only `ca_vm` and that C0's backup is verified before applying.
+      ```bash
+      just iac-plan     # expect ca_vm replaced, nothing else surprising
+      just iac-apply
       ```
-      This happened on the 2026-09-09 reboot. The fix is to trim the file to the
-      `Endoffset` badger prints (48 bytes there) after backing the DB up:
+      The VM comes up blank and boots the ISO. A new MAC is harmless: `ca` uses
+      a static IP from its NixOS config, not DHCP.
+- [ ] **C3 · Reinstall.** `ssh-keygen -R 192.168.2.160`, then — because the ISO
+      boots a NixOS installer rather than kexec'ing one:
+      ```bash
+      just deploy ca 192.168.2.160 --phases disko,install,reboot
+      ```
+      Confirm afterwards: `findmnt -no FSTYPE,SIZE /` → `xfs`, ~27 G root, and a
+      real 4 G swap partition (not a btrfs swapfile).
+- [ ] **C4 · Restore the CA state**, then prove a real issuance — not just a
+      green unit.
       ```bash
       sudo systemctl stop step-ca
-      sudo cp -a /var/lib/step-ca/db /root/step-ca-db.bak-$(date +%F-%H%M)
-      sudo truncate -s <Endoffset> /var/lib/step-ca/db/000000.vlog
-      sudo systemctl reset-failed step-ca && sudo systemctl start step-ca
-      ```
-      The discarded tail is an uncommitted record, and **the CA's key material is
-      not in Badger** — `certs/{root,intermediate}_ca.crt` and
-      `secrets/{root,intermediate}_ca_key` are plain files, so the CA identity is
-      never at risk from this. Back those up separately regardless.
-
-      Then confirm it actually serves:
-      ```bash
+      sudo tar xzf step-ca-state-<ts>.tar.gz -C /var/lib/private
+      sudo chown -R step-ca:step-ca /var/lib/private/step-ca
+      sudo systemctl start step-ca
       curl -sS -o /dev/null -w '%{http_code}\n' https://ca.homelab.local:8443/health
       ```
-      and force a cert renewal on some other host to prove ACME still works
-      against the restored CA.
-- [ ] **C4 · agenix re-key.** New host key ⇒ update `hostCa` in
-      `secrets/secrets.nix` and re-encrypt what it consumes (same cautions as
-      A3.2 — ask before `just reencrypt`).
-- [ ] **C5 · Tailscale.** Delete the stale `homelab-ca` node and approve the new
+      Then force a renewal on another host and watch it succeed.
+
+      If badger refuses to open —
+      `Truncate Needed. File …/db/000000.vlog size: 214233088 Endoffset: 214233040`
+      — trim to the `Endoffset` it prints, after copying the db aside:
+      ```bash
+      sudo truncate -s <Endoffset> /var/lib/private/step-ca/db/000000.vlog
+      sudo systemctl reset-failed step-ca && sudo systemctl start step-ca
+      ```
+      The discarded tail is an uncommitted record, and **the CA identity is not
+      in badger** — the certs and keys are plain files — so this never risks the
+      root of trust.
+- [ ] **C5 · agenix re-key.** New host key ⇒ update `hostCa` in
+      `secrets/secrets.nix`, then re-encrypt what `ca` consumes:
+      `EDITOR=: agenix -e <secret>.age -i ~/.ssh/id_ed25519` per secret.
+      **Not `just reencrypt`** — wrong identity, see the A3 notes.
+- [ ] **C6 · Tailscale.** Delete the stale `homelab-ca` node and approve the new
       one. No subnet route on this host.
+- [ ] **C7 · Re-measure.** Repeat the C-why sync-write test on the rebuilt host.
+      It is the evidence for whether the remaining guests are worth moving, and
+      the number belongs in D.2.
 
 ## Part D — Fold the findings back
 
