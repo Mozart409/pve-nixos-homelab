@@ -153,9 +153,16 @@ Infrastructure:
       Caddy) is what actually fixed it.
 - ✅ B.5 PBS/PVE backup job — checked, **no job references VM 4340**; Part B is
       closed
-- ⬜ Part C (`ca` → XFS **on `ssd_pool`** — scope widened 2026-09-09 after the
-      sync-write measurement; `iac/main.tf` already updated, disko import
-      deliberately not yet)
+- ✅ **Part C essentially DONE** — `ca` reinstalled onto **26.9 G XFS on
+      `ssd_pool`**, step-ca active and serving `HTTP 200`, CA identity restored
+      and **verified from another host against its system trust store** (not
+      `-k`), agenix re-keyed, sync writes **~305× faster** (500 ms → 1.6 ms).
+      See C7 for the full before/after table.
+- ⬜ C6 Tailscale — `ca` is `Logged out`. Root-caused to a broken
+      `requires = ["agenix.service"]` in `modules/tailscale.nix` (agenix is an
+      activation script, not a unit) plus the oneshot never re-running after a
+      re-key. Both fixed declaratively with the `secretNonce` idiom; needs one
+      deploy, then node approval.
 
 ---
 
@@ -611,13 +618,13 @@ So:
       blank disk (no `file_id`), `discard = "on"`, `file_format = "raw"`, plus
       the installer `cdrom` on `ide0` and `boot_order = ["scsi0", "ide0"]`.
       Memory was already raised to `2048/2048`.
-- [ ] **C1b · Swap the disko import — LAST, not now.**
+- [x] **C1b · Swap the disko import — LAST, not now.**
       `hosts/ca/configuration.nix` still imports `modules/disko-config.nix`
       **on purpose**. Swapping it to `disko-xfs.nix` makes the config describe
       partlabels the live disk does not have (Ordering hazard 1), which poisons
       `ca` for every `colmena apply` until it is reinstalled — exactly the state
       `dns` was stuck in. **Change it immediately before C2.**
-- [ ] **C2 · Recreate the VM.** ⚠️ This **destroys the existing 20 G disk**;
+- [x] **C2 · Recreate the VM.** ⚠️ This **destroys the existing 20 G disk**;
       the `datastore_id` change forces replacement. Confirm the plan touches
       only `ca_vm` and that C0's backup is verified before applying.
       ```bash
@@ -626,23 +633,74 @@ So:
       ```
       The VM comes up blank and boots the ISO. A new MAC is harmless: `ca` uses
       a static IP from its NixOS config, not DHCP.
-- [ ] **C3 · Reinstall.** `ssh-keygen -R 192.168.2.160`, then — because the ISO
+- [x] **C3 · Reinstall.** `ssh-keygen -R 192.168.2.160`, then — because the ISO
       boots a NixOS installer rather than kexec'ing one:
       ```bash
       just deploy ca 192.168.2.160 --phases disko,install,reboot
       ```
       Confirm afterwards: `findmnt -no FSTYPE,SIZE /` → `xfs`, ~27 G root, and a
       real 4 G swap partition (not a btrfs swapfile).
-- [ ] **C4 · Restore the CA state**, then prove a real issuance — not just a
-      green unit.
+- [x] **C4 · agenix re-key — BEFORE any attempt to start step-ca.**
+
+      ⚠️ **This is the step whose order was wrong on 2026-09-09.** The runbook
+      originally had the state restore first, which cannot work: step-ca takes
+      its intermediate password from `config.age.secrets.step-ca-password.path`
+      via systemd `LoadCredential`, and a reinstalled host has a **new SSH host
+      key**, so agenix decrypts nothing. `/run/agenix/` is empty and the unit
+      dies before it ever looks at `/var/lib/step-ca`:
+      ```
+      step-ca.service: Failed to set up credentials: No such file or directory
+      step-ca.service: Main process exited, code=exited, status=243/CREDENTIALS
+      ```
+      That reads like a broken binary or a missing store path. It is neither —
+      it is a missing secret. Re-key first, and the restore becomes trivial.
+
+      Get the new key **without needing to log in** (the old entry in
+      `known_hosts` and a refusing SSH agent both get in the way otherwise):
       ```bash
-      sudo systemctl stop step-ca
-      sudo tar xzf step-ca-state-<ts>.tar.gz -C /var/lib/private
-      sudo chown -R step-ca:step-ca /var/lib/private/step-ca
-      sudo systemctl start step-ca
+      ssh-keyscan -t ed25519 192.168.2.160
+      ```
+      Update `hostCa` in `secrets/secrets.nix`, then re-encrypt exactly the
+      secrets `ca` consumes — `step-ca-password` (its own), plus
+      `tailscale-auth-key` and `fleet-enroll-secret` (via `modules/tailscale.nix`
+      and `modules/osquery.nix`):
+      ```bash
+      cd secrets
+      for f in step-ca-password tailscale-auth-key fleet-enroll-secret; do
+        EDITOR=: agenix -e $f.age -i ~/.ssh/id_ed25519
+      done
+      ```
+      `attic-push-token.age` still lists `hostCa` but **nothing imports
+      `modules/attic-push.nix` any more**, so it is inert — skip it.
+
+      ⚠️ **Both halves of that command are load-bearing** (see
+      `agenix-rekey-one-secret`): `EDITOR=:` or agenix skips re-encryption, and
+      `-i ~/.ssh/id_ed25519` because `~/.config/age/keys.txt` is the wrong
+      identity. **`just reencrypt` is NOT the fix.** Confirm with `sha256sum`
+      before/after — unchanged means nothing happened, whatever it printed.
+
+      ⚠️ **Run it in a real terminal.** The key is passphrase-protected, so a
+      non-interactive shell fails with `could not read passphrase … /dev/tty is
+      not available`. The same missing TTY breaks `git commit` signing
+      (`agent refused operation`) and SSH once the gpg-agent cache expires.
+
+      Then push the re-encrypted secrets: `just cah ca`.
+- [x] **C5 · Restore the CA state** — safe to do at any point, but it only takes
+      effect once C4 has landed.
+      ```bash
+      scp ~/backups/step-ca-state-<ts>.tar.gz amadeus@192.168.2.160:/tmp/
+      ssh amadeus@192.168.2.160 '
+        sudo systemctl stop step-ca
+        sudo tar xzf /tmp/step-ca-state-<ts>.tar.gz -C /var/lib/private
+        sudo chown -R step-ca:step-ca /var/lib/private/step-ca
+        sudo systemctl start step-ca'
+      ```
+      `-C /var/lib/private`, **not** `/var/lib` — see the symlink note in C0.
+      Verify, then prove a real issuance rather than trusting a green unit:
+      ```bash
       curl -sS -o /dev/null -w '%{http_code}\n' https://ca.homelab.local:8443/health
       ```
-      Then force a renewal on another host and watch it succeed.
+      and force a renewal on another host.
 
       If badger refuses to open —
       `Truncate Needed. File …/db/000000.vlog size: 214233088 Endoffset: 214233040`
@@ -654,15 +712,57 @@ So:
       The discarded tail is an uncommitted record, and **the CA identity is not
       in badger** — the certs and keys are plain files — so this never risks the
       root of trust.
-- [ ] **C5 · agenix re-key.** New host key ⇒ update `hostCa` in
-      `secrets/secrets.nix`, then re-encrypt what `ca` consumes:
-      `EDITOR=: agenix -e <secret>.age -i ~/.ssh/id_ed25519` per secret.
-      **Not `just reencrypt`** — wrong identity, see the A3 notes.
-- [ ] **C6 · Tailscale.** Delete the stale `homelab-ca` node and approve the new
-      one. No subnet route on this host.
-- [ ] **C7 · Re-measure.** Repeat the C-why sync-write test on the rebuilt host.
-      It is the evidence for whether the remaining guests are worth moving, and
-      the number belongs in D.2.
+- [ ] **C6 · Tailscale — fixed declaratively, needs one deploy.**
+
+      `ca` came up `Logged out`, and `systemctl restart tailscaled-autoconnect`
+      could not fix it:
+      ```
+      Failed to restart tailscaled-autoconnect.service: Unit agenix.service not found.
+      ```
+      Two separate faults, both now handled in `modules/tailscale.nix`:
+
+      1. The module carried `requires = ["agenix.service"]`. **agenix runs here
+         as a system activation script, not a systemd unit**, so a hard
+         `requires` on it made the service permanently unstartable — the
+         dependency meant to make autoconnect reliable was what stopped it ever
+         running. (`hosts/ca` used `wants` for step-ca, which degrades to a
+         no-op when the unit is missing; `requires` hard-fails.) The ordering it
+         wanted is free anyway: stage-2 runs activation before systemd.
+      2. `tailscaled-autoconnect` is a oneshot, re-run only when its unit file
+         changes or on reboot — never merely because the secret changed. On a
+         reinstall the host boots *before* its secrets can be re-keyed, finds no
+         auth key, gives up, and the deploy that finally delivers the key does
+         not re-run it. Hence every reinstall in this lab ending in a manual
+         `tailscale up`. Fixed with the repo's `secretNonce` /
+         `restartTriggers` idiom (same pattern as `modules/attic-push.nix`):
+         bump the nonce when the auth key is re-encrypted and the next deploy
+         re-runs the login.
+
+      So: `just cah ca` (or a fleet apply — the module is fleet-wide and the
+      re-run is a no-op on hosts already logged in), then approve the new node
+      in the admin console and delete the stale `homelab-ca`. Expect it to join
+      as `homelab-ca-1`; no subnet route on this host.
+- [x] **C7 · Re-measure.** Done 2026-09-09 — the justification for the move:
+
+      | | before (`zfs_pool`, btrfs) | after (`ssd_pool`, XFS) |
+      |---|---|---|
+      | 20 × 4 KiB `O_DSYNC` | **10.04 s** | **0.033 s** |
+      | per write | ~500 ms | ~1.6 ms |
+      | throughput | 8.2 kB/s | 2.5 MB/s |
+      | effective IOPS | ~2 | ~600 |
+      | `io pressure full avg60` | **67** | **0.03** |
+      | root | 19 G btrfs @ 89 % | 26.9 G XFS, 10.6 G used |
+
+      **~305× faster on the metric that actually drives badger.** Swap is a real
+      4 G partition (`/dev/sda3`), `/boot` is 973 M ext4.
+
+      **CA identity verified preserved** — the test that matters, since a new
+      root would silently break fleet-wide trust. From `dns`, against its
+      *system* trust store with no `-k`:
+      ```
+      https://ca.homelab.local:8443/health   HTTP 200
+      https://database.homelab.local         HTTP 200
+      ```
 
 ## Part D — Fold the findings back
 
@@ -703,6 +803,26 @@ So:
       on the resulting expiry would have caught this at 16:05 instead of at
       0.98 days remaining.
 
+- [x] **D.6 Audit every `requires` on `agenix.service` in this repo.** Done
+      2026-09-09 — `modules/tailscale.nix` was the **only** `requires`. The
+      other three sites (`hosts/fleet`, `hosts/ca`, `hosts/database`) use
+      `after`/`wants`, which systemd ignores harmlessly when the unit is
+      absent. No other host was affected.
+
+      Original note: The
+      tailscale module's hard dependency on a unit that does not exist (C6) is
+      unlikely to be the only one, and the failure mode is nasty: the service
+      never runs, and the error names a missing unit rather than the real
+      problem. `wants` is the safe form when the target may not exist; better
+      still, drop it — activation already precedes systemd at boot.
+      ```bash
+      grep -rn "agenix.service" --include="*.nix" .
+      ```
+- [ ] **D.7 Reinstalls need a nonce bump, not a re-key alone.** Any oneshot that
+      consumes an agenix secret through a stable path (`tailscaled-autoconnect`,
+      `attic-login`, …) will keep whatever it read at its last activation. After
+      re-keying a reinstalled host, bump that module's `secretNonce` in the same
+      commit, or the deploy silently leaves the old state in place.
 ---
 
 ## Rollback
