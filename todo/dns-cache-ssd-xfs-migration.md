@@ -16,6 +16,7 @@ internalise before starting:
 | | `dns` | `cache` |
 | --- | --- | --- |
 | Already on `ssd_pool`? | **No** — needs the move | **Yes**, moved manually 2026-08-19 |
+| Disk work | in-place move + grow (20→32 GB) | **destroy + recreate** (200→50 GB — a shrink cannot be done in place) |
 | Root filesystem | btrfs → XFS | btrfs → XFS |
 | State to preserve | **None** — stateless by design | **~4.1 GB of attic NAR storage, whose index is in Postgres on another host** |
 | RAM vs kexec's ~1.5 GB | 1536 unpinned — **borderline** | **963 MB — below the line, will fail** |
@@ -30,7 +31,7 @@ its failure modes are all well-understood.
 
 - ✅ `hosts/dns/configuration.nix` + `hosts/cache/configuration.nix` import `modules/disko-xfs.nix`
 - ✅ `iac/main.tf` `dns_vm`: `ssd_pool`, 32 GB, `discard = "on"`
-- ✅ `iac/main.tf` `cache_vm`: `discard = "on"` (already on `ssd_pool`)
+- ✅ `iac/main.tf` `cache_vm`: 200 → **50 GB**, memory → 2048/1024, `discard = "on"` (already on `ssd_pool`)
 - ✅ both closures pre-built on wotan (so neither install needs DNS of its own)
 - ⬜ everything below
 
@@ -56,12 +57,12 @@ its failure modes are all well-understood.
 | Fact | Value |
 | --- | --- |
 | Guest | VM **4340**, `homelab-cache`, **192.168.2.175** (static, `ens18`) |
-| Disk | single `scsi0` → `/dev/sda`, **200 GB**, already **`ssd_pool`** |
+| Disk | single `scsi0` → `/dev/sda`, **200 GB**, already **`ssd_pool`** → **recreated at 50 GB** |
 | Layout today | 1 M BIOS + 1 G ext4 `/boot` + 199 G **btrfs** |
-| Root usage | **18 G of 199 G — 9 %** (no resize needed) |
-| Memory | `dedicated 1024 / floating 1024` (pinned); guest reports **963 MB total, ~554 MB available** |
+| Root usage | **18 G of 199 G — 9 %** (15 G `/nix/store` + 4.1 G attic) — hence the shrink to 50 GB |
+| Memory | was `dedicated 1024 / floating 1024`; **963 MB total** in-guest — below the kexec floor, now `2048 / 1024` in `iac/main.tf` |
 | agenix | `attic-db-url`, `attic-server-token`, `garage-rpc-secret`, `attic-push-token` (explicit `hostCache`) + `tailscale-auth-key`, `fleet-enroll-secret` (via `users`) |
-| `atticd` | **active**, storage `type = "local"` at `/var/lib/atticd/storage` — **4.1 GB** |
+| `atticd` | **active** as a **static** `atticd` user (uid 993/gid 990), storage `type = "local"` at `/var/lib/atticd/storage` — **4,122,133,565 bytes**; GC retention **6 months** |
 | `atticd` database | **PostgreSQL on the `database` host** (192.168.2.134), via `attic-db-url.age` — **not on this guest** |
 | `garage` | **inactive**, `/var/lib/garage` = **4.0 KB** — see "Garage is dead weight" below |
 
@@ -70,7 +71,7 @@ Both by-id pins exist (`scsi-0QEMU_QEMU_HARDDISK_drive-scsi0`), so
 
 ---
 
-## Two traps worth reading before you start
+## Three traps worth reading before you start
 
 ### 1. `cache` will desynchronise its own cache if you just wipe it
 
@@ -101,7 +102,12 @@ Preserve. The other option trades a 4 GB copy for an unverified script.
 reports **963 MB total**. This is not "tight" like `dns` — it is below the line,
 and the install is expected to fail at the kexec step.
 
-Raise it for the duration from the PVE host, then decide whether to keep it:
+**Already handled declaratively:** because the shrink forces a VM recreate
+anyway (trap 3), `iac/main.tf` now sets `dedicated = 2048 / floating = 1024`, so
+the rebuilt guest boots above the floor and still balloons back down to its
+steady-state 1 GB rather than becoming a permanent non-donor. Nothing manual is
+needed — but if you ever reinstall this host *without* recreating it, the balloon
+may have taken it under again, and the fallback is:
 
 ```bash
 qm set 4340 --memory 2048 --balloon 2048     # then reboot the guest to apply
@@ -112,6 +118,24 @@ qm set 4340 --memory 2048 --balloon 2048     # then reboot the guest to apply
 ([`pve-gigabyte-memory-oversubscription.md`](./pve-gigabyte-memory-oversubscription.md)),
 so the balloon may have taken it below 1.5 GB by the time you get there. Check
 `free -m` first and un-balloon with `qm set 4326 --balloon 1536` if it has.
+
+### 3. The `cache` disk shrink cannot be applied in place
+
+`size = 200` → `50` is **not** the same kind of change as the `ssd_pool` move.
+Proxmox and the bpg provider can only ever **grow** a disk; a shrink is refused
+outright — the same trap the stale `size = 16` on `dns_vm` would have sprung.
+Applying it requires **destroying and recreating** the disk, which is why it is
+bundled into the reinstall that already discards this guest's data instead of
+being done separately later, at the cost of a second outage.
+
+Sizing rationale: 18 G of the 200 G is in use (15 G `/nix/store`, 4.1 G attic),
+so 50 G leaves ~45 G of root after the XFS layout's 1 G `/boot` and 4 G swap.
+**The 4.1 G is not steady state** — atticd's `garbage-collection` keeps a
+6-month `default-retention-period` and the cache is roughly a month old, so
+nothing has aged out yet. Watch it as it fills; growing later is a manual
+guest-side `growpart` + `xfs_growfs` (XFS grows but never shrinks), not a
+`tofu apply`. If it turns out to climb faster than expected, shortening that
+retention period is the cheaper lever than resizing again.
 
 ### Why the blast radius is smaller than it looks
 
@@ -290,27 +314,37 @@ Phase A1 equivalent — the `discard = "on"` addition applies on the next
 - [ ] **B0.2 Note the Postgres index is untouched** and lives on the `database`
       host. That is exactly why C0.1 matters — restoring storage is what keeps
       the two in step.
-- [ ] **B0.3 Raise the guest's memory above the kexec floor** (trap 2 — the
-      install fails without this):
+- [ ] **B0.3 Recreate the VM at 50 GB** (traps 2 and 3). The shrink and the
+      memory bump both land here, and **B0.1 must already be done** — this
+      destroys the disk:
       ```bash
-      qm set 4340 --memory 2048 --balloon 2048
+      cd iac
+      tofu destroy -target=proxmox_virtual_environment_vm.cache_vm
+      tofu apply                      # or: just iac-apply
       ```
-      Reboot the guest so it takes effect, and confirm `free -m` shows ~2 GB.
+      The VM returns as **4340** with a 50 GB `ssd_pool` disk, `discard = on`,
+      2048/1024 memory, and its static **192.168.2.175** from the cloud-init
+      block — i.e. the ordinary new-host starting point, running Debian.
+      Confirm `qm config 4340` and `free -m` (~2 GB) before continuing.
 - [ ] **B0.4 Confirm the closure is built:**
       ```bash
       nix build --no-link --print-out-paths '.#nixosConfigurations.cache.config.system.build.toplevel'
       ```
-- [ ] **B0.5** No resize needed — 18 G of 199 G used. `size` stays 200.
+- [ ] **B0.5** Nothing else on this guest is stateful: `/home` is 544 KB and
+      `/var/lib/garage` is 4.0 KB (garage is inactive — see "Garage is dead
+      weight"). The 15 G `/nix/store` rebuilds itself.
 
 ### B1 · Reinstall onto XFS (destructive)
 
 - [ ] **B1.1** `ssh-keygen -R 192.168.2.175`
 - [ ] **B1.2** `just deploy cache 192.168.2.175` (type `cache` at the prompt).
-      Full config: static IP, same reasoning as A2.2.
+      Full config, not `deploy-minimal`: static IP, same reasoning as A2.2.
+      After B0.3 the target is a fresh Debian cloud image rather than the old
+      NixOS host, which is the normal nixos-anywhere starting point.
 - [ ] **B1.3** Confirm the format:
       ```bash
       ssh amadeus@192.168.2.175 'findmnt -no FSTYPE,SIZE /; lsblk -o NAME,SIZE,FSTYPE'
-      # expect: xfs, ~195G root, 4G swap partition
+      # expect: xfs, ~45G root, 4G swap partition
       ```
 
 ### B2 · agenix re-key (six secrets, not three)

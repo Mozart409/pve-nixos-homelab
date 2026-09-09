@@ -837,8 +837,14 @@ resource "proxmox_virtual_environment_vm" "cache_vm" {
     type  = "host"
   }
 
+  # dedicated raised 1024 -> 2048 so nixos-anywhere can kexec its installer into
+  # RAM: that needs ~1.5 GB and this guest reported 963 MB total, i.e. below the
+  # floor, so the reinstall would have died at the kexec step. floating stays
+  # 1024 so it balloons back down to its steady-state footprint (atticd has been
+  # comfortable in 1 GB) instead of becoming a permanent non-donor on an
+  # oversubscribed host -- see todo/pve-gigabyte-memory-oversubscription.md.
   memory {
-    dedicated = 1024
+    dedicated = 2048
     floating  = 1024
   }
 
@@ -851,12 +857,26 @@ resource "proxmox_virtual_environment_vm" "cache_vm" {
     datastore_id = "ssd_pool"
     file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
-    size         = 200
-    # Added alongside the btrfs -> XFS switch (modules/disko-xfs.nix, which
-    # enables a weekly services.fstrim). Without it the guest frees blocks, the
-    # zvol never learns, and 200 G stays inflated on an 888 G pool. Only useful
-    # once the guest is actually running the XFS layout -- see
-    # todo/dns-cache-ssd-xfs-migration.md.
+    # 200 -> 50. The guest uses 18 G of it (15 G /nix/store + 4.1 G of attic NAR
+    # storage), so 200 was never justified.
+    #
+    # ⚠️ This is NOT an in-place change like the ssd_pool move was. Proxmox and
+    # the bpg provider can only GROW a disk -- a shrink is refused, exactly the
+    # trap the stale `size = 16` on dns_vm would have hit. Applying this requires
+    # destroying and recreating the disk, so it is deliberately bundled with the
+    # btrfs -> XFS reinstall that already discards this guest's data. Doing it
+    # later would cost a second outage. Back up /var/lib/atticd/storage FIRST --
+    # its index lives in Postgres on the database host and will survive to point
+    # at NARs that no longer exist. See todo/dns-cache-ssd-xfs-migration.md.
+    #
+    # Sizing: 50 G leaves ~45 G of root after the XFS layout's 1 G /boot and 4 G
+    # swap. Note atticd's garbage-collection keeps a 6-month retention window and
+    # the cache is only ~1 month old, so 4.1 G is NOT steady state -- nothing has
+    # aged out yet. Watch it; growing later is a manual guest-side growpart +
+    # xfs_growfs (XFS grows but never shrinks), not a tofu apply.
+    size = 50
+    # Makes the weekly services.fstrim from modules/disko-xfs.nix actually reach
+    # ZFS; without it the guest frees blocks and the zvol stays inflated.
     discard = "on"
   }
 
