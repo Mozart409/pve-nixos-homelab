@@ -413,13 +413,15 @@ drops its backup with it — no second edit, and no stale backup unit left behin
 - [ ] **B.1 Deploy the fleet, minus `dns`.** Every host keeps its
       `attic-login`/`attic-push-system` units and its `cache.homelab.local`
       substituter until redeployed. **Exclude `dns`** — see Ordering hazard 1;
-      its config now describes a disk it does not have.
+      its config now described a disk it did not have. **Part A is done, so
+      `dns` can be included now.**
       ```bash
-      just colmena-apply          # 15 nodes; leave dns out until Part A is done
+      just colmena-apply          # all 15 nodes
       ```
-      The *push* units failing is harmless (`|| true`), but the **substituter**
-      is not: see Ordering hazard 2 for why this wants to happen before B.2, and
-      for the `substituteOnDestination = false` escape hatch if it does not.
+      The *push* units failing is harmless (`|| true`). The **substituter** was
+      the real hazard, but it has defused itself: the reinstalled `dns` no longer
+      serves `cache.homelab.local`, so those lookups NXDOMAIN immediately instead
+      of hanging. See Ordering hazard 2.
 - [ ] **B.2 Destroy the VM.** Removing the resource from `iac/main.tf` is what
       does it; confirm the plan shows **`1 to destroy`** and that it is VM
       **4340** before applying.
