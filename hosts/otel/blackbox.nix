@@ -76,8 +76,6 @@
       "albyhub.homelab.internal"
       "dashboard.homelab.local"
       "dashboard.homelab.internal"
-      "notes.homelab.local"
-      "notes.homelab.internal"
       "romm.homelab.local"
       "romm.homelab.internal"
       "searxng.homelab.local"

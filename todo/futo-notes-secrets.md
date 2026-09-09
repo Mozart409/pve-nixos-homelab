@@ -1,5 +1,18 @@
 # FUTO Notes secrets are empty placeholders
 
+> **SUPERSEDED 2026-09-09 — the service was retired, so this is moot.** FUTO
+> Notes was unwired from the fleet: the `./futo-notes` import and its Caddy
+> vhost are gone from `hosts/containers/configuration.nix`, the `futo_notes`
+> database, role and password unit are gone from `hosts/database/`, and the
+> `notes.homelab.{local,internal}` records and cert probe are gone from `dns`
+> and `otel`. `hosts/containers/futo-notes/` and both `.age` files are kept on
+> disk, wired to nothing. The empty-placeholder problem below never needs
+> fixing unless the service is revived — in which case start here, because the
+> credentials are still empty. Dropping the leftover database on the `database`
+> host is a manual step (`ensureDatabases` only ever creates):
+> `sudo -u postgres psql -c 'DROP DATABASE futo_notes;'` and likewise
+> `DROP ROLE futo_notes;`.
+
 Filled in 2026-08-20: `agenix -d futo-notes-db-password.age` and
 `agenix -d futo-notes-env.age` decrypt to **nothing**. Both `.age` files were
 committed as placeholders in `4190486 feat(containers): add placeholder agenix

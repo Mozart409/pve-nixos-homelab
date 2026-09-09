@@ -112,13 +112,6 @@ in {
     group = "postgres";
   };
 
-  # FUTO Notes database password
-  age.secrets.futo-notes-db-password = {
-    file = ../../secrets/futo-notes-db-password.age;
-    owner = "postgres";
-    group = "postgres";
-  };
-
   # hofvarpnir database password
   age.secrets.hofvarpnir-db-password = {
     file = ../../secrets/hofvarpnir-db-password.age;
@@ -282,7 +275,7 @@ in {
     # `attic` removed 2026-09-09 with the cache VM (iac/main.tf). Dropping it
     # here also drops its nightly dump, because services.postgresqlBackup below
     # derives its database list from this one.
-    ensureDatabases = ["appdb" "terraform" "forgejo" "romm" "hofvarpnir" "futo_notes"];
+    ensureDatabases = ["appdb" "terraform" "forgejo" "romm" "hofvarpnir"];
 
     # Initial users
     ensureUsers = [
@@ -296,10 +289,6 @@ in {
       }
       {
         name = "romm";
-        ensureDBOwnership = true;
-      }
-      {
-        name = "futo_notes";
         ensureDBOwnership = true;
       }
       {
@@ -400,13 +389,6 @@ in {
     role = "romm";
     description = "Set RomM PostgreSQL user password";
     secret = config.age.secrets.romm-db-password;
-    timeouts = migrationRoleTimeouts;
-  };
-
-  systemd.services.postgresql-futo-notes-password = mkRolePasswordUnit {
-    role = "futo_notes";
-    description = "Set FUTO Notes PostgreSQL user password";
-    secret = config.age.secrets.futo-notes-db-password;
     timeouts = migrationRoleTimeouts;
   };
 
