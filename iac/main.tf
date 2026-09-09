@@ -706,8 +706,8 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
   }
 
   memory {
-    dedicated = 768
-    floating  = 384
+    dedicated = 2048
+    floating  = 2048
   }
 
   disk {
