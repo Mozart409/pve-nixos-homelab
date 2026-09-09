@@ -254,9 +254,16 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   initialization {
     datastore_id = "local-lvm"
 
+    # Static, not dhcp: this guest is the resolver, and after a recreate the
+    # Debian phase would otherwise come up on a lease you have to go hunting
+    # for before nixos-anywhere can target it. The NixOS config pins the same
+    # address (hosts/dns/configuration.nix, networking.interfaces.ens18), so
+    # this only governs the pre-install image -- but it means
+    # `just deploy dns 192.168.2.145` works immediately after `tofu apply`.
     ip_config {
       ipv4 {
-        address = "dhcp"
+        address = "192.168.2.145/24"
+        gateway = "192.168.2.1"
       }
     }
 
@@ -818,15 +825,6 @@ resource "proxmox_virtual_environment_vm" "forgejo_vm" {
 
   on_boot = true
 }
-
-# Cache VM REMOVED 2026-09-09. The attic binary cache stopped earning its keep
-# when comin was retired (6a387b2): colmena builds on the deploy host with
-# buildOnTarget = false and pushes closures over SSH, so no target ever
-# substitutes during a deploy. Measured over 14 days it took 2999 uploads and
-# served 11 organic NAR reads. The NixOS config is deliberately KEPT in
-# hosts/cache/ and modules/attic-{cache,push}.nix (unwired, not deleted) so the
-# service can be resurrected; only the VM is gone. See
-# todo/dns-cache-ssd-xfs-migration.md.
 
 # Jellyfin Media Server VM
 resource "proxmox_virtual_environment_vm" "jellyfin_vm" {
