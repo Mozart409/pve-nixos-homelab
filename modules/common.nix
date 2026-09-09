@@ -125,6 +125,12 @@
     variant = "";
   };
 
+  # Journald log retention. NixOS defaults to a percentage of the filesystem,
+  # which on small VM disks lets logs consume hundreds of MBs — enough to
+  # wedge nix-collect-garbage when /nix hits 100%. 50M is plenty for
+  # debugging while keeping the system functional under disk pressure.
+  services.journald.settings.Journal.SystemMaxUse = "50M";
+
   # Enable SSH
   services.openssh = {
     enable = true;
