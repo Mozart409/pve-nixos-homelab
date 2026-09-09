@@ -413,27 +413,18 @@
         defaults = {
           imports = [homeManagerNixvim ./modules/container-registries.nix];
 
-          # Push every store path from the deploy host instead of letting each
-          # target fetch from its own substituters.
+          # NOTE: there is no `deployment.substituteOnDestination` in this
+          # colmena. It was added here on 2026-09-09 to stop targets pulling from
+          # the retired `cache.homelab.local` substituter and broke evaluation of
+          # EVERY node ("The option `deployment.substituteOnDestination' does not
+          # exist"). The valid deployment options are buildOnTarget, sshOptions,
+          # targetHost/Port/User, tags, keys, and friends -- check
+          # src/nix/hive/options.nix in the colmena source before adding another.
           #
-          # Colmena defaults this to true, which makes the TARGET pull during a
-          # push. On 2026-09-09 that turned a dead substituter into a fleet-wide
-          # stall: every host still carried `https://cache.homelab.local/homelab`
-          # from the retired attic cache, and nix waits out
-          # `stalled-download-timeout` (300s) per path on an unreachable one --
-          # otel sat 19 minutes on a single "copying path ... from
-          # cache.homelab.local". The hosts cannot drop that substituter until
-          # they are redeployed, and the redeploy is what was stalling.
-          #
-          # This option is evaluated by colmena on the PUSHER, so it takes effect
-          # immediately without the targets having been redeployed first -- which
-          # is exactly what breaks the deadlock. It also costs little here:
-          # `buildOnTarget = false` already means the deploy host has the whole
-          # closure built locally, so shipping it over SSH is the normal path
-          # rather than a detour.
-          #
-          # Safe to flip back to true once no host references a dead substituter.
-          deployment.substituteOnDestination = false;
+          # The problem it was meant to solve went away on its own: `dns` no
+          # longer serves an A record for cache.homelab.local, so lookups
+          # NXDOMAIN immediately instead of hanging on a dead IP for
+          # `stalled-download-timeout` (300s) per path.
         };
 
         # Host definitions

@@ -22,11 +22,12 @@ the guest keeps its old filesystem and nothing tells you otherwise.
 > pushed closures onto `dns`, whose btrfs root was at 89 %, and **btrfs ran out
 > of metadata space**. unbound could not `rename()` its `root.key`, crash-looped
 > **1,674 times**, and LAN DNS went down — which then hung every *other* host's
-> push, because they all still carry `https://cache.homelab.local/homelab` as a
-> substituter and colmena's `substituteOnDestination` makes the *target* pull
-> from its own substituters. `otel` sat 19 minutes on `copying path … from
-> cache.homelab.local`. **The cache host was healthy the whole time** (HTTP 200
-> in 14 ms by IP); it was collateral, not cause.
+> push, because they all still carried `https://cache.homelab.local/homelab` as a
+> substituter and the *target* is what fetches from it during a colmena push.
+> `otel` sat 19 minutes on `copying path … from cache.homelab.local`. **The cache
+> host was healthy the whole time** (HTTP 200 in 14 ms by IP); it was collateral,
+> not cause — the name simply stopped resolving when unbound died, and nix waits
+> out `stalled-download-timeout` (300 s) per path rather than failing fast.
 >
 > **`df` cannot show you this failure.** It reported 1.8 G free while writes
 > failed with ENOSPC, because that free space was trapped inside *data* chunks:
@@ -105,21 +106,27 @@ Repo:
       a recreated guest come up on a lease you had to go hunting for)
 - ✅ `iac/main.tf` `ca_vm`: stale `size = 16` corrected to the live `20`
 - ✅ `cache` decommissioned in the repo — Part B lists exactly what was unwired
-- ✅ `deployment.substituteOnDestination = false` in `colmenaHive.defaults`
-      (Ordering hazard 2 — **already applied**, revert once the fleet is clean)
 - ✅ `dns` closure pre-built on wotan
 - ⬜ `hosts/ca/configuration.nix` still on btrfs **deliberately** — see C1
 
 Infrastructure:
 
 - ✅ `cache` VM **destroyed**
-- ✅ `dns` VM **destroyed** — awaiting `tofu apply` to recreate, then
-      `just deploy dns 192.168.2.145`
+- ✅ **Part A DONE** — `dns` reinstalled onto XFS on `ssd_pool`. Root went from
+      15 G btrfs at 89 % to **26.9 G XFS**; swap is now a real 4 G partition
+      rather than a btrfs swapfile; unbound active and resolving, and
+      `cache.homelab.local` correctly NXDOMAINs
 - ✅ `ca` rescued from the pending wedge (`sfdisk` + `btrfs resize`; 19 GiB
-      device, 3.5 GiB unallocated, metadata 61.9 %) — no longer urgent
-- ⬜ Fleet `colmena apply` — not done; `dns` must be excluded (hazard 1)
+      device, 3.5 GiB unallocated, metadata 61.9 %), memory raised to 2 GB and
+      its step-ca Badger DB repaired after the reboot — no longer urgent
+- ⬜ **agenix re-key for `dns`** — `secrets.nix` has the new `hostDns`, but
+      `tailscale-auth-key.age` and `fleet-enroll-secret.age` still need
+      re-encrypting; `/run/agenix/` on the host is empty until then
+- ⬜ Tailscale: approve the new `dns` node **and its `192.168.2.0/24` subnet
+      route** (A4)
+- ⬜ Fleet `colmena apply` — `dns` can now be included, Part A is done
 - ⬜ Drop the `attic` + `futo_notes` databases on `database` (B.3/B.4)
-- ⬜ Parts A and C
+- ⬜ Part C (`ca` → XFS)
 
 ---
 
@@ -147,30 +154,28 @@ Colmena has no negation for `--on`, so either deploy the other nodes explicitly
 ### 2. Destroying the cache VM before the fleet is redeployed re-creates the stall
 
 Every host still carries `https://cache.homelab.local/homelab` as a substituter
-until it is redeployed, and colmena's `deployment.substituteOnDestination`
-(default **true**) makes each *target* pull from its own substituters during the
-push. Point that at a host that no longer exists and nix waits on it —
-`stalled-download-timeout` is 300 s per path, which is how a 19-minute
-"copying path … from cache.homelab.local" happens.
+until it is redeployed, and the *target* is what fetches from it during a push.
+Point that at a name that resolves to a host which no longer answers and nix
+waits on it — `stalled-download-timeout` is 300 s per path, which is how a
+19-minute "copying path … from cache.homelab.local" happens.
 
 **Least-surprise order** would have been: fleet apply first (drops the
 substituter), *then* destroy the VM. **That is not what happened** — the cache VM
-was destroyed on 2026-09-09 while every host still pointed at it, so the
-mitigation below is **already applied** in `colmenaHive.defaults` (`flake.nix`):
+was destroyed on 2026-09-09 while every host still pointed at it.
 
-```nix
-deployment.substituteOnDestination = false;
-```
+**`deployment.substituteOnDestination = false` is NOT the fix — that option does
+not exist in this colmena.** It was tried in `colmenaHive.defaults` and broke
+evaluation of every node (`The option 'deployment.substituteOnDestination' does
+not exist`). The valid deployment options are `buildOnTarget`, `sshOptions`,
+`targetHost`/`Port`/`User`, `tags`, `keys` and friends — see
+`src/nix/hive/options.nix` in the colmena source before reaching for another.
 
-It stops the targets consulting substituters at all: everything arrives over SSH
-from the deploy host, which is what `buildOnTarget = false` already implies. The
-key property is that colmena evaluates it on the **pusher**, not in the target's
-running config — so it takes effect immediately, without the targets having been
-redeployed first. That is what breaks the deadlock, since the redeploy is the
-very thing that was stalling.
-
-**Revert it to `true` once every host has been through an apply** and no longer
-carries a dead substituter.
+**What actually resolved it:** once `dns` was reinstalled it stopped serving an A
+record for `cache.homelab.local`, so lookups now NXDOMAIN immediately rather than
+hanging on a dead IP for `stalled-download-timeout` (300 s) per path. The stall
+was never really about substitution being enabled — it was about a name that
+resolved to an address nothing answered on. A substituter that fails fast is
+harmless noise.
 
 To move only the `dns` disk without touching the cache VM:
 
