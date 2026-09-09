@@ -131,6 +131,9 @@ Infrastructure:
       after one `systemctl restart caddy` following the rename)
 - ✅ Fleet `colmena apply` — all 10 nodes evaluated, pushed and activated (20 min
       wall clock; `otel` took 17 min and `ca` 10 min, both still on `zfs_pool`)
+- ✅ The five commented-out hosts are **silenced in Alertmanager** (amadeus,
+      2026-09-09), so their `TargetDown`/`ProbeFailed` alerts are expected and
+      handled — not an open item.
 - ✅ Five unreachable hosts commented out of `colmenaHive` first — `hermes`,
       `fleet`, `harbor`, `woodpecker`, `k3s-cntrl-1` all failed with "No route to
       host". Only the **hive entry** is commented; `hostAddrs` and
@@ -826,11 +829,46 @@ So:
       ```bash
       grep -rn "agenix.service" --include="*.nix" .
       ```
-- [ ] **D.7 Reinstalls need a nonce bump, not a re-key alone.** Any oneshot that
-      consumes an agenix secret through a stable path (`tailscaled-autoconnect`,
-      `attic-login`, …) will keep whatever it read at its last activation. After
-      re-keying a reinstalled host, bump that module's `secretNonce` in the same
-      commit, or the deploy silently leaves the old state in place.
+- [x] **D.7 Make secret-consuming oneshots re-run themselves.** Solved
+      2026-09-09 — the answer is a one-line change, not a discipline.
+
+      The problem: a oneshot like `tailscaled-autoconnect` or `attic-login`
+      reads its secret through **`config.age.secrets.<n>.path`**, which is
+      `/run/agenix/<n>` — **stable forever**. So the generated unit never
+      changes when the secret is rotated, NixOS sees no reason to re-run it, and
+      the host silently keeps whatever it read at its last activation. That is
+      how `ca` sat at `Logged out` after its re-key.
+
+      The fix: trigger on **`.file`** instead, which is the `.age` file's
+      **content-addressed store path**:
+
+      ```nix
+      restartTriggers = [config.age.secrets.tailscale-auth-key.file];
+      ```
+
+      ```
+      .path = /run/agenix/tailscale-auth-key             stable  → never re-runs
+      .file = /nix/store/<hash>-tailscale-auth-key.age   content → re-runs
+      ```
+
+      Verified in the built unit:
+      ```
+      X-Restart-Triggers=/nix/store/66fhhml6...-X-Restart-Triggers-tailscaled-autoconnect
+        contents: /nix/store/lcqmx6r9...-tailscale-auth-key.age
+      ```
+
+      **Prefer this over the hand-bumped `secretNonce` string** in
+      `modules/attic-push.nix`: a nonce you have to remember to bump fails
+      silently, which is exactly the failure it exists to prevent.
+
+      One caveat that decides which to use: age is non-deterministic (fresh
+      ephemeral key per encryption), so **even a no-op re-encrypt re-runs the
+      unit**. Harmless when the action is idempotent (`tailscale up`,
+      `attic login`). If a redundant re-run would be expensive or disruptive,
+      keep the manual nonce so the operator picks the moment.
+
+      Still using the old idiom: `modules/attic-push.nix` — but nothing imports
+      it any more, so it is dead code rather than a live hazard.
 ---
 
 ## Rollback

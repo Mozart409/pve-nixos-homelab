@@ -2,12 +2,7 @@
   config,
   pkgs,
   ...
-}: let
-  # Bump this whenever tailscale-auth-key.age is re-encrypted (a reinstalled
-  # host gets a new SSH host key, so every secret it consumes is re-keyed).
-  # See the restartTriggers comment below for why a re-key alone is not enough.
-  secretNonce = "2026-09-09-ca-reinstall-rekey";
-in {
+}: {
   services.tailscale.enable = true;
 
   # Tailscale requires loose reverse path filtering
@@ -42,6 +37,25 @@ in {
     # host then sits at `Logged out` until someone runs `tailscale up` by hand
     # -- which is how every reinstall in this lab has gone. Bumping the nonce
     # makes the next deploy re-run the login instead.
-    restartTriggers = [secretNonce];
+    # Self-maintaining trigger -- deliberately `.file`, NOT `.path`:
+    #
+    #   .path = /run/agenix/tailscale-auth-key            (stable forever)
+    #   .file = /nix/store/<hash>-tailscale-auth-key.age  (content-addressed)
+    #
+    # ExecStart reads `.path`, so the unit file never changes when the secret
+    # is rotated and this oneshot silently keeps whatever it read at its last
+    # activation. Triggering on `.file` closes that gap without anyone having
+    # to remember: re-encrypting the secret changes its store path, which
+    # changes this unit, which makes the next deploy re-run the login.
+    #
+    # Preferred over the hand-bumped `secretNonce` string used in
+    # modules/attic-push.nix -- a nonce you must remember to bump fails
+    # silently, which is precisely the failure this is here to prevent.
+    #
+    # Note age is non-deterministic (fresh ephemeral key per encryption), so
+    # even a no-op re-encrypt re-runs this. Harmless here: `tailscale up` is
+    # idempotent. A unit where a redundant re-run is expensive or disruptive
+    # wants the manual nonce instead, so the operator picks the moment.
+    restartTriggers = [config.age.secrets.tailscale-auth-key.file];
   };
 }
