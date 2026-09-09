@@ -244,11 +244,14 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   # ~1.5 GB kexec RAM floor and the need for scratch space on the target.
   # Deploy with:  just deploy dns <dhcp-ip> --phases disko,install,reboot
   #
-  # Upload the built ISO to the `local` datastore under exactly this name.
+  # The name is whatever `just iso-build` produced and you uploaded to the
+  # `local` datastore -- it carries the nixpkgs revision, so it changes every
+  # time the ISO is rebuilt after a flake update. Rebuilt the ISO? Re-upload and
+  # update this string, or the next apply fails on a missing volume.
   # ide0, not ide2: the initialization block below claims ide2 for its
   # cloud-init drive.
   cdrom {
-    file_id   = "local:iso/nixos-homelab.iso"
+    file_id   = "local:iso/nixos-homelab-26.11.20260907.dc5d91f-x86_64-linux.iso"
     interface = "ide0"
   }
 
