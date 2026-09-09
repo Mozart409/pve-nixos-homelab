@@ -201,7 +201,7 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   tags        = ["terraform", "debian", "nixos-target", "dns"]
 
   node_name = "pve-gigabyte"
-  vm_id     = 4326
+  vm_id     = 326
 
   bios = "seabios"
 
@@ -214,7 +214,7 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
 
   memory {
     dedicated = 1536
-    floating  = 768
+    floating  = 1536
   }
 
   # ssd_pool, not zfs_pool: this guest is the resolver every other host and
