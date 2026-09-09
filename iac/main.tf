@@ -223,19 +223,41 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   # swap. `file_format = "raw"` is required -- ssd_pool is a zfspool and stores
   # only raw volumes; without it the import fails as qcow2. See
   # todo/dns-cache-ssd-xfs-migration.md.
+  # BLANK disk -- deliberately no file_id. Importing a cloud image onto this
+  # zfspool kept failing with "timeout: no zvol device link for
+  # 'vm-4326-disk-0' found after 10 sec", leaving a VM with no bootable disk
+  # that just hangs at SeaBIOS. The pool was idle at the time, so it is the
+  # import path itself, not contention. A blank volume is a plain `zfs create
+  # -V` and avoids it entirely; the installer comes from the CD-ROM below.
   disk {
     datastore_id = "ssd_pool"
-    # Fedora rather than the shared debian_cloud_image: the Debian import left
-    # the guest hanging at boot. Only the pre-NixOS scratch image is affected --
-    # nixos-anywhere reformats the disk regardless, so nothing downstream cares
-    # which distro seeds it. (Fedora's image is qcow2; the provider converts it
-    # to raw on import, which is what ssd_pool requires.)
-    file_id     = proxmox_virtual_environment_download_file.fedora_cloud_image.id
-    interface   = "scsi0"
-    size        = 32
-    discard     = "on"
-    file_format = "raw"
+    interface    = "scsi0"
+    size         = 32
+    discard      = "on"
+    file_format  = "raw"
   }
+
+  # The repo's own installer ISO (`just iso-build`, hosts/iso/configuration.nix).
+  # It already carries the amadeus SSH key via modules/common.nix, so no
+  # cloud-init datasource is needed to get in -- and because it boots straight
+  # into a NixOS installer there is nothing to kexec, which sidesteps both the
+  # ~1.5 GB kexec RAM floor and the need for scratch space on the target.
+  # Deploy with:  just deploy dns <dhcp-ip> --phases disko,install,reboot
+  #
+  # Upload the built ISO to the `local` datastore under exactly this name.
+  # ide0, not ide2: the initialization block below claims ide2 for its
+  # cloud-init drive.
+  cdrom {
+    file_id   = "local:iso/nixos-homelab.iso"
+    interface = "ide0"
+  }
+
+  # Disk FIRST, CD second. A freshly created zvol is all zeroes with no MBR
+  # signature, so SeaBIOS skips it and falls through to the ISO -- but once
+  # nixos-anywhere has installed, the disk boots and the still-attached ISO is
+  # ignored. Ordering it the other way round would reboot into the installer
+  # forever unless you remembered to detach the CD by hand.
+  boot_order = ["scsi0", "ide0"]
 
   network_device {
     bridge = "vmbr0"
