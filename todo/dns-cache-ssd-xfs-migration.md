@@ -153,16 +153,19 @@ Infrastructure:
       Caddy) is what actually fixed it.
 - ✅ B.5 PBS/PVE backup job — checked, **no job references VM 4340**; Part B is
       closed
-- ✅ **Part C essentially DONE** — `ca` reinstalled onto **26.9 G XFS on
+- ✅ **Part C DONE** — `ca` reinstalled onto **26.9 G XFS on
       `ssd_pool`**, step-ca active and serving `HTTP 200`, CA identity restored
       and **verified from another host against its system trust store** (not
       `-k`), agenix re-keyed, sync writes **~305× faster** (500 ms → 1.6 ms).
       See C7 for the full before/after table.
-- ⬜ C6 Tailscale — `ca` is `Logged out`. Root-caused to a broken
+- ✅ **C6 Tailscale done** — root-caused to a broken
       `requires = ["agenix.service"]` in `modules/tailscale.nix` (agenix is an
       activation script, not a unit) plus the oneshot never re-running after a
-      re-key. Both fixed declaratively with the `secretNonce` idiom; needs one
-      deploy, then node approval.
+      re-key. Both fixed declaratively with the `secretNonce` idiom; one deploy
+      brought it back as `homelab-ca`, online with a full netmap.
+- ✅ **CA trust confirmed fleet-wide** — `dns`, `database` and `otel` all reach
+      `https://ca.homelab.local:8443/health` with **HTTP 200** through their
+      system trust stores. **Part C is complete.**
 
 ---
 
@@ -712,7 +715,7 @@ So:
       The discarded tail is an uncommitted record, and **the CA identity is not
       in badger** — the certs and keys are plain files — so this never risks the
       root of trust.
-- [ ] **C6 · Tailscale — fixed declaratively, needs one deploy.**
+- [x] **C6 · Tailscale — fixed declaratively, done 2026-09-09.**
 
       `ca` came up `Logged out`, and `systemctl restart tailscaled-autoconnect`
       could not fix it:
@@ -738,10 +741,15 @@ So:
          bump the nonce when the auth key is re-encrypted and the next deploy
          re-runs the login.
 
-      So: `just cah ca` (or a fleet apply — the module is fleet-wide and the
-      re-run is a no-op on hosts already logged in), then approve the new node
-      in the admin console and delete the stale `homelab-ca`. Expect it to join
-      as `homelab-ca-1`; no subnet route on this host.
+      One `colmena apply --on ca` (23 s total) was all it took:
+      `tailscaled-autoconnect` ran with `Result=success` and the host came back
+      as `homelab-ca` at `100.117.250.26`, `Online: true`, 22 peers — a full
+      netmap, so it is approved.
+
+      **No manual approval or cleanup was needed**, contrary to the expectation
+      set by [[reinstalled-host-tailscale-reapproval]]: it reclaimed its
+      original name rather than joining as `homelab-ca-1`, so there was no stale
+      duplicate to delete. Worth noting that the `-1` suffix is not guaranteed.
 - [x] **C7 · Re-measure.** Done 2026-09-09 — the justification for the move:
 
       | | before (`zfs_pool`, btrfs) | after (`ssd_pool`, XFS) |
