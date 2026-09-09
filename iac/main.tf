@@ -235,12 +235,21 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   #
   # discard = "on" is what lets the weekly services.fstrim in disko-xfs.nix
   # reach ZFS; without it the guest frees blocks and the zvol stays inflated.
+  # file_format = "raw" is REQUIRED here. ssd_pool is ZFS, which only stores raw
+  # volumes; the provider otherwise defaults to qcow2 when importing from
+  # file_id, and creation dies with "format 'qcow2' is not supported by the
+  # target storage" followed by "unable to parse volume ID 'ssd_pool:'" (the
+  # volume was never created, so its ID is empty). The other ssd_pool guests
+  # never hit this because they were created on zfs_pool and moved afterwards --
+  # dns is the first one created there directly. Same reason jellyfin's ZFS data
+  # disk sets it explicitly.
   disk {
     datastore_id = "ssd_pool"
     file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
     size         = 32
     discard      = "on"
+    file_format  = "raw"
   }
 
   network_device {
