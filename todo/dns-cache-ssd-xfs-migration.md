@@ -13,9 +13,53 @@ online, in-place `move-disk` the bpg provider does for you. A format change is a
 **no-op for disks**: the generated mounts key off `/dev/disk/by-partlabel/*`, so
 the guest keeps its old filesystem and nothing tells you otherwise.
 
+> ## ⚠️ 2026-09-09 — `dns` filled its disk and took the lab down
+>
+> This stopped being hypothetical mid-migration. A fleet-wide `colmena apply`
+> pushed closures onto `dns`, whose btrfs root was at 89 %, and **btrfs ran out
+> of metadata space**. unbound could not `rename()` its `root.key`, crash-looped
+> **1,674 times**, and LAN DNS went down — which then hung every *other* host's
+> push, because they all still carry `https://cache.homelab.local/homelab` as a
+> substituter and colmena's `substituteOnDestination` makes the *target* pull
+> from its own substituters. `otel` sat 19 minutes on `copying path … from
+> cache.homelab.local`. **The cache host was healthy the whole time** (HTTP 200
+> in 14 ms by IP); it was collateral, not cause.
+>
+> **`df` cannot show you this failure.** It reported 1.8 G free while writes
+> failed with ENOSPC, because that free space was trapped inside *data* chunks:
+>
+> ```
+> Device allocated:  15.00GiB / 15.00GiB   ← unallocated: 1.00 MiB
+> Data,single:       13.96GiB used 12.18GiB   ← what df counts as "free"
+> Metadata,DUP:       522MiB  used  489MiB    ← 93.8 %, and cannot grow
+> ```
+>
+> Always check `btrfs filesystem usage /`, not `df`, on these hosts.
+>
+> **What did not work:** `nix-collect-garbage -d` (deleting files itself needs
+> metadata) and `btrfs balance -dusage=0` ("had to relocate 0 out of 18 chunks"
+> — no chunk was completely empty).
+>
+> **What worked:** deleting the 4 GB btrfs swapfile to free *data*, then a
+> balance to hand whole chunks back as unallocated so metadata could grow:
+>
+> ```bash
+> sudo swapoff -a && sudo rm -f /.swapvol/swapfile
+> sudo btrfs balance start -dusage=50 /
+> ```
+>
+> Result: unallocated 1.00 MiB → **1.50 GiB**, metadata 93.8 % → **66.7 %**,
+> free 1.8 G → **4.3 G**, unbound `active`. **`dns` is currently running with no
+> swap** until it is reinstalled (the XFS layout gives it a real 4 GB partition).
+>
+> This is the strongest possible argument for Part A: on XFS there is no
+> data/metadata chunk split to exhaust, and the new disk is 32 GB on flash
+> instead of 15 GB on a 78-IOPS HDD pair.
+
 ## Status (2026-09-09)
 
-**Repo changes landed. Nothing has touched the infrastructure yet.**
+**Repo changes landed. Infrastructure: `dns` was rescued from the ENOSPC wedge
+above (swap removed, balance run); the migration itself has not started.**
 
 - ✅ `hosts/dns/configuration.nix` imports `modules/disko-xfs.nix`
 - ✅ `iac/main.tf` `dns_vm`: `ssd_pool`, 32 GB, `discard = "on"`
@@ -23,6 +67,60 @@ the guest keeps its old filesystem and nothing tells you otherwise.
 - ✅ `dns` closure pre-built on wotan (so the install needs no DNS of its own)
 - ⬜ Part A (the `dns` migration) — not started
 - ⬜ Part B operator steps (destroy the VM, drop the database) — not started
+
+---
+
+## Ordering — two hazards that bite in practice
+
+### 1. `dns` must NOT be in a `colmena apply` until it is reinstalled
+
+Its committed config already describes the **XFS** layout, while the live disk is
+still btrfs:
+
+```
+root: /dev/disk/by-partlabel/nixos   fsType xfs   ← live partition is btrfs
+swap: /dev/disk/by-partlabel/swap                 ← does not exist; swap was a file
+```
+
+`colmena apply` never reformats (disko only runs under nixos-anywhere), so this
+looks harmless and activates fine — but it writes a boot generation whose fstab
+declares XFS for a btrfs partition. **The host keeps running and fails on the
+next reboot.** `dns` gets *reinstalled* (`just deploy`), never applied, until
+Part A is done.
+
+Colmena has no negation for `--on`, so either deploy the other nodes explicitly
+/ by tag, or simply do Part A first and then apply the fleet.
+
+### 2. Destroying the cache VM before the fleet is redeployed re-creates the stall
+
+Every host still carries `https://cache.homelab.local/homelab` as a substituter
+until it is redeployed, and colmena's `deployment.substituteOnDestination`
+(default **true**) makes each *target* pull from its own substituters during the
+push. Point that at a host that no longer exists and nix waits on it —
+`stalled-download-timeout` is 300 s per path, which is how a 19-minute
+"copying path … from cache.homelab.local" happens.
+
+**Least-surprise order** is therefore: fleet apply first (drops the substituter),
+*then* destroy the VM. If you instead run a full `just iac-apply` first — which
+destroys the cache VM immediately, since the resource is already gone from
+`main.tf` — the mitigation is to stop the targets consulting substituters at all
+for that one deploy, by adding to `colmenaHive.defaults` in `flake.nix`:
+
+```nix
+deployment.substituteOnDestination = false;
+```
+
+That is evaluated by colmena on the **pusher**, not baked into the target's
+running config, so it takes effect immediately without needing the targets
+redeployed first. Everything then arrives over SSH from the deploy host, which
+is what `buildOnTarget = false` already implies. Revert it afterwards if you want
+targets substituting again.
+
+To move only the `dns` disk without touching the cache VM:
+
+```bash
+cd iac && tofu apply -target=proxmox_virtual_environment_vm.dns_vm
+```
 
 ---
 
@@ -77,8 +175,16 @@ so the balloon may have taken it under the line. Check before you start.
       Done once on 2026-09-09; re-run after any further edit.
 - [ ] **A0.3 Check the guest has its memory** — `ssh amadeus@192.168.2.145 free -m`
       should show MemTotal near 1500, not 768. If low, un-balloon from the PVE
-      host: `qm set 4326 --balloon 1536`.
-- [ ] **A0.4 Nothing to back up.** unbound serves a static zone from the Nix
+      host: `qm set 4326 --balloon 1536`. **Note `dns` currently has no swap** —
+      the swapfile was deleted on 2026-09-09 to break the ENOSPC wedge (see the
+      banner at the top), so this check matters more than usual until the
+      reinstall restores a real swap partition.
+- [ ] **A0.4 Confirm there is room for the kexec.** nixos-anywhere stages a
+      ~500 MB installer onto the target's filesystem, so a full disk fails the
+      install the same way it failed unbound. After the 2026-09-09 rescue there
+      is 4.3 G free; verify with **`btrfs filesystem usage /`**, not `df` —
+      `df` reported 1.8 G free while the filesystem was refusing writes.
+- [ ] **A0.5 Nothing to back up.** unbound serves a static zone from the Nix
       store, the step-ca cert is re-issued over ACME on first boot, and the
       Tailscale identity is replaced regardless.
 
@@ -243,14 +349,16 @@ drops its backup with it — no second edit, and no stale backup unit left behin
 
 ### Operator steps (not started)
 
-- [ ] **B.1 Deploy the fleet first, then destroy the VM.** Every host keeps its
-      `attic-login`/`attic-push-system` units and its substituter until
-      redeployed. Redeploying first avoids a window where hosts reference a host
-      that is already gone — though pushes fail soft (`|| true`), so neither
-      order actually breaks anything.
+- [ ] **B.1 Deploy the fleet, minus `dns`.** Every host keeps its
+      `attic-login`/`attic-push-system` units and its `cache.homelab.local`
+      substituter until redeployed. **Exclude `dns`** — see Ordering hazard 1;
+      its config now describes a disk it does not have.
       ```bash
-      just colmena-apply          # all 15 nodes
+      just colmena-apply          # 15 nodes; leave dns out until Part A is done
       ```
+      The *push* units failing is harmless (`|| true`), but the **substituter**
+      is not: see Ordering hazard 2 for why this wants to happen before B.2, and
+      for the `substituteOnDestination = false` escape hatch if it does not.
 - [ ] **B.2 Destroy the VM.** Removing the resource from `iac/main.tf` is what
       does it; confirm the plan shows **`1 to destroy`** and that it is VM
       **4340** before applying.
@@ -258,6 +366,10 @@ drops its backup with it — no second edit, and no stale backup unit left behin
       just iac-plan
       just iac-apply
       ```
+      ⚠️ A full `iac-apply` also carries the `dns_vm` disk move (`zfs_pool` →
+      `ssd_pool`, 20 → 32 GB). That is fine and desirable — just know both
+      changes land in the same apply, and that destroying the cache while the
+      fleet still points at it is hazard 2.
 - [ ] **B.3 Drop the database and role by hand.** ⚠️ `ensureDatabases` only ever
       **creates** — removing `attic` from the list does not drop anything. The
       database, its role and its index will sit on the `database` host until
