@@ -1,10 +1,13 @@
-# Move `dns` to `ssd_pool` + XFS; decommission `cache`
+# Get `dns`, `cache` and `ca` off btrfs
 
-Two jobs that started as one. `dns` moves to the flash tier and swaps its btrfs
+Three jobs that started as one. `dns` moves to the flash tier and swaps its btrfs
 root for the XFS layout every new VM here uses (`modules/disko-xfs.nix`) — Phase 2
 of [`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md). `cache` was
 going to get the same treatment until its traffic was measured, at which point
-the better answer turned out to be **deleting it**.
+the better answer turned out to be **deleting it**. `ca` joined the list when it
+turned up two percentage points from the same ENOSPC wedge that took `dns` down
+mid-migration; it gets XFS but **stays on `zfs_pool`** — its problem was btrfs,
+not IOPS.
 
 **Moving a disk is cheap; changing its filesystem is not.** A pool move is an
 online, in-place `move-disk` the bpg provider does for you. A format change is a
@@ -55,18 +58,68 @@ the guest keeps its old filesystem and nothing tells you otherwise.
 > This is the strongest possible argument for Part A: on XFS there is no
 > data/metadata chunk split to exhaust, and the new disk is 32 GB on flash
 > instead of 15 GB on a 78-IOPS HDD pair.
+>
+> ### `ca` was found in the same state, one point behind — rescued the same day
+>
+> Checking the other btrfs guests turned up **`ca` at 92.8 % metadata with
+> 1.00 MiB unallocated** — `dns` wedged at 93.8 %. This is the host that issues
+> every step-ca certificate in the lab, so its ENOSPC would have stopped ACME
+> renewals fleet-wide.
+>
+> The cause was the same and slightly worse: its root partition was **15 GiB
+> inside a 20 GB disk**. Someone had grown the Proxmox disk 16 → 20 GB (probably
+> when it first filled) but never grew the partition, so btrfs never saw the
+> extra 4 GB — and `iac/main.tf` still declared `size = 16`, which made every
+> plan propose an impossible **shrink**. That is what produced
+> `cannot delete boot disk "ide0"` on `ca_vm` and `dns_vm` during the
+> 2026-09-09 apply: the error was the symptom, the stale size was the cause.
+> Fixed in `main.tf` (16 → 20, matching reality).
+>
+> Rescued by claiming the space that was already paid for — no reinstall, no
+> downtime. NixOS has no `growpart`, so `sfdisk` does it (`sda3` is the last
+> partition, so extending it is safe):
+>
+> ```bash
+> echo ", +" | sudo sfdisk -N 3 --no-reread --force /dev/sda
+> sudo partx -u /dev/sda
+> sudo btrfs filesystem resize max /
+> ```
+>
+> Result: device 15 → **19 GiB**, unallocated 1 MiB → **3.50 GiB**, metadata
+> 92.8 % → **61.9 %**, free 1.5 G → **5.0 G**. (The partition-table backup to
+> `/tmp` failed with ENOSPC first — `/tmp` was on the full filesystem. A good
+> reminder to write that backup somewhere else.)
+>
+> **Check the remaining btrfs guests for this shape** — `btrfs filesystem usage /`
+> on each, looking for near-zero `unallocated` with high `Metadata` usage. Any
+> guest whose partition is smaller than its disk has free headroom one `sfdisk`
+> away.
 
 ## Status (2026-09-09)
 
-**Repo changes landed. Infrastructure: `dns` was rescued from the ENOSPC wedge
-above (swap removed, balance run); the migration itself has not started.**
+Repo:
 
 - ✅ `hosts/dns/configuration.nix` imports `modules/disko-xfs.nix`
-- ✅ `iac/main.tf` `dns_vm`: `ssd_pool`, 32 GB, `discard = "on"`
+- ✅ `iac/main.tf` `dns_vm`: `ssd_pool`, 32 GB, `discard = "on"`, cloud-init
+      pinned to the static `192.168.2.145` (it was `dhcp`, which would have made
+      a recreated guest come up on a lease you had to go hunting for)
+- ✅ `iac/main.tf` `ca_vm`: stale `size = 16` corrected to the live `20`
 - ✅ `cache` decommissioned in the repo — Part B lists exactly what was unwired
-- ✅ `dns` closure pre-built on wotan (so the install needs no DNS of its own)
-- ⬜ Part A (the `dns` migration) — not started
-- ⬜ Part B operator steps (destroy the VM, drop the database) — not started
+- ✅ `deployment.substituteOnDestination = false` in `colmenaHive.defaults`
+      (Ordering hazard 2 — **already applied**, revert once the fleet is clean)
+- ✅ `dns` closure pre-built on wotan
+- ⬜ `hosts/ca/configuration.nix` still on btrfs **deliberately** — see C1
+
+Infrastructure:
+
+- ✅ `cache` VM **destroyed**
+- ✅ `dns` VM **destroyed** — awaiting `tofu apply` to recreate, then
+      `just deploy dns 192.168.2.145`
+- ✅ `ca` rescued from the pending wedge (`sfdisk` + `btrfs resize`; 19 GiB
+      device, 3.5 GiB unallocated, metadata 61.9 %) — no longer urgent
+- ⬜ Fleet `colmena apply` — not done; `dns` must be excluded (hazard 1)
+- ⬜ Drop the `attic` + `futo_notes` databases on `database` (B.3/B.4)
+- ⬜ Parts A and C
 
 ---
 
@@ -100,21 +153,24 @@ push. Point that at a host that no longer exists and nix waits on it —
 `stalled-download-timeout` is 300 s per path, which is how a 19-minute
 "copying path … from cache.homelab.local" happens.
 
-**Least-surprise order** is therefore: fleet apply first (drops the substituter),
-*then* destroy the VM. If you instead run a full `just iac-apply` first — which
-destroys the cache VM immediately, since the resource is already gone from
-`main.tf` — the mitigation is to stop the targets consulting substituters at all
-for that one deploy, by adding to `colmenaHive.defaults` in `flake.nix`:
+**Least-surprise order** would have been: fleet apply first (drops the
+substituter), *then* destroy the VM. **That is not what happened** — the cache VM
+was destroyed on 2026-09-09 while every host still pointed at it, so the
+mitigation below is **already applied** in `colmenaHive.defaults` (`flake.nix`):
 
 ```nix
 deployment.substituteOnDestination = false;
 ```
 
-That is evaluated by colmena on the **pusher**, not baked into the target's
-running config, so it takes effect immediately without needing the targets
-redeployed first. Everything then arrives over SSH from the deploy host, which
-is what `buildOnTarget = false` already implies. Revert it afterwards if you want
-targets substituting again.
+It stops the targets consulting substituters at all: everything arrives over SSH
+from the deploy host, which is what `buildOnTarget = false` already implies. The
+key property is that colmena evaluates it on the **pusher**, not in the target's
+running config — so it takes effect immediately, without the targets having been
+redeployed first. That is what breaks the deadlock, since the redeploy is the
+very thing that was stalling.
+
+**Revert it to `true` once every host has been through an apply** and no longer
+carries a dead substituter.
 
 To move only the `dns` disk without touching the cache VM:
 
@@ -402,20 +458,75 @@ drops its backup with it — no second edit, and no stale backup unit left behin
 
 ---
 
-## Part C — Fold the findings back
+## Part C — `ca` to XFS (staying on `zfs_pool`)
 
-- [ ] **C.1** Tick `dns` off Phase 2 in
+`ca` gets the filesystem change **only** — no pool move. It is a small,
+low-traffic guest whose problem today was btrfs's data/metadata chunk split, not
+IOPS, and `ssd_pool` capacity is better spent elsewhere. So: XFS, still
+`zfs_pool`, same 20 GB.
+
+The urgency is gone (the `sfdisk` rescue above bought it 3.5 GiB of unallocated
+space and dropped metadata to 61.9 %), so this is planned work, not a fire.
+
+### ⚠️ Do the config swap LAST, not now
+
+`hosts/ca/configuration.nix` still imports `modules/disko-config.nix` **on
+purpose**. Swapping it to `disko-xfs.nix` makes the config describe partlabels
+the live btrfs disk does not have — Ordering hazard 1 — and `ca` would then be
+poisoned for every `colmena apply` until it is reinstalled. That is exactly the
+state `dns` is in now, and it is why `dns` has to be excluded from fleet
+deploys. **Change the import immediately before C2, not before.**
+
+- [ ] **C0 · Pre-flight**
+  - [ ] Confirm the rescue held: `sudo btrfs filesystem usage /` should still
+        show ~3.5 GiB unallocated and metadata well under 90 %.
+  - [ ] Check RAM against the kexec floor (~1.5 GB). `ca_vm` is
+        `dedicated 768 / floating 384` — **well under**, so raise it first:
+        `qm set 4337 --memory 2048 --balloon 2048`, or bump `memory` in
+        `iac/main.tf` and apply. This is the single most likely thing to fail.
+  - [ ] `nix build --no-link '.#nixosConfigurations.ca.config.system.build.toplevel'`
+        so the install needs nothing fetched.
+  - [ ] Note what is stateful: **step-ca's `/var/lib/step-ca`** — the CA root key,
+        intermediate, and its database. Unlike `dns`, this host is **NOT**
+        disposable. Losing the CA root means re-issuing trust on every host that
+        imports `modules/step-ca-trust.nix`. **Back it up and verify the copy
+        before wiping**, and do not rely on the backup landing in `/tmp`.
+- [ ] **C1 · Swap the disko import** in `hosts/ca/configuration.nix`:
+      `../../modules/disko-config.nix` → `../../modules/disko-xfs.nix`.
+      Optionally add `discard = "on"` to the `ca_vm` disk in `iac/main.tf` — the
+      XFS module enables a weekly `services.fstrim`, and without `discard` those
+      TRIMs never reach ZFS. Leave `datastore_id = "zfs_pool"` alone.
+- [ ] **C2 · Reinstall.** `ssh-keygen -R 192.168.2.160`, then
+      `just deploy ca 192.168.2.160` (static IP, so the full-config path as in
+      A2.2). Confirm afterwards with
+      `findmnt -no FSTYPE,SIZE /` → `xfs`, ~15 G root, 4 G swap partition.
+- [ ] **C3 · Restore step-ca state**, then verify a real issuance end to end —
+      not just that the unit is green:
+      ```bash
+      curl -sS -o /dev/null -w '%{http_code}\n' https://ca.homelab.local:8443/health
+      ```
+      and force a cert renewal on some other host to prove ACME still works
+      against the restored CA.
+- [ ] **C4 · agenix re-key.** New host key ⇒ update `hostCa` in
+      `secrets/secrets.nix` and re-encrypt what it consumes (same cautions as
+      A3.2 — ask before `just reencrypt`).
+- [ ] **C5 · Tailscale.** Delete the stale `homelab-ca` node and approve the new
+      one. No subnet route on this host.
+
+## Part D — Fold the findings back
+
+- [ ] **D.1** Tick `dns` off Phase 2 in
       [`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md), and note that
       `cache`'s 200 G came back to `ssd_pool` rather than being migrated.
-- [ ] **C.2** Record the measured `dns` move time and any before/after IOPS —
+- [ ] **D.2** Record the measured `dns` move time and any before/after IOPS —
       that table is the evidence base for moving the remaining root disks.
-- [ ] **C.3** Decide whether `dns` gets `floating = dedicated`. Every guest that
+- [ ] **D.3** Decide whether `dns` gets `floating = dedicated`. Every guest that
       hit balloon starvation here (`harbor`, `forgejo`, `woodpecker`,
       `k3s-cntrl-1`) ended up pinned — but a pinned guest is a balloon
       **non-donor**, so weigh it against
       [`pve-gigabyte-memory-oversubscription.md`](./pve-gigabyte-memory-oversubscription.md).
       Destroying the cache VM gives back 1 GB, which makes this cheaper than it was.
-- [ ] **C.4** If the cache is ever revived, revive it *without* Garage — that
+- [ ] **D.4** If the cache is ever revived, revive it *without* Garage — that
       module was `inactive` with 4 KB of data, because atticd used
       `storage.type = "local"`, not S3.
 
