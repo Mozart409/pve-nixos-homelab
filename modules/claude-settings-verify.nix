@@ -44,6 +44,16 @@
       SETTINGS="''${CLAUDE_SETTINGS:-${home}/.claude/settings.json}"
       problems=()
 
+      # Read one setting, distinguishing "absent" from "present and false".
+      # jq's `//` yields its right-hand side for `false` as well as for null, so
+      # the obvious `.x // "unset"` reports every correctly-*disabled* boolean as
+      # missing — a false alarm on exactly the settings this module exists to
+      # confirm are disabled (it fired daily on development from 2026-08-31 until
+      # 2026-09-10). An explicit null test is the only form that tells them apart.
+      readSetting() {
+        jq -r "$1"' | if . == null then "unset" else tostring end' "$SETTINGS"
+      }
+
       if [ ! -f "$SETTINGS" ]; then
         problems+=("settings.json is missing entirely")
       elif ! jq -e . "$SETTINGS" >/dev/null 2>&1; then
@@ -64,13 +74,22 @@
           fi
         done
 
-        mode=$(jq -r '.permissions.defaultMode // "unset"' "$SETTINGS")
+        mode=$(readSetting '.permissions.defaultMode')
         [ "$mode" = "dontAsk" ] || problems+=("defaultMode is '$mode', expected 'dontAsk'")
 
-        coauthor=$(jq -r '.includeCoAuthoredBy // "unset"' "$SETTINGS")
+        coauthor=$(readSetting '.includeCoAuthoredBy')
         [ "$coauthor" = "false" ] || problems+=("includeCoAuthoredBy is '$coauthor', expected 'false'")
 
-        sessionUrl=$(jq -r '.attribution.sessionUrl // "unset"' "$SETTINGS")
+        # All three subfields of Claude Code's attribution block. `commit` and
+        # `pr` are attribution *text* — the empty string is what hides it, so
+        # "unset" (the key absent) is a real finding, not a synonym for empty.
+        commitAttr=$(readSetting '.attribution.commit')
+        [ "$commitAttr" = "" ] || problems+=("attribution.commit is '$commitAttr', expected an empty string")
+
+        prAttr=$(readSetting '.attribution.pr')
+        [ "$prAttr" = "" ] || problems+=("attribution.pr is '$prAttr', expected an empty string")
+
+        sessionUrl=$(readSetting '.attribution.sessionUrl')
         [ "$sessionUrl" = "false" ] || problems+=("attribution.sessionUrl is '$sessionUrl', expected 'false'")
 
         # Redundant while the mode above holds — dontAsk denies AskUserQuestion
@@ -79,7 +98,7 @@
         # an unattended session would otherwise block forever on a question
         # nobody is there to answer. Backstop for that window, not for normal
         # operation.
-        timeout=$(jq -r '.askUserQuestionTimeout // "unset"' "$SETTINGS")
+        timeout=$(readSetting '.askUserQuestionTimeout')
         case "$timeout" in
           60s | 5m | 10m) ;;
           *) problems+=("askUserQuestionTimeout is '$timeout' — unattended sessions can block forever") ;;

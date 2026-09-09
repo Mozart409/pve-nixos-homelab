@@ -864,6 +864,31 @@ overwrites them, and the daily verify sends a push notification in the
 meantime. Keys outside those (model, theme, other hooks) are left alone and
 *are* hand-maintained. Change permissions in the data module and redeploy.
 
+### Attribution: all three subfields are pinned, and `false` is not "unset"
+
+Claude Code's `attribution` block has exactly three subfields, and
+`claude-permissions.nix` writes all of them — alongside the legacy
+`includeCoAuthoredBy = false`, which Claude Code still folds into the same
+decision:
+
+| Key | Value here | Meaning |
+| --- | --- | --- |
+| `attribution.commit` | `""` | Attribution text for commits; the empty string hides it |
+| `attribution.pr` | `""` | Attribution text for PR descriptions; the empty string hides it |
+| `attribution.sessionUrl` | `false` | Drops the `Claude-Session: https://claude.ai/code/…` trailer from commits and the matching link from PR bodies on web/Remote Control sessions |
+
+That is why commits from this repo are a bare subject line (§2): a harness
+reminder asking for a session trailer is stale, not a setting to obey.
+
+**The `jq '.x // "unset"'` trap.** `//` yields its right-hand side for `false`
+as well as for `null`, so reading a boolean setting that way reports every
+correctly-*disabled* flag as missing. `claude-settings-verify.nix` did exactly
+that and pushed a drift alert to the phone on every boot and every daily tick
+from 2026-08-31 until 2026-09-10, claiming `includeCoAuthoredBy` and
+`attribution.sessionUrl` were unset while both were correctly `false` on disk.
+Read settings with `if . == null then "unset" else tostring end` — the module's
+`readSetting` helper — never with `//`.
+
 ### Why `defaultMode = "dontAsk"`
 
 `dontAsk` **auto-denies** anything not pre-approved instead of prompting. That is

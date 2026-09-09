@@ -15,9 +15,16 @@
     };
     # Don't append "Co-Authored-By: Claude" to commits made from this host.
     includeCoAuthoredBy = false;
-    # Don't append "Claude-Session: https://claude.ai/code/session_…" trailers
-    # to commits or PR bodies created from web/Remote Control sessions.
+    # Claude Code's own attribution block. All three subfields it defines are
+    # pinned: `commit` and `pr` are attribution *text* (the empty string hides
+    # it entirely), and `sessionUrl = false` drops the
+    # "Claude-Session: https://claude.ai/code/session_…" trailer from commits and
+    # the matching link from PR bodies created in web/Remote Control sessions.
+    # includeCoAuthoredBy above is the legacy key Claude Code still folds into
+    # this block, so both are set.
     attribution = {
+      commit = "";
+      pr = "";
       sessionUrl = false;
     };
   };
@@ -119,6 +126,10 @@
       # .permissions — additionalDirectories, say — is preserved. Everything
       # outside .permissions is untouched.
       #
+      # .attribution is merged the same right-biased way, so the three subfields
+      # set here are replaced while any subfield a future Claude Code version
+      # adds is preserved.
+      #
       # The hooks merge is deliberately scoped to PreToolUse groups with
       # matcher == "WebSearch": any group with that matcher is dropped (so a
       # store path from an older build cannot linger) and the current hook is
@@ -126,7 +137,7 @@
       jq --argjson p '${permsJson}' --argjson h '${hooksJson}' \
         '.permissions = ((.permissions // {}) + $p.permissions)
          | .includeCoAuthoredBy = $p.includeCoAuthoredBy
-         | .attribution.sessionUrl = $p.attribution.sessionUrl
+         | .attribution = ((.attribution // {}) + $p.attribution)
          | .hooks.PreToolUse = ([((.hooks.PreToolUse // [])[] | select(.matcher != "WebSearch"))] + $h.hooks.PreToolUse)' \
         "$SETTINGS" > "$tmp"
 
