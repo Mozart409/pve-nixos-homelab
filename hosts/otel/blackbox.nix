@@ -11,10 +11,9 @@
   # queued download silently stopped. Only the health endpoints knew.
   #
   # So the rule for this list: probe the endpoint that proves the service DOES its
-  # job, not the one that proves a process is listening. The `cache` entry below
-  # (and the comment on it in hosts/containers/homelab-dashboard/default.nix) is
-  # the same idea -- /health there is answered by Caddy itself and stays green
-  # when atticd is dead.
+  # job, not the one that proves a process is listening. The retired `cache`
+  # entry was the same idea -- its /health was answered by Caddy itself and
+  # stayed green when atticd was dead, so the probe used nix-cache-info instead.
   #
   # These URLs are deliberately the ones already proven good by the dashboard's
   # health_checks list, plus hofvarpnir's readiness path. Do not add a target
@@ -68,10 +67,6 @@
   # whole-host outage still collapses into one TargetDown rather than N
   # ProbeFailed -- the same dedup contract as the lists below.
   certSubjects = {
-    homelab-cache = [
-      "cache.homelab.local"
-      "cache.homelab.internal"
-    ];
     homelab-containers = [
       "containers.homelab.local"
       "containers.homelab.internal"
@@ -163,10 +158,6 @@
       {
         url = "https://hermes.homelab.internal/health";
         instance = "homelab-hermes";
-      }
-      {
-        url = "https://cache.homelab.internal/homelab/nix-cache-info";
-        instance = "homelab-cache";
       }
       # Stays on .local, but no longer for the original reason. This entry used
       # to carry a note that forgejo's caddy had no usable cert for its

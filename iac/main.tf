@@ -819,103 +819,14 @@ resource "proxmox_virtual_environment_vm" "forgejo_vm" {
   on_boot = true
 }
 
-# Cache VM (Garage S3 + Attic Nix Binary Cache)
-resource "proxmox_virtual_environment_vm" "cache_vm" {
-  name        = "cache"
-  description = "Garage S3 + Attic Nix Binary Cache - Debian base for NixOS installation via nixos-anywhere"
-  tags        = ["terraform", "debian", "nixos-target", "cache", "s3", "nix"]
-
-  node_name = "pve-gigabyte"
-  vm_id     = 4340
-
-  bios = "seabios"
-
-  keyboard_layout = "de"
-
-  cpu {
-    cores = 2
-    type  = "host"
-  }
-
-  # dedicated raised 1024 -> 2048 so nixos-anywhere can kexec its installer into
-  # RAM: that needs ~1.5 GB and this guest reported 963 MB total, i.e. below the
-  # floor, so the reinstall would have died at the kexec step. floating stays
-  # 1024 so it balloons back down to its steady-state footprint (atticd has been
-  # comfortable in 1 GB) instead of becoming a permanent non-donor on an
-  # oversubscribed host -- see todo/pve-gigabyte-memory-oversubscription.md.
-  memory {
-    dedicated = 2048
-    floating  = 1024
-  }
-
-  disk {
-    # Moved from zfs_pool to ssd_pool on 2026-08-19 (manual `qm move-disk`,
-    # outside tofu) — the shared 2-HDD zfs_pool caps out around ~78 IOPS
-    # cluster-wide and was the root cause of attic's earlier SQLite lock
-    # contention (see hosts/cache/attic/default.nix). datastore_id here just
-    # documents where the disk now lives; it does not itself trigger a move.
-    datastore_id = "ssd_pool"
-    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
-    interface    = "scsi0"
-    # 200 -> 50. The guest uses 18 G of it (15 G /nix/store + 4.1 G of attic NAR
-    # storage), so 200 was never justified.
-    #
-    # ⚠️ This is NOT an in-place change like the ssd_pool move was. Proxmox and
-    # the bpg provider can only GROW a disk -- a shrink is refused, exactly the
-    # trap the stale `size = 16` on dns_vm would have hit. Applying this requires
-    # destroying and recreating the disk, so it is deliberately bundled with the
-    # btrfs -> XFS reinstall that already discards this guest's data. Doing it
-    # later would cost a second outage. Back up /var/lib/atticd/storage FIRST --
-    # its index lives in Postgres on the database host and will survive to point
-    # at NARs that no longer exist. See todo/dns-cache-ssd-xfs-migration.md.
-    #
-    # Sizing: 50 G leaves ~45 G of root after the XFS layout's 1 G /boot and 4 G
-    # swap. Note atticd's garbage-collection keeps a 6-month retention window and
-    # the cache is only ~1 month old, so 4.1 G is NOT steady state -- nothing has
-    # aged out yet. Watch it; growing later is a manual guest-side growpart +
-    # xfs_growfs (XFS grows but never shrinks), not a tofu apply.
-    size = 50
-    # Makes the weekly services.fstrim from modules/disko-xfs.nix actually reach
-    # ZFS; without it the guest frees blocks and the zvol stays inflated.
-    discard = "on"
-  }
-
-  network_device {
-    bridge = "vmbr0"
-  }
-
-  operating_system {
-    type = "l26"
-  }
-
-  initialization {
-    datastore_id = "local-lvm"
-
-    ip_config {
-      ipv4 {
-        address = "192.168.2.175/24"
-        gateway = "192.168.2.1"
-      }
-    }
-
-    user_account {
-      username = "amadeus"
-      keys     = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHv1USrKf6yIjg8dZolm37xGysGfj18ol1KUKqsVuQHa amadeus@wotan"]
-    }
-  }
-
-  serial_device {}
-
-  # Enable QEMU Guest Agent
-  agent {
-    enabled = true
-    timeout = "60s"
-  }
-
-  started = true
-
-  on_boot = true
-}
+# Cache VM REMOVED 2026-09-09. The attic binary cache stopped earning its keep
+# when comin was retired (6a387b2): colmena builds on the deploy host with
+# buildOnTarget = false and pushes closures over SSH, so no target ever
+# substitutes during a deploy. Measured over 14 days it took 2999 uploads and
+# served 11 organic NAR reads. The NixOS config is deliberately KEPT in
+# hosts/cache/ and modules/attic-{cache,push}.nix (unwired, not deleted) so the
+# service can be resurrected; only the VM is gone. See
+# todo/dns-cache-ssd-xfs-migration.md.
 
 # Jellyfin Media Server VM
 resource "proxmox_virtual_environment_vm" "jellyfin_vm" {
@@ -1578,7 +1489,6 @@ output "vm_ipv4_addresses" {
     ca          = proxmox_virtual_environment_vm.ca_vm.ipv4_addresses
     fleet       = proxmox_virtual_environment_vm.fleet_vm.ipv4_addresses
     harbor      = proxmox_virtual_environment_vm.harbor_vm.ipv4_addresses
-    cache       = proxmox_virtual_environment_vm.cache_vm.ipv4_addresses
     forgejo     = proxmox_virtual_environment_vm.forgejo_vm.ipv4_addresses
     development = proxmox_virtual_environment_vm.development_vm.ipv4_addresses
     jellyfin    = proxmox_virtual_environment_vm.jellyfin_vm.ipv4_addresses

@@ -16,12 +16,12 @@ harness.mkHostTest {
     # NO agenix dependency -- role/db existence must hold even though the
     # separate password-ALTER oneshots (mkRolePasswordUnit, requiring the
     # per-role agenix secrets we do NOT fixture here) are expected to fail.
-    for db in ["appdb", "terraform", "forgejo", "romm", "hofvarpnir", "attic", "futo_notes"]:
+    for db in ["appdb", "terraform", "forgejo", "romm", "hofvarpnir", "futo_notes"]:
         machine.succeed(
             f"sudo -u postgres psql -tAc \"select 1 from pg_database where datname='{db}'\" | grep -q 1"
         )
 
-    for role in ["mcp", "attic", "terraform", "forgejo", "romm", "futo_notes", "hofvarpnir"]:
+    for role in ["mcp", "terraform", "forgejo", "romm", "futo_notes", "hofvarpnir"]:
         machine.succeed(
             f"sudo -u postgres psql -tAc \"select 1 from pg_roles where rolname='{role}'\" | grep -q 1"
         )

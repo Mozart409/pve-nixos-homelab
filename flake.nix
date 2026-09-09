@@ -145,10 +145,12 @@
         local = "harbor.homelab.local";
         tailscale = "homelab-harbor";
       };
-      cache = {
-        local = "cache.homelab.local";
-        tailscale = "homelab-cache";
-      };
+      # Cache VM decommissioned 2026-09-09 (see the note in iac/main.tf). The
+      # NixOS config is kept under hosts/cache/ but is wired to nothing.
+      # cache = {
+      #   local = "cache.homelab.local";
+      #   tailscale = "homelab-cache";
+      # };
       development = {
         local = "development.homelab.local";
         tailscale = "homelab-development";
@@ -224,7 +226,9 @@
     };
 
     # Function to create a NixOS system configuration. Every mkHost host gets
-    # home-manager/nixvim (hive parity, see above) and modules/attic-push.nix.
+    # home-manager/nixvim (hive parity, see above). The fleet-wide attic push
+    # was retired 2026-09-09 with the cache VM: modules/attic-push.nix is kept
+    # on disk but imported nowhere.
     # The Loki shipper is NOT here -- it is owned by modules/fluent-bit.nix and
     # imported from modules/common.nix, which every host has. Hosts that must NOT
     # (bootstrap/installer images like `minimal` and `iso`) are explicit
@@ -243,7 +247,6 @@
           disko.nixosModules.disko
           agenix.nixosModules.default
           homeManagerNixvim
-          ./modules/attic-push.nix
           ./modules/container-registries.nix
           ./hosts/${hostname}/configuration.nix
         ];
@@ -259,7 +262,7 @@
         containers = mkHost "containers";
         # Bootstrap image for nixos-anywhere (`just deploy-minimal`). Explicit
         # (not mkHost) because it must NOT get home-manager/nixvim (slows the
-        # install). A bootstrap host also gets no attic-push.
+        # install).
         minimal = nixpkgs.lib.nixosSystem {
           specialArgs = {inherit homelab-dashboard;};
           modules = [
@@ -295,14 +298,13 @@
             homelab-mcp.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            ./modules/attic-push.nix
             ./hosts/mcp_vm/configuration.nix
           ];
         };
         ca = mkHost "ca";
         fleet = mkHost "fleet";
         harbor = mkHost "harbor";
-        cache = mkHost "cache";
+        # cache = mkHost "cache"; # decommissioned 2026-09-09
         forgejo = mkHost "forgejo";
         # Explicit (not mkHost) so `herdr`/`nix-ai-tools` can be passed via specialArgs.
         development = nixpkgs.lib.nixosSystem {
@@ -319,7 +321,6 @@
             agenix.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            ./modules/attic-push.nix
             ./hosts/development/configuration.nix
           ];
         };
@@ -341,7 +342,6 @@
             agenix.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            ./modules/attic-push.nix
             ./hosts/jellyfin/configuration.nix
           ];
         };
@@ -385,7 +385,6 @@
             hermes-agent.nixosModules.default
             homeManagerNixvim
             ./modules/container-registries.nix
-            ./modules/attic-push.nix
             ./hosts/hermes/configuration.nix
           ];
         };
@@ -426,7 +425,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/database/configuration.nix
           ];
         };
@@ -441,7 +439,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/otel/configuration.nix
           ];
         };
@@ -456,7 +453,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/dns/configuration.nix
           ];
         };
@@ -471,7 +467,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/unifi/configuration.nix
           ];
         };
@@ -485,7 +480,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/containers/configuration.nix
           ];
         };
@@ -501,7 +495,6 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             homelab-mcp.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/mcp_vm/configuration.nix
           ];
         };
@@ -520,7 +513,6 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             hermes-agent.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/hermes/configuration.nix
           ];
         };
@@ -535,7 +527,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/ca/configuration.nix
           ];
         };
@@ -550,7 +541,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/fleet/configuration.nix
           ];
         };
@@ -565,25 +555,25 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/harbor/configuration.nix
           ];
         };
 
-        cache = {
-          deployment = {
-            targetHost = targetHost "cache";
-            targetUser = "amadeus";
-            buildOnTarget = false;
-            tags = ["cache" "s3" "nix"];
-          };
-          imports = [
-            disko.nixosModules.disko
-            agenix.nixosModules.default
-            ./modules/attic-push.nix
-            ./hosts/cache/configuration.nix
-          ];
-        };
+        # Decommissioned 2026-09-09 along with the VM (iac/main.tf). Kept
+        # commented rather than deleted, like the zeroclaw node below.
+        # cache = {
+        #   deployment = {
+        #     targetHost = targetHost "cache";
+        #     targetUser = "amadeus";
+        #     buildOnTarget = false;
+        #     tags = ["cache" "s3" "nix"];
+        #   };
+        #   imports = [
+        #     disko.nixosModules.disko
+        #     agenix.nixosModules.default
+        #     ./hosts/cache/configuration.nix
+        #   ];
+        # };
 
         forgejo = {
           deployment = {
@@ -604,7 +594,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/forgejo/configuration.nix
           ];
         };
@@ -619,7 +608,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/woodpecker/configuration.nix
           ];
         };
@@ -634,7 +622,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/development/configuration.nix
           ];
         };
@@ -649,7 +636,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/jellyfin/configuration.nix
           ];
         };
@@ -664,7 +650,6 @@
           imports = [
             disko.nixosModules.disko
             agenix.nixosModules.default
-            ./modules/attic-push.nix
             ./hosts/k3s-cntrl-1/configuration.nix
           ];
         };

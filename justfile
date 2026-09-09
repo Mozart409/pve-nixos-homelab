@@ -164,59 +164,66 @@ iso-build: clear
   @echo "Building minimal installer ISO..."
   nix build '.#nixosConfigurations.iso.config.system.build.isoImage' --show-trace
 
-# --- Attic binary cache (hosts/cache) -------------------------------------
-
-# ONE-TIME bootstrap: mint an admin token from the atticd signing secret, create
-# the `homelab` cache, and mark it public. Public means pulls need no
-# credentials, so consumers only need the public key in
-# modules/attic-cache.nix — no netrc or agenix secret on every host. Pushing
-# still requires the token this prints.
-attic-init:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  host=amadeus@192.168.2.175
-  echo "==> minting admin token on cache host"
-  # Heredoc via `sudo sh -s` so the token-minting script is not mangled by
-  # nested shell quoting. atticd-atticadm needs the RS256 secret that the
-  # systemd unit gets from environmentFile, hence sourcing it explicitly.
-  token=$(ssh "$host" 'sudo sh -s' <<'REMOTE' | tail -1
-  set -eu
-  set -a
-  . /run/agenix/attic-server-token
-  set +a
-  atticd-atticadm make-token --sub admin --validity 1y \
-    --pull '*' --push '*' --delete '*' \
-    --create-cache '*' --configure-cache '*' \
-    --configure-cache-retention '*' --destroy-cache '*'
-  REMOTE
-  )
-  echo "==> logging in and creating the 'homelab' cache"
-  ssh "$host" "attic login homelab https://cache.homelab.local '$token'"
-  ssh "$host" "attic cache create homelab || echo '(cache already exists)'"
-  ssh "$host" "attic cache configure homelab --public"
-  echo
-  echo "==> push token (store it; needed by any host that pushes):"
-  echo "$token"
-  echo
-  just attic-info
-
-# Print the cache's public signing key — the value that belongs in
-# modules/attic-cache.nix's `publicKey`.
-attic-info:
-  @ssh amadeus@192.168.2.175 "attic cache info homelab"
-
-# Push a closure to the cache. Defaults to this machine's current system.
-# Builds land in the local store first; this uploads them for everyone else.
+# --- Attic binary cache (hosts/cache) -- RETIRED 2026-09-09 ----------------
 #
-# `jobs` was pinned to 1 while atticd kept its index in SQLite: one writer at a
-# time on the 2-HDD zfs_pool (~78 IOPS cluster-wide) meant five parallel uploads
-# queued behind each other until the pool gave up, killing the push with
-# `Connection pool timed out` and `database is locked`. Since the index moved to
-# Postgres on the database host, attic's own default of 5 completes — the same
-# 15-minute window went from 19 pool timeouts to 1. Lower it again if a push
-# ever starts starving the other VMs of IO; the disks are still the ceiling.
-attic-push path="/run/current-system" jobs="5":
-  attic push -j {{jobs}} homelab {{path}}
+# The cache VM was decommissioned (see the note in iac/main.tf): comin's removal
+# left nothing that builds on a target, so over 14 days the cache took 2999
+# uploads and served 11 organic reads. hosts/cache/ and modules/attic-*.nix are
+# kept on disk, wired to nothing; these recipes are commented out because they
+# SSH to 192.168.2.175, which no longer exists. Uncomment if the cache is ever
+# revived.
+#
+# # ONE-TIME bootstrap: mint an admin token from the atticd signing secret, create
+# # the `homelab` cache, and mark it public. Public means pulls need no
+# # credentials, so consumers only need the public key in
+# # modules/attic-cache.nix — no netrc or agenix secret on every host. Pushing
+# # still requires the token this prints.
+# attic-init:
+#   #!/usr/bin/env bash
+#   set -euo pipefail
+#   host=amadeus@192.168.2.175
+#   echo "==> minting admin token on cache host"
+#   # Heredoc via `sudo sh -s` so the token-minting script is not mangled by
+#   # nested shell quoting. atticd-atticadm needs the RS256 secret that the
+#   # systemd unit gets from environmentFile, hence sourcing it explicitly.
+#   token=$(ssh "$host" 'sudo sh -s' <<'REMOTE' | tail -1
+#   set -eu
+#   set -a
+#   . /run/agenix/attic-server-token
+#   set +a
+#   atticd-atticadm make-token --sub admin --validity 1y \
+#     --pull '*' --push '*' --delete '*' \
+#     --create-cache '*' --configure-cache '*' \
+#     --configure-cache-retention '*' --destroy-cache '*'
+#   REMOTE
+#   )
+#   echo "==> logging in and creating the 'homelab' cache"
+#   ssh "$host" "attic login homelab https://cache.homelab.local '$token'"
+#   ssh "$host" "attic cache create homelab || echo '(cache already exists)'"
+#   ssh "$host" "attic cache configure homelab --public"
+#   echo
+#   echo "==> push token (store it; needed by any host that pushes):"
+#   echo "$token"
+#   echo
+#   just attic-info
+# 
+# # Print the cache's public signing key — the value that belongs in
+# # modules/attic-cache.nix's `publicKey`.
+# attic-info:
+#   @ssh amadeus@192.168.2.175 "attic cache info homelab"
+# 
+# # Push a closure to the cache. Defaults to this machine's current system.
+# # Builds land in the local store first; this uploads them for everyone else.
+# #
+# # `jobs` was pinned to 1 while atticd kept its index in SQLite: one writer at a
+# # time on the 2-HDD zfs_pool (~78 IOPS cluster-wide) meant five parallel uploads
+# # queued behind each other until the pool gave up, killing the push with
+# # `Connection pool timed out` and `database is locked`. Since the index moved to
+# # Postgres on the database host, attic's own default of 5 completes — the same
+# # 15-minute window went from 19 pool timeouts to 1. Lower it again if a push
+# # ever starts starving the other VMs of IO; the disks are still the ceiling.
+# attic-push path="/run/current-system" jobs="5":
+#   attic push -j {{jobs}} homelab {{path}}
 
 # --- Woodpecker CI image (pulled by .woodpecker/static.yml + .woodpecker/iac.yml) ---
 

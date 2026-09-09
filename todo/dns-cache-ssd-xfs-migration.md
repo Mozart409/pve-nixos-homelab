@@ -1,186 +1,73 @@
-# Move `dns` and `cache` to `ssd_pool` + XFS
+# Move `dns` to `ssd_pool` + XFS; decommission `cache`
 
-Put both guests on the flash tier with the XFS layout every new VM here already
-uses (`modules/disko-xfs.nix`), replacing their btrfs roots. Phase 2 of
-[`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md), applied to two of
-the 18 VM root disks that phase is about.
+Two jobs that started as one. `dns` moves to the flash tier and swaps its btrfs
+root for the XFS layout every new VM here uses (`modules/disko-xfs.nix`) — Phase 2
+of [`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md). `cache` was
+going to get the same treatment until its traffic was measured, at which point
+the better answer turned out to be **deleting it**.
 
-**The two halves are not equally cheap.** Moving a disk is an online, in-place
-`move-disk` the bpg provider does for you. Changing the *filesystem* is a **full
-reinstall** — `disko` only ever runs under `nixos-anywhere`, never during
-`colmena apply`.
+**Moving a disk is cheap; changing its filesystem is not.** A pool move is an
+online, in-place `move-disk` the bpg provider does for you. A format change is a
+**full reinstall** — `disko` only ever runs under `nixos-anywhere`, never during
+`colmena apply`. Editing the disko module and running `colmena apply` is a
+**no-op for disks**: the generated mounts key off `/dev/disk/by-partlabel/*`, so
+the guest keeps its old filesystem and nothing tells you otherwise.
 
-**The two hosts are not equally cheap either**, and that is the thing to
-internalise before starting:
+## Status (2026-09-09)
 
-| | `dns` | `cache` |
-| --- | --- | --- |
-| Already on `ssd_pool`? | **No** — needs the move | **Yes**, moved manually 2026-08-19 |
-| Disk work | in-place move + grow (20→32 GB) | **destroy + recreate** (200→50 GB — a shrink cannot be done in place) |
-| Root filesystem | btrfs → XFS | btrfs → XFS |
-| State to preserve | **None** — stateless by design | **~4.1 GB of attic NAR storage, whose index is in Postgres on another host** |
-| RAM vs kexec's ~1.5 GB | 1536 unpinned — **borderline** | **963 MB — below the line, will fail** |
-| agenix secrets to re-key | 3 | 6 |
-| Outage hurts | the whole LAN's name resolution (softened, see below) | almost nothing |
+**Repo changes landed. Nothing has touched the infrastructure yet.**
 
-`dns` is the scarier-sounding host and the easier job. `cache` is the reverse.
-**Do `dns` first** — it is the clean rehearsal of the exact same procedure, and
-its failure modes are all well-understood.
-
-## Status — repo changes landed, migration not started (2026-09-09)
-
-- ✅ `hosts/dns/configuration.nix` + `hosts/cache/configuration.nix` import `modules/disko-xfs.nix`
+- ✅ `hosts/dns/configuration.nix` imports `modules/disko-xfs.nix`
 - ✅ `iac/main.tf` `dns_vm`: `ssd_pool`, 32 GB, `discard = "on"`
-- ✅ `iac/main.tf` `cache_vm`: 200 → **50 GB**, memory → 2048/1024, `discard = "on"` (already on `ssd_pool`)
-- ✅ both closures pre-built on wotan (so neither install needs DNS of its own)
-- ⬜ everything below
+- ✅ `cache` decommissioned in the repo — Part B lists exactly what was unwired
+- ✅ `dns` closure pre-built on wotan (so the install needs no DNS of its own)
+- ⬜ Part A (the `dns` migration) — not started
+- ⬜ Part B operator steps (destroy the VM, drop the database) — not started
 
 ---
 
-## Live facts (verified 2026-09-09)
+## Part A — `dns` to `ssd_pool` + XFS
 
-### `dns`
+### Live facts (verified 2026-09-09)
 
 | Fact | Value |
 | --- | --- |
 | Guest | VM **4326**, `homelab-dns`, **192.168.2.145** (static, `ens18`) |
 | Disk | single `scsi0` → `/dev/sda`, **20 GB**, **`zfs_pool`** |
+| Stable by-id | `scsi-0QEMU_QEMU_HARDDISK_drive-scsi0` — `disko-xfs.nix`'s default pin is correct, no override needed |
 | Layout today | 1 M BIOS + 1 G ext4 `/boot` + 15 G **btrfs** (`/root` `/home` `/nix` `/var` + 4 G swapfile subvol) |
 | Root usage | **14 G of 15 G — 89 %** |
 | `iac/main.tf` said | `size = 16` — **stale**, below the live 20 GB; a plan would have tried to shrink and the provider cannot. Now 32. |
 | Memory | `dedicated 1536 / floating 768` — **not pinned** |
-| agenix | `tailscale-auth-key`, `fleet-enroll-secret` (via `users`), `attic-push-token` |
+| agenix | `tailscale-auth-key`, `fleet-enroll-secret` (via `users`) |
 | Tailscale role | **subnet router** — advertises `192.168.2.0/24`, and the tailnet's split-DNS target for `homelab.local` |
-
-### `cache`
-
-| Fact | Value |
-| --- | --- |
-| Guest | VM **4340**, `homelab-cache`, **192.168.2.175** (static, `ens18`) |
-| Disk | single `scsi0` → `/dev/sda`, **200 GB**, already **`ssd_pool`** → **recreated at 50 GB** |
-| Layout today | 1 M BIOS + 1 G ext4 `/boot` + 199 G **btrfs** |
-| Root usage | **18 G of 199 G — 9 %** (15 G `/nix/store` + 4.1 G attic) — hence the shrink to 50 GB |
-| Memory | was `dedicated 1024 / floating 1024`; **963 MB total** in-guest — below the kexec floor, now `2048 / 1024` in `iac/main.tf` |
-| agenix | `attic-db-url`, `attic-server-token`, `garage-rpc-secret`, `attic-push-token` (explicit `hostCache`) + `tailscale-auth-key`, `fleet-enroll-secret` (via `users`) |
-| `atticd` | **active** as a **static** `atticd` user (uid 993/gid 990), storage `type = "local"` at `/var/lib/atticd/storage` — **4,122,133,565 bytes**; GC retention **6 months** |
-| `atticd` database | **PostgreSQL on the `database` host** (192.168.2.134), via `attic-db-url.age` — **not on this guest** |
-| `garage` | **inactive**, `/var/lib/garage` = **4.0 KB** — see "Garage is dead weight" below |
-
-Both by-id pins exist (`scsi-0QEMU_QEMU_HARDDISK_drive-scsi0`), so
-`disko-xfs.nix`'s default device is correct on both; neither needs an override.
-
----
-
-## Three traps worth reading before you start
-
-### 1. `cache` will desynchronise its own cache if you just wipe it
-
-This is the finding that shapes the whole `cache` procedure.
-
-atticd keeps **NAR chunks locally** (`/var/lib/atticd/storage`, 4.1 GB) but its
-**index in Postgres on the `database` host**. The wipe destroys one and leaves
-the other fully populated. The result is not an empty cache — it is a **lying**
-cache: attic keeps serving narinfos for store paths whose NAR data no longer
-exists, and every client gets a 404 on fetch. That is strictly worse than having
-no cache at all, and it fails in a way that looks like a network problem.
-
-Two consistent endings, pick one in Phase B0:
-
-- **Preserve** — `rsync` the 4.1 GB off before the wipe and back after. Storage
-  and index stay in step, the cache stays warm. 4 GB over the LAN is a couple of
-  minutes; this is the default.
-- **Reset both** — wipe the guest *and* empty the attic index, giving a clean
-  empty cache that refills itself. Cheaper to execute, but note the memory on
-  `just attic-init` says it was "written but never executed; treat as
-  unverified", so you would be debugging a bringup script during a migration.
-
-Preserve. The other option trades a 4 GB copy for an unverified script.
-
-### 2. `cache` does not have enough RAM to kexec
-
-`nixos-anywhere` kexecs a NixOS installer into RAM and wants ~1.5 GB. `cache`
-reports **963 MB total**. This is not "tight" like `dns` — it is below the line,
-and the install is expected to fail at the kexec step.
-
-**Already handled declaratively:** because the shrink forces a VM recreate
-anyway (trap 3), `iac/main.tf` now sets `dedicated = 2048 / floating = 1024`, so
-the rebuilt guest boots above the floor and still balloons back down to its
-steady-state 1 GB rather than becoming a permanent non-donor. Nothing manual is
-needed — but if you ever reinstall this host *without* recreating it, the balloon
-may have taken it under again, and the fallback is:
-
-```bash
-qm set 4340 --memory 2048 --balloon 2048     # then reboot the guest to apply
-```
-
-`dns` has the softer version of the same problem: `dedicated 1536 / floating
-768`, **unpinned**, on an oversubscribed host
-([`pve-gigabyte-memory-oversubscription.md`](./pve-gigabyte-memory-oversubscription.md)),
-so the balloon may have taken it below 1.5 GB by the time you get there. Check
-`free -m` first and un-balloon with `qm set 4326 --balloon 1536` if it has.
-
-### 3. The `cache` disk shrink cannot be applied in place
-
-`size = 200` → `50` is **not** the same kind of change as the `ssd_pool` move.
-Proxmox and the bpg provider can only ever **grow** a disk; a shrink is refused
-outright — the same trap the stale `size = 16` on `dns_vm` would have sprung.
-Applying it requires **destroying and recreating** the disk, which is why it is
-bundled into the reinstall that already discards this guest's data instead of
-being done separately later, at the cost of a second outage.
-
-Sizing rationale: 18 G of the 200 G is in use (15 G `/nix/store`, 4.1 G attic),
-so 50 G leaves ~45 G of root after the XFS layout's 1 G `/boot` and 4 G swap.
-**The 4.1 G is not steady state** — atticd's `garbage-collection` keeps a
-6-month `default-retention-period` and the cache is roughly a month old, so
-nothing has aged out yet. Watch it as it fills; growing later is a manual
-guest-side `growpart` + `xfs_growfs` (XFS grows but never shrinks), not a
-`tofu apply`. If it turns out to climb faster than expected, shortening that
-retention period is the cheaper lever than resizing again.
 
 ### Why the blast radius is smaller than it looks
 
-**`dns`:** `modules/dns-client-cache.nix` puts a local unbound stub on **every
-host except this one**, with `serve-expired` + `serve-expired-ttl 1800` and a
-30-minute `cache-min-ttl` floor. While `dns` is down, other hosts answer
-`*.homelab.local` from stale cache rather than failing, and `modules/common.nix`
-lists `192.168.2.1` as a second nameserver for public names. A window well under
-30 minutes is absorbed almost invisibly. What does *not* survive: any name first
-resolved after a stub's cache ages out, and any tailnet client reaching the LAN
-through the subnet route.
+`modules/dns-client-cache.nix` puts a local unbound stub on **every host except
+this one**, with `serve-expired` + `serve-expired-ttl 1800` and a 30-minute
+`cache-min-ttl` floor. While `dns` is down, other hosts answer `*.homelab.local`
+from stale cache rather than failing, and `modules/common.nix` lists
+`192.168.2.1` as a second nameserver for public names. A window well under 30
+minutes is absorbed almost invisibly.
 
-**`cache`:** almost nothing depends on it. Only `hosts/development` imports
-`modules/attic-cache.nix` as a substituter, and nix falls back to
-`cache.nixos.org` silently. `modules/attic-push.nix` runs on every node but
-fires `systemctl start --no-block … || true`, so a failed push **never** blocks a
-deploy. Losing this host for an hour costs rebuild time on `development` and
-nothing else.
+What does *not* survive: any name first resolved after a stub's cache ages out,
+and any tailnet client reaching the LAN through the subnet route.
 
-### Why the format change costs a reinstall
+### The one trap: RAM vs kexec
 
-`disko` runs exactly once, during `nixos-anywhere`. Editing the disko module and
-running `colmena apply` is a **no-op for disks** — the generated mounts key off
-`/dev/disk/by-partlabel/*`, so the guest keeps its btrfs root and nothing tells
-you otherwise. There is no in-place btrfs→XFS conversion.
-
-### Garage is dead weight
-
-`garage` is `inactive` with **4.0 KB** of data, while `hosts/cache/garage/` is
-still imported and Caddy still routes `/s3/*` to `localhost:3900`. atticd uses
-`storage.type = "local"`, not S3, so nothing needs it. Not part of this
-migration — but this is the moment you would notice, and removing the module
-(and `garage-rpc-secret.age`) is a clean follow-up.
-
----
-
-## Part A — `dns` (do this one first)
+`nixos-anywhere` kexecs a NixOS installer into RAM and wants ~1.5 GB. This guest
+is `dedicated 1536 / floating 768`, i.e. **unpinned**, on an oversubscribed host
+([`pve-gigabyte-memory-oversubscription.md`](./pve-gigabyte-memory-oversubscription.md)),
+so the balloon may have taken it under the line. Check before you start.
 
 ### A0 · Pre-flight
 
 - [ ] **A0.1 Verify `ssd_pool` has room.** The 888 G mirror held only immich
       (~70 G) when [`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md)
-      was measured on 2026-08-08; `woodpecker` (100 G), `cache` (200 G) and
-      `k3s-cntrl-1` (64 G) have landed since, so re-measure rather than trust
-      that number: `zpool list ssd_pool` on `pve-gigabyte`.
+      was measured on 2026-08-08; `woodpecker` (100 G) and `k3s-cntrl-1` (64 G)
+      landed since, and `cache`'s 200 G is about to come *back* (Part B). Measure
+      rather than trust: `zpool list ssd_pool` on `pve-gigabyte`.
 - [ ] **A0.2 Confirm the closure is built**, so the install never needs a name
       resolved while the resolver is down (the `homelab-mcp` flake input is
       `git+https://forgejo.homelab.local/…`):
@@ -189,7 +76,8 @@ migration — but this is the moment you would notice, and removing the module
       ```
       Done once on 2026-09-09; re-run after any further edit.
 - [ ] **A0.3 Check the guest has its memory** — `ssh amadeus@192.168.2.145 free -m`
-      should show MemTotal near 1500, not 768. See trap 2 above.
+      should show MemTotal near 1500, not 768. If low, un-balloon from the PVE
+      host: `qm set 4326 --balloon 1536`.
 - [ ] **A0.4 Nothing to back up.** unbound serves a static zone from the Nix
       store, the step-ca cert is re-issued over ACME on first boot, and the
       Tailscale identity is replaced regardless.
@@ -201,7 +89,9 @@ the move stays independently revertible.
 
 - [ ] **A1.1 Plan and read it carefully.** `datastore_id` must show as an
       **in-place update** — no `# forces replacement`, `0 to destroy`. Confirmed
-      for `woodpecker` on 2026-08-15; verify rather than assume.
+      for `woodpecker` on 2026-08-15; verify rather than assume. Note the same
+      apply also **destroys the cache VM** (Part B) — expect `1 to destroy` and
+      check it is 4340, not something else.
       ```bash
       just iac-plan     # or: cd iac && tofu plan -target=proxmox_virtual_environment_vm.dns_vm
       ```
@@ -210,8 +100,8 @@ the move stays independently revertible.
 - [ ] **A1.2 Apply.** `just iac-apply`. Proxmox streams the zvol with the guest
       running; 20 GB *off* a ~78 IOPS pool is not instant.
 - [ ] **A1.3 Confirm.** `qm config 4326` → `scsi0: ssd_pool:vm-4326-disk-0,discard=on,size=32G`.
-      The guest is still btrfs and still sees only 20 GB; Phase A2 repartitions
-      the whole disk anyway.
+      The guest is still btrfs and still sees only 20 GB; A2 repartitions the
+      whole disk anyway.
 
 ### A2 · Reinstall onto XFS (destructive — this is the outage)
 
@@ -231,25 +121,25 @@ the move stays independently revertible.
       dig +short @192.168.2.145 forgejo.homelab.local     # 192.168.2.178
       dig +short @192.168.2.145 nixos.org                 # forwarding works
       ```
-      LAN DNS is restored here; the rest is reinstall follow-up.
 
 ### A3 · agenix re-key
 
 New host key ⇒ `age: error: no identity matched any of the recipients`.
 
 - [ ] **A3.1** `just get-host-key 192.168.2.145`, replace `hostDns` in
-      `secrets/secrets.nix:13`.
-- [ ] **A3.2** Re-encrypt the three affected secrets. ⚠️ **Ask before running
+      `secrets/secrets.nix`.
+- [ ] **A3.2** Re-encrypt the affected secrets. ⚠️ **Ask before running
       `just reencrypt`** — amadeus corrected that as the wrong follow-up on
       2026-08-04 and the right procedure was never written down. Targeted form:
       ```bash
       cd secrets
       agenix -e tailscale-auth-key.age -i ~/.config/age/keys.txt   # save unchanged
       agenix -e fleet-enroll-secret.age -i ~/.config/age/keys.txt
-      agenix -e attic-push-token.age -i ~/.config/age/keys.txt
       ```
-      Use a **real interactive editor**: agenix runs `$EDITOR` with a stripped
-      PATH, and an editor *script* silently writes an **empty** secret.
+      (`attic-push-token.age` no longer needs re-keying — nothing imports
+      `modules/attic-push.nix` since Part B.) Use a **real interactive editor**:
+      agenix runs `$EDITOR` with a stripped PATH, and an editor *script* silently
+      writes an **empty** secret.
 - [ ] **A3.3** `just colmena-apply-host dns` — targets the raw IP from
       `hostAddrs`, so it works with or without healthy DNS.
 - [ ] **A3.4** Verify: `sudo ls -l /run/agenix/` and
@@ -268,11 +158,9 @@ the entire homelab LAN, not just this host.
 - [ ] **A4.2** Approve the new node.
 - [ ] **A4.3** Approve the **subnet route** `192.168.2.0/24` — a separate toggle
       from node approval, and the one that silently breaks remote access.
-      `extraUpFlags` re-advertises it automatically on a fresh install
-      (`tailscaled-autoconnect` does run `tailscale up` when not already
-      connected), so this is console-side only.
-- [ ] **A4.4** Confirm split-DNS still maps `homelab.local` → `192.168.2.145`
-      (unchanged LAN IP, but check while you are there).
+      `extraUpFlags` re-advertises it automatically on a fresh install, so this
+      is console-side only.
+- [ ] **A4.4** Confirm split-DNS still maps `homelab.local` → `192.168.2.145`.
 - [ ] **A4.5** Verify from a remote tailnet client: `dig +short
       @192.168.2.145 forgejo.homelab.local` and `ping 192.168.2.178`.
 
@@ -293,136 +181,131 @@ the entire homelab LAN, not just this host.
 
 ---
 
-## Part B — `cache`
+## Part B — `cache` decommission
 
-Only after Part A is green. The disk is **already on `ssd_pool`**, so there is no
-Phase A1 equivalent — the `discard = "on"` addition applies on the next
-`just iac-apply` and does nothing until the guest runs XFS.
+### Why
 
-### B0 · Pre-flight — **the data comes first**
+Measured over 14 days on the live host:
 
-- [ ] **B0.1 Back up the attic NAR storage** (trap 1 — do not skip):
+| | count |
+| --- | --- |
+| Uploads (PUT/POST) | **2,999** |
+| NAR fetches | 1,738 — but **1,727 on Sep 08 alone**, 11 on Aug 31, **zero** on the other 12 days |
+| Distinct NARs fetched | 256, top ones pulled 38–46× each |
+
+Sep 08 is the day the chunking was retuned 64× in `hosts/cache/attic/default.nix`
+— that spike is someone working *on* attic, not benefiting *from* it, and the
+repetition looks like retries. Net of it, the cache served **11 organic reads in
+two weeks** for ~3,000 uploads.
+
+The reason it stopped paying is structural. `modules/common.nix` imported the
+substituter fleet-wide to spare hosts that evaluate the flake locally from
+GitHub's 429 rate-limit on input tarballs — and the thing that made every host
+evaluate locally was **comin**, retired in `6a387b2`. Everything else deploys via
+colmena with `buildOnTarget = false`: the deploy host builds and pushes closures
+over SSH, so no target ever consults a substituter. Meanwhile the cost was a VM,
+a Postgres database on the **IOPS-starved** `database` host, a push unit firing
+on 16 hosts after every activation, 6 secrets, a Caddy vhost, a step-ca cert, two
+monitoring targets and a dead Garage module.
+
+`development` and `hermes` do still evaluate the flake locally. If they start
+hitting 429s, a GitHub token in `nix.settings.access-tokens` is the direct fix —
+not a VM.
+
+### What was unwired in the repo (done)
+
+**The NixOS config was deliberately kept on disk**, wired to nothing, so the
+service can be resurrected. Only the VM resource was deleted.
+
+| File | Change |
+| --- | --- |
+| `iac/main.tf` | `cache_vm` resource + output entry **deleted** (the only deletion) |
+| `flake.nix` | 22 `modules/attic-push.nix` imports removed; `cache` commented out of `hostAddrs`, `nixosConfigurations`, `colmenaHive` |
+| `modules/common.nix` | fleet-wide `attic-cache.nix` import removed |
+| `hosts/development/` | its own `attic-cache.nix` import removed |
+| `hosts/database/` | `attic` database, role, password unit and `attic-db-password` secret removed |
+| `hosts/dns/` | `cache.homelab.{local,internal}` A records + PTR removed |
+| `hosts/otel/configuration.nix` | `cache-node` scrape job removed |
+| `hosts/otel/blackbox.nix` | `homelab-cache` cert subjects + `nix-cache-info` probe removed |
+| `hosts/containers/homelab-dashboard/` | "Attic Cache" health check removed |
+| `justfile` | `attic-init` / `attic-info` / `attic-push` commented out |
+| `tests/hosts/database.nix` | `attic` dropped from the db + role assertions |
+| **Kept, untouched** | `hosts/cache/**`, `modules/attic-cache.nix`, `modules/attic-push.nix`, `secrets/*.age`, `secrets/secrets.nix` |
+
+`hosts/otel/alerting.nix` needed **no change** — it has no cache-specific rules,
+only generic `up`/cert alerts driven by the targets removed above. Deleting the
+targets is what silences the alerting.
+
+The nightly `attic` dump also stops **by construction**:
+`services.postgresqlBackup.databases` derives from
+`config.services.postgresql.ensureDatabases`, so dropping `attic` from that list
+drops its backup with it — no second edit, and no stale backup unit left behind.
+
+### Operator steps (not started)
+
+- [ ] **B.1 Deploy the fleet first, then destroy the VM.** Every host keeps its
+      `attic-login`/`attic-push-system` units and its substituter until
+      redeployed. Redeploying first avoids a window where hosts reference a host
+      that is already gone — though pushes fail soft (`|| true`), so neither
+      order actually breaks anything.
       ```bash
-      sudo rsync -aHAX --numeric-ids --info=progress2 \
-        amadeus@192.168.2.175:/var/lib/atticd/storage/ \
-        /path/to/atticd-storage-backup/
+      just colmena-apply          # all 15 nodes
       ```
-      Needs `sudo` on the remote side to read it; adjust to taste (`ssh … sudo
-      tar -C /var/lib/atticd -cf - storage | …` also works). Verify the byte count
-      matches the source exactly — it was **4,122,133,565 bytes** on 2026-09-09
-      (`du -sb`).
-- [ ] **B0.2 Note the Postgres index is untouched** and lives on the `database`
-      host. That is exactly why C0.1 matters — restoring storage is what keeps
-      the two in step.
-- [ ] **B0.3 Recreate the VM at 50 GB** (traps 2 and 3). The shrink and the
-      memory bump both land here, and **B0.1 must already be done** — this
-      destroys the disk:
+- [ ] **B.2 Destroy the VM.** Removing the resource from `iac/main.tf` is what
+      does it; confirm the plan shows **`1 to destroy`** and that it is VM
+      **4340** before applying.
       ```bash
-      cd iac
-      tofu destroy -target=proxmox_virtual_environment_vm.cache_vm
-      tofu apply                      # or: just iac-apply
+      just iac-plan
+      just iac-apply
       ```
-      The VM returns as **4340** with a 50 GB `ssd_pool` disk, `discard = on`,
-      2048/1024 memory, and its static **192.168.2.175** from the cloud-init
-      block — i.e. the ordinary new-host starting point, running Debian.
-      Confirm `qm config 4340` and `free -m` (~2 GB) before continuing.
-- [ ] **B0.4 Confirm the closure is built:**
+- [ ] **B.3 Drop the database and role by hand.** ⚠️ `ensureDatabases` only ever
+      **creates** — removing `attic` from the list does not drop anything. The
+      database, its role and its index will sit on the `database` host until
+      dropped explicitly:
       ```bash
-      nix build --no-link --print-out-paths '.#nixosConfigurations.cache.config.system.build.toplevel'
+      ssh amadeus@192.168.2.134
+      sudo -u postgres psql -c 'DROP DATABASE attic;'
+      sudo -u postgres psql -c 'DROP ROLE attic;'
       ```
-- [ ] **B0.5** Nothing else on this guest is stateful: `/home` is 544 KB and
-      `/var/lib/garage` is 4.0 KB (garage is inactive — see "Garage is dead
-      weight"). The 15 G `/nix/store` rebuilds itself.
-
-### B1 · Reinstall onto XFS (destructive)
-
-- [ ] **B1.1** `ssh-keygen -R 192.168.2.175`
-- [ ] **B1.2** `just deploy cache 192.168.2.175` (type `cache` at the prompt).
-      Full config, not `deploy-minimal`: static IP, same reasoning as A2.2.
-      After B0.3 the target is a fresh Debian cloud image rather than the old
-      NixOS host, which is the normal nixos-anywhere starting point.
-- [ ] **B1.3** Confirm the format:
-      ```bash
-      ssh amadeus@192.168.2.175 'findmnt -no FSTYPE,SIZE /; lsblk -o NAME,SIZE,FSTYPE'
-      # expect: xfs, ~45G root, 4G swap partition
-      ```
-
-### B2 · agenix re-key (six secrets, not three)
-
-- [ ] **B2.1** `just get-host-key 192.168.2.175`, replace `hostCache` in
-      `secrets/secrets.nix:9`.
-- [ ] **B2.2** Re-encrypt, same cautions as A3.2:
-      ```bash
-      cd secrets
-      agenix -e attic-db-url.age -i ~/.config/age/keys.txt
-      agenix -e attic-server-token.age -i ~/.config/age/keys.txt
-      agenix -e garage-rpc-secret.age -i ~/.config/age/keys.txt
-      agenix -e attic-push-token.age -i ~/.config/age/keys.txt
-      agenix -e tailscale-auth-key.age -i ~/.config/age/keys.txt
-      agenix -e fleet-enroll-secret.age -i ~/.config/age/keys.txt
-      ```
-- [ ] **B2.3** `just colmena-apply-host cache`
-- [ ] **B2.4** Verify `/run/agenix/` is populated. `atticd` **will not start**
-      without `attic-db-url` — it panics with an explicit message if the env var
-      is missing (`hosts/cache/attic/default.nix`), which is the good failure.
-
-### B3 · Restore the NAR storage
-
-- [ ] **B3.1 Stop atticd** before writing into its state dir:
-      `sudo systemctl stop atticd`
-- [ ] **B3.2 Restore, then chown by NAME** — this is the step that bites.
-      `hosts/cache/attic/default.nix` already runs atticd as a **static**
-      `atticd` user (`DynamicUser = no`), precisely because the upstream
-      DynamicUser default once broke this host: state written as uid 65534 came
-      back as uid 65312 and every upload failed with `Failed to read version
-      file: Permission denied`, since `storage/VERSION` is mode 0600.
-      **That fix does not survive a reinstall on its own.** `isSystemUser`
-      allocates the numeric uid at activation and records it in
-      `/var/lib/nixos/uid-map` — which the wipe destroys — so the fresh install
-      can pick a different number. Today it is **uid 993 / gid 990**; do not
-      assume it comes back as that.
-      ```bash
-      sudo rsync -aHAX --numeric-ids /path/to/atticd-storage-backup/ /var/lib/atticd/storage/
-      sudo chown -R atticd:atticd /var/lib/atticd     # by NAME, never by number
-      sudo systemctl start atticd
-      ```
-      `--numeric-ids` on the restore preserves the *old* uid, which is why the
-      chown-by-name afterwards is mandatory rather than belt-and-braces.
-- [ ] **B3.3 Verify storage and index agree** — pick a store path the cache
-      already knows and fetch it end to end, rather than trusting a green unit:
-      ```bash
-      curl -sS -o /dev/null -w '%{http_code}\n' https://cache.homelab.local/health   # 200
-      nix path-info --store https://cache.homelab.local/homelab <some-cached-path>
-      ```
-      A narinfo hit followed by a NAR 404 is exactly the desync from trap 1.
-
-### B4 · Tailscale + certificates
-
-- [ ] **B4.1** Delete the stale `homelab-cache` node, approve the new one. No
-      subnet route on this host — simpler than A4.
-- [ ] **B4.2** `curl -sS -o /dev/null -w '%{http_code}\n' https://cache.homelab.local/health`
-      → 200. Same `badNonce` recovery as A5.1 if it sits at 000.
-- [ ] **B4.3** Confirm `development` can substitute from it again (it is the only
-      importer of `modules/attic-cache.nix`).
-- [ ] **B4.4** Trigger a push from any host and confirm it lands:
-      `sudo systemctl start attic-push-system.service`, then check its journal.
-      Remember pushes fail silently by design (`|| true`), so read the unit
-      rather than the deploy output.
+- [ ] **B.4 Remove the old dumps.** The nightly job stops on its own, but the
+      dumps it already wrote do not:
+      `sudo rm -f /var/backup/postgresql/attic.sql*` on the `database` host.
+- [ ] **B.5 Check the PBS backup job.** PBS is **not managed by this repo**, so
+      nothing above touches it. If its VM-backup job lists **4340**, remove it
+      there. (A job listing a guest that no longer exists silently no-ops, the
+      same way it does for HA's VM 208 — so this is tidiness, not an outage.)
+- [ ] **B.6 Delete the `homelab-cache` Tailscale node** at
+      <https://login.tailscale.com/admin/machines>.
+- [ ] **B.7 Confirm the monitoring went quiet.** `homelab-cache` should vanish
+      from Prometheus targets and the blackbox probe list, and the dashboard
+      should no longer show an "Attic Cache" tile. No alert should fire for the
+      disappearance — that is the point of removing the targets rather than
+      letting them go red.
+- [ ] **B.8 Optional cleanup, deliberately left undone.** `hostCache` is still a
+      recipient in `secrets/secrets.nix` (including the `users` list) and the
+      5 attic/garage `.age` files are still committed. They are inert — a dead
+      recipient costs nothing but a stale entry — and keeping them means a
+      revival needs no re-keying. Remove them only if you decide the cache is
+      never coming back.
 
 ---
 
 ## Part C — Fold the findings back
 
-- [ ] **C.1** Tick both hosts off Phase 2 in
-      [`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md).
+- [ ] **C.1** Tick `dns` off Phase 2 in
+      [`ssd-tier-for-vm-storage.md`](./ssd-tier-for-vm-storage.md), and note that
+      `cache`'s 200 G came back to `ssd_pool` rather than being migrated.
 - [ ] **C.2** Record the measured `dns` move time and any before/after IOPS —
-      that table is the evidence base for moving the remaining ~16 root disks.
-- [ ] **C.3** Decide whether `cache` keeps the 2 GB from B0.3, and whether `dns`
-      gets `floating = dedicated`. Every guest that hit balloon starvation here
-      (`harbor`, `forgejo`, `woodpecker`, `k3s-cntrl-1`) ended up pinned — but a
-      pinned guest is a balloon **non-donor**, so weigh it against
+      that table is the evidence base for moving the remaining root disks.
+- [ ] **C.3** Decide whether `dns` gets `floating = dedicated`. Every guest that
+      hit balloon starvation here (`harbor`, `forgejo`, `woodpecker`,
+      `k3s-cntrl-1`) ended up pinned — but a pinned guest is a balloon
+      **non-donor**, so weigh it against
       [`pve-gigabyte-memory-oversubscription.md`](./pve-gigabyte-memory-oversubscription.md).
-- [ ] **C.4** Consider removing the dead Garage module and `garage-rpc-secret.age`.
+      Destroying the cache VM gives back 1 GB, which makes this cheaper than it was.
+- [ ] **C.4** If the cache is ever revived, revive it *without* Garage — that
+      module was `inactive` with 4 KB of data, because atticd used
+      `storage.type = "local"`, not S3.
 
 ---
 
@@ -430,11 +313,15 @@ Phase A1 equivalent — the `discard = "on"` addition applies on the next
 
 - **`dns`, after A1 and before A2:** revert `datastore_id` to `zfs_pool` and
   apply. The guest never stopped; nothing was lost.
-- **Either host, once the reinstall starts:** there is no rollback, only forward
-  — the disk is wiped the moment disko runs. Recovery is the same command again.
-  `dns` is stateless (A0.4), so a second `just deploy` is a complete fix.
-  `cache` is a complete fix **only if B0.1 was done**; without that backup, the
-  4.1 GB is gone and you must reset the Postgres index too, or the cache lies.
+- **`dns`, once the reinstall starts:** no rollback, only forward — the disk is
+  wiped the moment disko runs. The guest is stateless (A0.4), so a second
+  `just deploy dns 192.168.2.145` is a complete fix.
 - **If DNS stays down and you need the lab back now:** other hosts survive on
   their `serve-expired` stubs plus the `192.168.2.1` fallback. Colmena targets
   `dns` by raw IP, so you can always redeploy the resolver without the resolver.
+- **`cache`, after B.2:** the VM and its 4.1 GB of NAR storage are gone. Reviving
+  means uncommenting the flake node, restoring the `iac/main.tf` resource, and
+  running `just attic-init` — which the 2026-08-02 notes flag as *written but
+  never executed, treat as unverified*. Do **not** revive the Postgres index
+  without the storage, or the cache serves narinfos for NARs that no longer
+  exist — a lying cache, worse than no cache.

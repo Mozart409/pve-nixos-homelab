@@ -121,8 +121,6 @@
           ''"ca.homelab.internal. A 192.168.2.160"''
           # Homelab services with step-ca certificates
           ''"ca.homelab.local. A 192.168.2.160"''
-          ''"cache.homelab.internal. A 192.168.2.175"''
-          ''"cache.homelab.local. A 192.168.2.175"''
           ''"ci.homelab.internal. A 192.168.2.182"''
           # WOODPECKER_HOST -- the name baked into OAuth redirects and webhooks.
           ''"ci.homelab.local. A 192.168.2.182"''
@@ -237,7 +235,6 @@
           ''"192.168.2.160 ca.homelab.local"''
           ''"192.168.2.164 fleet.homelab.local"''
           ''"192.168.2.174 harbor.homelab.local"''
-          ''"192.168.2.175 cache.homelab.local"''
           ''"192.168.2.178 forgejo.homelab.local"''
           ''"192.168.2.180 hofvarpnir.homelab.local"''
           ''"192.168.2.180 jellyfin.homelab.local"''

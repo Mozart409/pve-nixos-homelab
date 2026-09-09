@@ -24,7 +24,6 @@ in {
     ../../modules/repo-sync.nix
     ../../modules/claude-permissions.nix
     ../../modules/claude-settings-verify.nix
-    ../../modules/attic-cache.nix
     ../../modules/forgejo-cli.nix
   ];
 
@@ -242,11 +241,12 @@ in {
     mode = "0400";
   };
 
-  # Attic push token + login + auto-push-on-activation now come from
-  # modules/attic-push.nix, imported fleet-wide from flake.nix's mkHost. Used to
-  # be defined here inline; moved out so every host gets the same push setup
-  # instead of just this one. (It reached hosts via modules/comin.nix until comin
-  # was removed on 2026-09-08.)
+  # The attic push token / login / auto-push-on-activation is gone: the cache VM
+  # was decommissioned 2026-09-09 (iac/main.tf) and modules/attic-push.nix is no
+  # longer imported anywhere. This host is one of the two that still evaluates
+  # the flake locally (`just self-deploy`, agent `nix develop`), so if GitHub
+  # starts returning 429 on flake-input tarballs, add a token to
+  # `nix.settings.access-tokens` here rather than reviving the cache.
 
   # Forgejo API token for the `developmentbot` account (env-file:
   # FORGEJO_TOKEN=...). Needed ONLY to create repos over the REST API — git

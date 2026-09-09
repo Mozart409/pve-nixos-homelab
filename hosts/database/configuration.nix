@@ -126,14 +126,6 @@ in {
     group = "postgres";
   };
 
-  # attic (binary cache index) database password. The same password is embedded
-  # in attic-db-url.age on the cache host — rotating it means re-encrypting both.
-  age.secrets.attic-db-password = {
-    file = ../../secrets/attic-db-password.age;
-    owner = "postgres";
-    group = "postgres";
-  };
-
   # pgAdmin initial (internal fallback) admin password and Pocket-ID OAuth2 client
   # secret. Both are consumed by the pgAdmin service below via systemd credentials
   # (root-owned 0400 by default is fine: systemd reads them during unit setup).
@@ -287,7 +279,10 @@ in {
     # writer, reachable only through its own pgmcp instance, and both were
     # dropped. Removing it here does NOT drop the live database or role --
     # ensureDatabases only ever creates. See the note in hosts/mcp_vm.
-    ensureDatabases = ["appdb" "terraform" "forgejo" "romm" "hofvarpnir" "attic" "futo_notes"];
+    # `attic` removed 2026-09-09 with the cache VM (iac/main.tf). Dropping it
+    # here also drops its nightly dump, because services.postgresqlBackup below
+    # derives its database list from this one.
+    ensureDatabases = ["appdb" "terraform" "forgejo" "romm" "hofvarpnir" "futo_notes"];
 
     # Initial users
     ensureUsers = [
@@ -309,12 +304,6 @@ in {
       }
       {
         name = "hofvarpnir";
-        ensureDBOwnership = true;
-      }
-      # atticd on the cache host. Owns its database because sea-orm runs schema
-      # migrations at startup, so it needs DDL rights, not just DML.
-      {
-        name = "attic";
         ensureDBOwnership = true;
       }
       # Read-only role for the pgmcp MCP servers. No ensureDBOwnership: it owns
@@ -373,11 +362,9 @@ in {
     };
   };
 
-  # atticd on the cache host. See the ordering gotcha on mkRolePasswordUnit.
-  #
-  # migrationRoleTimeouts (below) exempts a role from the three cluster
+  # migrationRoleTimeouts exempts a role from the three cluster
   # defaults that can abort work mid-flight. Every service role here runs its
-  # own schema migrations on connect or at startup -- sea-orm for atticd, xorm
+  # own schema migrations on connect or at startup -- xorm
   # for forgejo, alembic for romm/hofvarpnir -- and a migration on a 78-IOPS
   # HDD pool legitimately outruns statement_timeout, takes ACCESS EXCLUSIVE
   # locks that outrun lock_timeout, and wraps the whole thing in one
@@ -388,12 +375,8 @@ in {
   # one pathology that compounds (a pinned xmin horizon blocks autovacuum, and
   # the resulting bloat costs IOPS this pool does not have), and no correct
   # client idles two minutes inside an open transaction.
-  systemd.services.postgresql-attic-password = mkRolePasswordUnit {
-    role = "attic";
-    description = "Set attic PostgreSQL user password";
-    secret = config.age.secrets.attic-db-password;
-    timeouts = migrationRoleTimeouts;
-  };
+  # (The attic role's unit lived here until 2026-09-09, when the cache VM was
+  # decommissioned -- see iac/main.tf.)
 
   # terraform additionally needs idle_session_timeout off: the `pg` backend
   # takes its state lock as a SESSION-level advisory lock and then sits idle
