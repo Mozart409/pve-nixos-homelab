@@ -119,11 +119,15 @@ Infrastructure:
 - ✅ `ca` rescued from the pending wedge (`sfdisk` + `btrfs resize`; 19 GiB
       device, 3.5 GiB unallocated, metadata 61.9 %), memory raised to 2 GB and
       its step-ca Badger DB repaired after the reboot — no longer urgent
-- ⬜ **agenix re-key for `dns`** — `secrets.nix` has the new `hostDns`, but
-      `tailscale-auth-key.age` and `fleet-enroll-secret.age` still need
-      re-encrypting; `/run/agenix/` on the host is empty until then
-- ⬜ Tailscale: approve the new `dns` node **and its `192.168.2.0/24` subnet
-      route** (A4)
+- ✅ agenix re-keyed for `dns` — new `hostDns` in `secrets.nix`, both
+      `tailscale-auth-key.age` and `fleet-enroll-secret.age` re-encrypted, both
+      decrypting on the host, `colmena apply` reports **Activation successful**
+- ✅ Tailscale — node renamed back to `homelab-dns` (it joined as
+      `homelab-dns-1`), approved, and `192.168.2.0/24` re-approved.
+      `AdvertiseRoutes` confirms the route is live
+- ✅ Both Caddy vhosts serving: `https://dns.homelab.local` **200** (step-ca) and
+      `https://homelab-dns.dropbear-butterfly.ts.net` **200** (tailscale cert,
+      after one `systemctl restart caddy` following the rename)
 - ⬜ Fleet `colmena apply` — `dns` can now be included, Part A is done
 - ⬜ Drop the `attic` + `futo_notes` databases on `database` (B.3/B.4)
 - ⬜ Part C (`ca` → XFS)
