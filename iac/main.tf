@@ -201,7 +201,7 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
   tags        = ["terraform", "debian", "nixos-target", "dns"]
 
   node_name = "pve-gigabyte"
-  vm_id     = 326
+  vm_id     = 4326
 
   bios = "seabios"
 
