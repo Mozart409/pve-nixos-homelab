@@ -128,8 +128,22 @@ Infrastructure:
 - ✅ Both Caddy vhosts serving: `https://dns.homelab.local` **200** (step-ca) and
       `https://homelab-dns.dropbear-butterfly.ts.net` **200** (tailscale cert,
       after one `systemctl restart caddy` following the rename)
-- ⬜ Fleet `colmena apply` — `dns` can now be included, Part A is done
-- ⬜ Drop the `attic` + `futo_notes` databases on `database` (B.3/B.4)
+- ✅ Fleet `colmena apply` — all 10 nodes evaluated, pushed and activated (20 min
+      wall clock; `otel` took 17 min and `ca` 10 min, both still on `zfs_pool`)
+- ✅ Five unreachable hosts commented out of `colmenaHive` first — `hermes`,
+      `fleet`, `harbor`, `woodpecker`, `k3s-cntrl-1` all failed with "No route to
+      host". Only the **hive entry** is commented; `hostAddrs` and
+      `nixosConfigurations` are untouched, so the configs still evaluate and
+      `just deploy` still works. That is the existing `zeroclaw` precedent.
+- ✅ Dropped `attic` + `futo_notes` (B.3/B.4) — both databases, both roles and
+      all four `.sql.zstd` dumps. The backup timers had already disappeared with
+      the deploy, leaving only `appdb`, `hofvarpnir`, `romm`, `terraform`.
+- ✅ `homelab-cache` already gone from the tailnet (B.6)
+- ✅ Monitoring quiet (B.7) — no `cache`/`futo`/`notes` target, probe or cert
+      subject left in Prometheus, and no alert fired for the disappearance
+- ⬜ B.5 PBS/PVE backup job — **blocked**: Tailscale SSH to `pve-gigabyte` wants
+      an interactive browser check. Note the VMID list lives in PVE's
+      `/etc/pve/jobs.cfg`, not on PBS.
 - ⬜ Part C (`ca` → XFS)
 
 ---
@@ -412,9 +426,9 @@ The nightly `attic` dump also stops **by construction**:
 `config.services.postgresql.ensureDatabases`, so dropping `attic` from that list
 drops its backup with it — no second edit, and no stale backup unit left behind.
 
-### Operator steps (not started)
+### Operator steps (done 2026-09-09, except B.5)
 
-- [ ] **B.1 Deploy the fleet, minus `dns`.** Every host keeps its
+- [x] **B.1 Deploy the fleet, minus `dns`.** Every host keeps its
       `attic-login`/`attic-push-system` units and its `cache.homelab.local`
       substituter until redeployed. **Exclude `dns`** — see Ordering hazard 1;
       its config now described a disk it did not have. **Part A is done, so
@@ -437,7 +451,7 @@ drops its backup with it — no second edit, and no stale backup unit left behin
       `ssd_pool`, 20 → 32 GB). That is fine and desirable — just know both
       changes land in the same apply, and that destroying the cache while the
       fleet still points at it is hazard 2.
-- [ ] **B.3 Drop the database and role by hand.** ⚠️ `ensureDatabases` only ever
+- [x] **B.3 Drop the database and role by hand.** ⚠️ `ensureDatabases` only ever
       **creates** — removing `attic` from the list does not drop anything. The
       database, its role and its index will sit on the `database` host until
       dropped explicitly:
@@ -446,16 +460,16 @@ drops its backup with it — no second edit, and no stale backup unit left behin
       sudo -u postgres psql -c 'DROP DATABASE attic;'
       sudo -u postgres psql -c 'DROP ROLE attic;'
       ```
-- [ ] **B.4 Remove the old dumps.** The nightly job stops on its own, but the
+- [x] **B.4 Remove the old dumps.** The nightly job stops on its own, but the
       dumps it already wrote do not:
       `sudo rm -f /var/backup/postgresql/attic.sql*` on the `database` host.
 - [ ] **B.5 Check the PBS backup job.** PBS is **not managed by this repo**, so
       nothing above touches it. If its VM-backup job lists **4340**, remove it
       there. (A job listing a guest that no longer exists silently no-ops, the
       same way it does for HA's VM 208 — so this is tidiness, not an outage.)
-- [ ] **B.6 Delete the `homelab-cache` Tailscale node** at
+- [x] **B.6 Delete the `homelab-cache` Tailscale node** at
       <https://login.tailscale.com/admin/machines>.
-- [ ] **B.7 Confirm the monitoring went quiet.** `homelab-cache` should vanish
+- [x] **B.7 Confirm the monitoring went quiet.** `homelab-cache` should vanish
       from Prometheus targets and the blackbox probe list, and the dashboard
       should no longer show an "Attic Cache" tile. No alert should fire for the
       disappearance — that is the point of removing the targets rather than
@@ -562,6 +576,28 @@ deploys. **Change the import immediately before C2, not before.**
 - [ ] **D.4** If the cache is ever revived, revive it *without* Garage — that
       module was `inactive` with 4 KB of data, because atticd used
       `storage.type = "local"`, not S3.
+- [ ] **D.5** **A `dns` outage wedges ACME renewal fleet-wide, and it does not
+      self-heal.** While `dns` was down (16:05–16:14) every Caddy that happened
+      to be inside its renewal window failed with `lookup ca.homelab.local:
+      Temporary failure in name resolution` and backed off to
+      `"retrying_in": 21600` — a **6-hour, in-process** timer. Fixing DNS does
+      not shorten it. `database` was left with `database.homelab.internal` and
+      `pgadmin.homelab.internal` at **0.98 days** of validity; the
+      `CertificateExpiringSoon` alert (which already says "restart caddy on the
+      serving host") is what caught it. `systemctl restart caddy` clears the
+      backoff.
+
+      Two things to check before believing this alert next time:
+
+      - **`ca.homelab.local:8443/health` sitting at ~1 day is normal.** step-ca
+        self-issues a 24 h leaf and rotates it; it read 0.90 days five days
+        earlier too. Do not treat it as a casualty of the outage.
+      - The real signal is a host whose *other* certs are at 15–21 days while a
+        couple sit near zero — that is the wedge, not a fleet-wide expiry.
+
+      Worth considering: an alert on `caddy` renewal *failures* rather than only
+      on the resulting expiry would have caught this at 16:05 instead of at
+      0.98 days remaining.
 
 ---
 
