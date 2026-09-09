@@ -501,7 +501,29 @@ deploys. **Change the import immediately before C2, not before.**
       A2.2). Confirm afterwards with
       `findmnt -no FSTYPE,SIZE /` → `xfs`, ~15 G root, 4 G swap partition.
 - [ ] **C3 · Restore step-ca state**, then verify a real issuance end to end —
-      not just that the unit is green:
+      not just that the unit is green.
+
+      ⚠️ **Stop step-ca cleanly before the wipe, and expect to repair its Badger
+      DB if you don't.** An ungraceful stop leaves a torn tail in the value log
+      and step-ca then refuses to start at all:
+      ```
+      badger WARNING: Truncate Needed. File …/db/000000.vlog size: 214233088 Endoffset: 214233040
+      Error opening database of Type badgerv2: … Value log truncate required to run DB
+      ```
+      This happened on the 2026-09-09 reboot. The fix is to trim the file to the
+      `Endoffset` badger prints (48 bytes there) after backing the DB up:
+      ```bash
+      sudo systemctl stop step-ca
+      sudo cp -a /var/lib/step-ca/db /root/step-ca-db.bak-$(date +%F-%H%M)
+      sudo truncate -s <Endoffset> /var/lib/step-ca/db/000000.vlog
+      sudo systemctl reset-failed step-ca && sudo systemctl start step-ca
+      ```
+      The discarded tail is an uncommitted record, and **the CA's key material is
+      not in Badger** — `certs/{root,intermediate}_ca.crt` and
+      `secrets/{root,intermediate}_ca_key` are plain files, so the CA identity is
+      never at risk from this. Back those up separately regardless.
+
+      Then confirm it actually serves:
       ```bash
       curl -sS -o /dev/null -w '%{http_code}\n' https://ca.homelab.local:8443/health
       ```
