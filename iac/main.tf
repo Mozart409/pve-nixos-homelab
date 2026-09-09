@@ -217,11 +217,30 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
     floating  = 768
   }
 
+  # ssd_pool, not zfs_pool: this guest is the resolver every other host and
+  # every colmena deploy depends on, and zfs_pool is a single 2-HDD mirror
+  # (~78 IOPS shared cluster-wide) that stalls every guest together under load.
+  # The bpg provider updates datastore_id IN PLACE via Proxmox's online
+  # move-disk API -- it does not replace the resource -- so this relocates the
+  # existing zvol rather than discarding it. (The guest is being reinstalled
+  # anyway to swap btrfs for XFS, since disko only runs under nixos-anywhere;
+  # see todo/dns-ssd-xfs-migration.md.)
+  #
+  # size was 16 here while the live disk had already been grown to 20 GB, so a
+  # plan would have tried to shrink it and failed -- the provider cannot shrink.
+  # 32 both corrects that drift and gives headroom: the btrfs root was at 89%
+  # (14G of 15G), which is what the recent journal-cap and GC-aggression commits
+  # were fighting. The XFS layout spends 1G on /boot and 4G on swap, so this
+  # leaves ~27G of root.
+  #
+  # discard = "on" is what lets the weekly services.fstrim in disko-xfs.nix
+  # reach ZFS; without it the guest frees blocks and the zvol stays inflated.
   disk {
-    datastore_id = "zfs_pool"
+    datastore_id = "ssd_pool"
     file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
-    size         = 16
+    size         = 32
+    discard      = "on"
   }
 
   network_device {

@@ -6,7 +6,14 @@
 }: {
   imports = [
     ../../modules/common.nix
-    ../../modules/disko-config.nix
+    # XFS root on ssd_pool, not the old btrfs-on-zfs_pool layout
+    # (modules/disko-config.nix). Two reasons, both covered in disko-xfs.nix:
+    # the guest disk is a zvol, so btrfs stacked a second CoW+compression layer
+    # on ZFS's; and this root is the resolver every other host depends on, so it
+    # has no business sharing the ~78 IOPS 2-HDD zfs_pool. Switching the format
+    # needs a nixos-anywhere reinstall -- disko never runs during `colmena
+    # apply`. See todo/dns-ssd-xfs-migration.md.
+    ../../modules/disko-xfs.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
