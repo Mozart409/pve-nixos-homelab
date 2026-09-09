@@ -5,37 +5,37 @@ default:
     just --choose
 
 fmt:
-  alejandra .
+    alejandra .
 
 clear:
-  clear 2>/dev/null || true
+    clear 2>/dev/null || true
 
 shell:
-  nix develop . --command zsh
+    nix develop . --command zsh
 
 # Sync main against both git remotes: fetch, fast-forward/merge, then push
 # origin (Forgejo, canonical) first and github second. See scripts/sync-remotes.sh.
 sync-remotes:
-  @./scripts/sync-remotes.sh
+    @./scripts/sync-remotes.sh
 
 check: clear
-  nix flake check --all-systems
+    nix flake check --all-systems
 
 # NixOS configuration commands
 nixos-check:
-  @echo "Checking all NixOS configurations..."
-  nix flake check
+    @echo "Checking all NixOS configurations..."
+    nix flake check
 
 nixos-test host:
-  @echo "Dry building {{host}} configuration..."
-  nix build .#nixosConfigurations.{{host}}.config.system.build.toplevel --dry-run
+    @echo "Dry building {{ host }} configuration..."
+    nix build .#nixosConfigurations.{{ host }}.config.system.build.toplevel --dry-run
 
 # Boots a real QEMU VM from hosts/<host>/configuration.nix and checks its
 # primary services come up. Heavier than `nixos-test` (a dry-run eval) --
 # see AGENTS.md's "nixosTest Integration Tests" section for scope/limits.
 nixos-test-vm host: clear
-  @echo "Running nixosTest VM for {{host}}..."
-  nix build .#nixosTests.x86_64-linux.{{host}} -L
+    @echo "Running nixosTest VM for {{ host }}..."
+    nix build .#nixosTests.x86_64-linux.{{ host }} -L
 
 # "Too many authentication failures" during an install is a CLIENT problem, not
 # a broken target. ssh offers every key in the agent (4 here: amadeus@wotan,
@@ -66,8 +66,8 @@ nixos-test-vm host: clear
 # disks) — only for turning a bare VM into minimal NixOS. Never run against an
 # already-provisioned host; for config changes use colmena-apply-host instead.
 deploy-minimal ip:
-  @echo "Deploying minimal to {{ip}}..."
-  nixos-anywhere --flake .#minimal amadeus@{{ip}}
+    @echo "Deploying minimal to {{ ip }}..."
+    nixos-anywhere --flake .#minimal amadeus@{{ ip }}
 
 # DESTRUCTIVE: reinstalls the OS from scratch via nixos-anywhere (disko wipes ALL
 # disks). For a config change to an already-installed host use colmena-apply-host.
@@ -80,24 +80,24 @@ deploy-minimal ip:
 # When the target is ALREADY booted into an installer -- e.g. the ISO from
 # `just iso-build`, which carries the amadeus SSH key -- skip it:
 #
-#   just deploy dns 192.168.2.145 --phases disko,install,reboot
+# just deploy dns 192.168.2.145 --phases disko,install,reboot
 deploy host ip *ARGS:
-  #!/usr/bin/env bash
-  set -euo pipefail
-  echo ""
-  echo "⚠️  DESTRUCTIVE: 'just deploy' runs nixos-anywhere and REINSTALLS the OS on"
-  echo "   {{host}} ({{ip}}) — disko reformats ALL disks. Everything on the target is"
-  echo "   destroyed: /var/lib app data, ZFS pools, the host SSH key (breaks agenix)."
-  echo ""
-  echo "   Only meant to turn a bare/minimal VM into {{host}}. To apply a CONFIG change"
-  echo "   to an already-running host, cancel and use:  just colmena-apply-host {{host}}"
-  echo ""
-  if [ "${CONFIRM:-}" != "{{host}}" ]; then
-    read -rp "   Type the host name '{{host}}' to REINSTALL it (anything else aborts): " reply
-    [ "$reply" = "{{host}}" ] || { echo "Aborted."; exit 1; }
-  fi
-  echo "Deploying {{host}} to {{ip}}..."
-  nixos-anywhere {{ARGS}} --flake .#{{host}} amadeus@{{ip}}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo ""
+    echo "⚠️  DESTRUCTIVE: 'just deploy' runs nixos-anywhere and REINSTALLS the OS on"
+    echo "   {{ host }} ({{ ip }}) — disko reformats ALL disks. Everything on the target is"
+    echo "   destroyed: /var/lib app data, ZFS pools, the host SSH key (breaks agenix)."
+    echo ""
+    echo "   Only meant to turn a bare/minimal VM into {{ host }}. To apply a CONFIG change"
+    echo "   to an already-running host, cancel and use:  just colmena-apply-host {{ host }}"
+    echo ""
+    if [ "${CONFIRM:-}" != "{{ host }}" ]; then
+      read -rp "   Type the host name '{{ host }}' to REINSTALL it (anything else aborts): " reply
+      [ "$reply" = "{{ host }}" ] || { echo "Aborted."; exit 1; }
+    fi
+    echo "Deploying {{ host }} to {{ ip }}..."
+    nixos-anywhere {{ ARGS }} --flake .#{{ host }} amadeus@{{ ip }}
 
 # Shorthands. `cah <host>` takes the same argument as colmena-apply-host.
 alias ca := colmena-apply
@@ -107,36 +107,36 @@ alias cbh := colmena-build-host
 alias cs := colmena-current-system
 
 colmena-apply: clear
-  @echo "Deploying to all hosts..."
-  colmena apply
+    @echo "Deploying to all hosts..."
+    colmena apply
 
 colmena-apply-host host: clear
-  @echo "Deploying to {{host}}..."
-  colmena apply --on {{host}}
+    @echo "Deploying to {{ host }}..."
+    colmena apply --on {{ host }}
 
 colmena-apply-tag tag: clear
-  @echo "Deploying to hosts tagged with {{tag}}..."
-  colmena apply --on @{{tag}}
+    @echo "Deploying to hosts tagged with {{ tag }}..."
+    colmena apply --on @{{ tag }}
 
 colmena-build-host host: clear
-  @echo "Building {{host}} configurations..."
-  colmena build --on {{host}}
+    @echo "Building {{ host }} configurations..."
+    colmena build --on {{ host }}
 
 colmena-build: clear
-  @echo "Building all configurations..."
-  colmena build
+    @echo "Building all configurations..."
+    colmena build
 
 colmena-reboot host: clear
-  @echo "Rebooting {{host}}..."
-  colmena exec --on {{host}} -- sudo reboot
+    @echo "Rebooting {{ host }}..."
+    colmena exec --on {{ host }} -- sudo reboot
 
 colmena-current-system host: clear
-  @echo "Current system on {{host}}:"
-  ssh amadeus@{{host}}.homelab.internal readlink -f /run/current-system
+    @echo "Current system on {{ host }}:"
+    ssh amadeus@{{ host }}.homelab.internal readlink -f /run/current-system
 
 colmena-status: clear
-  @echo "Checking host status..."
-  colmena exec -- uptime
+    @echo "Checking host status..."
+    colmena exec -- uptime
 
 # Deploy the CURRENT host without SSH: builds into the local nix store and
 # switches in place. Run this ON the host itself — e.g. from development, where
@@ -144,59 +144,58 @@ colmena-status: clear
 # not resolve from itself. Runs the same agenix + home-manager activation as
 # colmena-apply-host.
 self-deploy host="development":
-  @echo "Self-deploying {{host}} with nixos-rebuild switch (no SSH)..."
-  sudo nixos-rebuild switch --flake .#{{host}}
+    @echo "Self-deploying {{ host }} with nixos-rebuild switch (no SSH)..."
+    sudo nixos-rebuild switch --flake .#{{ host }}
 
 # OpenTofu/IaC commands (run in iac/ directory)
-[working-directory: 'iac']
+[working-directory('iac')]
 iac-init: clear
-  tofu init
-[working-directory: 'iac']
+    tofu init
+[working-directory('iac')]
 iac-fmt: clear
-  tofu fmt
+    tofu fmt
 
-[working-directory: 'iac']
+[working-directory('iac')]
 iac-validate: iac-fmt
-  tofu validate
+    tofu validate
 
-[working-directory: 'iac']
+[working-directory('iac')]
 iac-plan: iac-fmt
-  tofu plan
+    tofu plan
 
-[working-directory: 'iac']
-iac-apply: iac-validate iac-plan
-  tofu apply
+[working-directory('iac')]
+iac-apply: iac-validate
+    tofu apply
 
-[working-directory: 'iac']
+[working-directory('iac')]
 iac-destroy: clear
-  tofu destroy
+    tofu destroy
 
 # Get SSH host key from a remote host (for agenix secrets.nix)
 get-host-key ip:
-  @echo "Getting SSH host key from {{ip}}..."
-  ssh amadeus@{{ip}} "cat /etc/ssh/ssh_host_ed25519_key.pub"
+    @echo "Getting SSH host key from {{ ip }}..."
+    ssh amadeus@{{ ip }} "cat /etc/ssh/ssh_host_ed25519_key.pub"
 
-
-[working-directory: 'secrets']
+[working-directory('secrets')]
 reencrypt: clear
-  agenix -r -i ~/.config/age/keys.txt
+    agenix -r -i ~/.config/age/keys.txt
 
 # Raspberry Pi SD image build (specify model: rpi4 or rpi5)
 rpi-build model: clear
-  @echo "Building Raspberry Pi {{model}} SD image (aarch64)..."
-  nix build '.#nixosConfigurations.{{model}}.config.system.build.sdImage' --show-trace
+    @echo "Building Raspberry Pi {{ model }} SD image (aarch64)..."
+    nix build '.#nixosConfigurations.{{ model }}.config.system.build.sdImage' --show-trace
 
 rpi-flash device: clear
-  @echo "Flashing SD image to {{device}}..."
-  @echo "WARNING: This will overwrite all data on {{device}}"
-  @read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
-  sudo dd if=result/sd-image/*.img of={{device}} bs=4096 conv=fsync status=progress
+    @echo "Flashing SD image to {{ device }}..."
+    @echo "WARNING: This will overwrite all data on {{ device }}"
+    @read -p "Continue? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
+    sudo dd if=result/sd-image/*.img of={{ device }} bs=4096 conv=fsync status=progress
 
 # Build a bootable minimal installer ISO. Output lands at result/iso/*.iso.
 # Not a deployable host -- just an image you can dd to a USB stick and boot.
 iso-build: clear
-  @echo "Building minimal installer ISO..."
-  nix build '.#nixosConfigurations.iso.config.system.build.isoImage' --show-trace
+    @echo "Building minimal installer ISO..."
+    nix build '.#nixosConfigurations.iso.config.system.build.isoImage' --show-trace
 
 # --- Attic binary cache (hosts/cache) -- RETIRED 2026-09-09 ----------------
 #
@@ -240,12 +239,12 @@ iso-build: clear
 #   echo "$token"
 #   echo
 #   just attic-info
-# 
+#
 # # Print the cache's public signing key — the value that belongs in
 # # modules/attic-cache.nix's `publicKey`.
 # attic-info:
 #   @ssh amadeus@192.168.2.175 "attic cache info homelab"
-# 
+#
 # # Push a closure to the cache. Defaults to this machine's current system.
 # # Builds land in the local store first; this uploads them for everyone else.
 # #
@@ -264,7 +263,7 @@ iso-build: clear
 # Build the CI image. Prints the store path of the image tarball (dockerTools
 # output); load it with podman for local testing or use ci-image-push.
 ci-image-build: clear
-  nix build '.#ci-image' --print-out-paths
+    nix build '.#ci-image' --print-out-paths
 
 # Load the freshly built CI image into podman and push it to Harbor so the
 # Woodpecker agent can pull it. The public `ci` project is provisioned
@@ -273,10 +272,10 @@ ci-image-build: clear
 # the Forgejo webhook on. Re-run whenever the toolset in flake.nix's
 # ci-image changes.
 ci-image-push: clear
-  #!/usr/bin/env bash
-  set -euo pipefail
-  out=$(nix build '.#ci-image' --print-out-paths)
-  podman load -i "$out"
-  podman tag pve-nixos-homelab-ci:latest harbor.homelab.local/ci/pve-nixos-homelab:latest
-  podman push harbor.homelab.local/ci/pve-nixos-homelab:latest
-  echo "==> pushed harbor.homelab.local/ci/pve-nixos-homelab:latest"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out=$(nix build '.#ci-image' --print-out-paths)
+    podman load -i "$out"
+    podman tag pve-nixos-homelab-ci:latest harbor.homelab.local/ci/pve-nixos-homelab:latest
+    podman push harbor.homelab.local/ci/pve-nixos-homelab:latest
+    echo "==> pushed harbor.homelab.local/ci/pve-nixos-homelab:latest"
