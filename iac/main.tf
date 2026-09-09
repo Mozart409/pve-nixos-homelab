@@ -852,6 +852,12 @@ resource "proxmox_virtual_environment_vm" "cache_vm" {
     file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
     interface    = "scsi0"
     size         = 200
+    # Added alongside the btrfs -> XFS switch (modules/disko-xfs.nix, which
+    # enables a weekly services.fstrim). Without it the guest frees blocks, the
+    # zvol never learns, and 200 G stays inflated on an 888 G pool. Only useful
+    # once the guest is actually running the XFS layout -- see
+    # todo/dns-cache-ssd-xfs-migration.md.
+    discard = "on"
   }
 
   network_device {
