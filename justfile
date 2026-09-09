@@ -49,9 +49,18 @@ nixos-test-vm host: clear
 # disabled -- ~/.ssh/id_ed25519 is passphrase-protected, so agent-less auth
 # fails outright.
 #
-# Two things that DO work: prune the agent to one key for the run
-# (`ssh-add -D && ssh-add ~/.ssh/id_ed25519`), or raise MaxAuthTries on the
-# target -- which is why hosts/iso/configuration.nix now sets it.
+# Pruning the agent does NOT work either, because the agent here is gpg-agent
+# with ssh support (SSH_AUTH_SOCK=/run/user/1000/gnupg/S.gpg-agent.ssh), which
+# serves keys from its own keyring: `ssh-add -D` clears the cache and all four
+# keys are back immediately. Nor can the agent be dropped -- the key is
+# passphrase-protected, so agent-less auth just fails.
+#
+# What DOES work is a private, throwaway agent holding exactly one key:
+#
+#   ssh-agent bash -c 'ssh-add ~/.ssh/id_ed25519 && just deploy dns <ip> --phases disko,install,reboot'
+#
+# The durable fix is server-side, which is why hosts/iso/configuration.nix now
+# sets MaxAuthTries = 20 -- it applies from the next `just iso-build` onward.
 
 # DESTRUCTIVE: reinstalls the OS from scratch via nixos-anywhere (disko wipes ALL
 # disks) — only for turning a bare VM into minimal NixOS. Never run against an
