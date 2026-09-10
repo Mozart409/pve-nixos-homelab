@@ -384,18 +384,6 @@
           }
         ];
       }
-      # Hermes host exporters
-      {
-        job_name = "hermes-node";
-        static_configs = [
-          {
-            targets = ["hermes.homelab.local:9100"];
-            labels = {
-              instance = "homelab-hermes";
-            };
-          }
-        ];
-      }
       # The k3s-server-1 / k3s-agent-1 node jobs were removed on 2026-08-15: both
       # machines are shut down and no longer deployed, and neither had reported
       # up == 1 in the preceding 30 days. They were scraped anyway, which cost
@@ -433,23 +421,6 @@
           }
         ];
       }
-      # Woodpecker CI host exporters
-      # Scrape interval raised to 5m: CI is typically idle between pipeline runs,
-      # so less frequent polling reduces overhead. Prometheus will still pick up
-      # metrics when pipelines are active.
-      {
-        job_name = "woodpecker-node";
-        scrape_interval = "5m";
-        scrape_timeout = "30s";
-        static_configs = [
-          {
-            targets = ["woodpecker.homelab.local:9100"];
-            labels = {
-              instance = "homelab-woodpecker";
-            };
-          }
-        ];
-      }
       # Development host exporters
       {
         job_name = "development-node";
@@ -478,42 +449,18 @@
           }
         ];
       }
-      # Fleet host exporters
-      {
-        job_name = "fleet-node";
-        static_configs = [
-          {
-            targets = ["fleet.homelab.local:9100"];
-            labels = {
-              instance = "homelab-fleet";
-            };
-          }
-        ];
-      }
-      # Harbor host exporters
-      {
-        job_name = "harbor-node";
-        static_configs = [
-          {
-            targets = ["harbor.homelab.local:9100"];
-            labels = {
-              instance = "homelab-harbor";
-            };
-          }
-        ];
-      }
-      # K3s control plane host exporters
-      {
-        job_name = "k3s-cntrl-1-node";
-        static_configs = [
-          {
-            targets = ["k3s-cntrl-1.homelab.local:9100"];
-            labels = {
-              instance = "homelab-k3s-cntrl-1";
-            };
-          }
-        ];
-      }
+      # Removed on 2026-09-10, for the same reason as the 2026-08-15 note above:
+      # homelab-hermes, homelab-harbor, homelab-woodpecker, homelab-fleet and
+      # homelab-k3s-cntrl-1 are all deliberately shut down and are not expected
+      # back. Their node jobs (hermes-node, harbor-node, woodpecker-node,
+      # fleet-node, k3s-cntrl-1-node), the woodpecker application job, and their
+      # http_2xx probes in ./blackbox.nix were scraped anyway, which left
+      # TargetDown and ProbeFailed firing permanently -- nine standing alerts,
+      # and a board that is always red is a board you stop reading. Host configs,
+      # flake entries, DNS records and the woodpecker-metrics-token secret are
+      # untouched; re-add the jobs here and the probes there if any of these
+      # hosts is redeployed.
+
       # The vllm job on wotan was removed on 2026-08-15 along with the k3s and
       # zeroclaw jobs above -- that host is down too. Re-add it here when wotan
       # comes back; the endpoint was wotan.homelab.local:10808.
@@ -569,44 +516,17 @@
           }
         ];
       }
-      # Woodpecker *application* metrics (queue depth, pending/running pipelines)
-      # -- distinct from the woodpecker-node job above, which is host-level.
-      #
-      # Two things to know about this endpoint:
-      #   1. It does not exist at all unless WOODPECKER_PROMETHEUS_AUTH_TOKEN is
-      #      set on the server. No token, no /metrics -- a 404, not a 401.
-      #   2. It is bearer-authenticated, and the token has to be on BOTH hosts:
-      #      on woodpecker inside woodpecker-server-env.age, and here as a bare
-      #      one-line file for prometheus. Hence its own .age rather than reusing
-      #      the server env file, which otel has no business decrypting.
-      #
-      # The server binds 127.0.0.1:8000, so the only route in is its Caddy vhost
-      # over HTTPS (step-ca cert, trusted here via modules/step-ca-trust.nix).
-      #
-      # Scrape interval raised to 5m: CI is typically idle between pipeline runs,
-      # so less frequent polling reduces overhead.
-      {
-        job_name = "woodpecker";
-        scrape_interval = "5m";
-        scrape_timeout = "30s";
-        scheme = "https";
-        metrics_path = "/metrics";
-        authorization.credentials_file = config.age.secrets.woodpecker-metrics-token.path;
-        static_configs = [
-          {
-            targets = ["ci.homelab.local"];
-            labels = {
-              instance = "homelab-woodpecker";
-            };
-          }
-        ];
-      }
     ];
   };
 
   # Bare token, no KEY=value wrapper -- prometheus reads the whole file as the
   # bearer credential (trailing whitespace trimmed). Must be byte-identical to
   # WOODPECKER_PROMETHEUS_AUTH_TOKEN in woodpecker-server-env.age.
+  #
+  # Nothing reads this since the woodpecker job was removed on 2026-09-10, and
+  # it is kept deliberately: the token is the fiddly half of that job (it has
+  # to match on both hosts, and without it the endpoint 404s rather than 401s),
+  # so re-adding the scrape config should not also mean re-deriving this.
   age.secrets.woodpecker-metrics-token = {
     file = ../../secrets/woodpecker-metrics-token.age;
     owner = "prometheus";

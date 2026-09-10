@@ -153,10 +153,6 @@
         url = "https://axon.homelab.internal/health";
         instance = "homelab-containers";
       }
-      {
-        url = "https://hermes.homelab.internal/health";
-        instance = "homelab-hermes";
-      }
       # Stays on .local, but no longer for the original reason. This entry used
       # to carry a note that forgejo's caddy had no usable cert for its
       # .internal name and aborted the handshake for that SNI, ending "fix the
@@ -172,14 +168,13 @@
         url = "https://forgejo.homelab.local";
         instance = "homelab-forgejo";
       }
-      {
-        url = "https://ci.homelab.internal";
-        instance = "homelab-woodpecker";
-      }
-      {
-        url = "https://harbor.homelab.internal";
-        instance = "homelab-harbor";
-      }
+      # The hermes, ci and harbor probes were removed on 2026-09-10 together
+      # with those hosts' scrape jobs in ./configuration.nix -- all three
+      # machines are deliberately shut down. A probe against a host that is not
+      # expected to answer is a permanent ProbeFailed warning, not monitoring.
+      # Re-add them here if the hosts come back; the URLs were
+      # https://hermes.homelab.internal/health, https://ci.homelab.internal and
+      # https://harbor.homelab.internal.
       {
         url = "https://searxng.homelab.internal";
         instance = "homelab-containers";
