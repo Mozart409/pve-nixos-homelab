@@ -114,6 +114,8 @@
           # interleaves these with the .local entries on commit.
           ''"albyhub.homelab.internal. A 192.168.2.149"''
           ''"albyhub.homelab.local. A 192.168.2.149"''
+          ''"alertmanager-mcp.homelab.internal. A 192.168.2.152"''
+          ''"alertmanager-mcp.homelab.local. A 192.168.2.152"''
           ''"alertmanager.homelab.internal. A 192.168.2.135"''
           ''"alertmanager.homelab.local. A 192.168.2.135"''
           ''"axon.homelab.internal. A 192.168.2.149"''
@@ -217,6 +219,7 @@
           ''"192.168.2.149 dashboard.homelab.local"''
           ''"192.168.2.149 romm.homelab.local"''
           ''"192.168.2.149 searxng.homelab.local"''
+          ''"192.168.2.152 alertmanager-mcp.homelab.local"''
           ''"192.168.2.152 loki-mcp.homelab.local"''
           ''"192.168.2.152 mcp.homelab.local"''
           ''"192.168.2.152 pbs-mcp.homelab.local"''
