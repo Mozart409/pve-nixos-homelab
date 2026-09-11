@@ -220,6 +220,9 @@
 
     # Secret-adjacent files that are safe to read (contain no secrets themselves).
     # deny > allow, so these must be allowed *and* not matched by a deny rule.
+    # The blanket secrets/** deny was removed (it shadowed the secrets.nix allow
+    # below); filetype rules (.env, *.pem, *.key, id_*, credentials*) still deny
+    # actual secret material inside secrets/ directories.
     # The deny list below denies specific .env.* variants (not a blanket .env.*)
     # so .env.example remains readable.
     "Read(//home/amadeus/code/**/secrets.nix)"
@@ -261,7 +264,6 @@
     "Read(//home/amadeus/code/**/.env.secret)"
     "Read(//home/amadeus/code/**/.env.secret.*)"
     "Read(//home/amadeus/code/**/*.env)"
-    "Read(//home/amadeus/code/**/secrets/**)"
     "Read(//home/amadeus/code/**/.secrets/**)"
     "Read(//home/amadeus/code/**/*.pem)"
     "Read(//home/amadeus/code/**/*.key)"
@@ -282,7 +284,6 @@
     "Edit(//home/amadeus/code/**/.env.secret)"
     "Edit(//home/amadeus/code/**/.env.secret.*)"
     "Edit(//home/amadeus/code/**/*.env)"
-    "Edit(//home/amadeus/code/**/secrets/**)"
     "Edit(//home/amadeus/code/**/.secrets/**)"
     "Edit(//home/amadeus/code/**/*.pem)"
     "Edit(//home/amadeus/code/**/*.key)"
