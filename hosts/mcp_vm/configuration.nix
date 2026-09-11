@@ -22,8 +22,16 @@
   # Both private zones are served for every name (see hosts/dns/configuration.nix):
   # Apple clients force *.local to mDNS and never ask a unicast resolver, so
   # homelab.internal is the reachable one from macOS/iOS over Tailscale split DNS.
-  # The Caddy vhost key lists both, so one cert carries both SANs; allowedHosts
-  # must list both too or the MCP server rejects the Host header Caddy passes on.
+  # The Caddy vhost key lists both names. Caddy issues one certificate *per
+  # hostname*, not per vhost, so each of these is two concurrent ACME orders
+  # against step-ca (two `issue_cert_*` locks in /var/lib/caddy). certmagic's
+  # retry backoff has no jitter, so once both fail together they retry in
+  # lockstep forever -- the badNonce storm seen 2026-09-11 for alertmanager-mcp,
+  # cleared only by restarting step-ca, not Caddy (todo/dns-cache-ssd-xfs-
+  # migration.md D.5). Both names also need A records in
+  # hosts/dns/configuration.nix before the vhost is deployed, or step-ca's
+  # challenge NXDOMAINs and Caddy sits in that same loop. allowedHosts must
+  # list both names too, or the MCP server rejects the Host header Caddy passes.
   vhostKey = base: "${base}.homelab.local ${base}.homelab.internal";
   vhostNames = base: ["${base}.homelab.local" "${base}.homelab.internal"];
 
