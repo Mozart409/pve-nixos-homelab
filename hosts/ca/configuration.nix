@@ -63,6 +63,16 @@
         dataSource = "/var/lib/step-ca/db";
       };
 
+      # Per-request logging to the journal. Without a logger block step-ca logs
+      # only its startup banner, so an ACME failure is visible solely from the
+      # client side -- on 2026-09-11 Caddy on mcp reported badNonce on every
+      # challenge POST for alertmanager-mcp while step-ca's journal had no
+      # entries at all for the same seconds. Each request now logs its method,
+      # path, status and duration.
+      logger = {
+        format = "json";
+      };
+
       authority = {
         provisioners = [
           # ACME provisioner for automatic certificate issuance (like Let's Encrypt)
