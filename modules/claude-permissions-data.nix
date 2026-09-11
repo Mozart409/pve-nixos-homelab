@@ -217,6 +217,13 @@
     # with a startup warning), so an Edit allow covers all file-editing tools.
     "Read(//home/amadeus/code/**)"
     "Edit(//home/amadeus/code/**)"
+
+    # Secret-adjacent files that are safe to read (contain no secrets themselves).
+    # deny > allow, so these must be allowed *and* not matched by a deny rule.
+    # The deny list below denies specific .env.* variants (not a blanket .env.*)
+    # so .env.example remains readable.
+    "Read(//home/amadeus/code/**/secrets.nix)"
+    "Read(//home/amadeus/code/**/.env.example)"
   ];
 
   # Grouped by what they protect, not sorted — the grouping is the documentation.
@@ -237,8 +244,22 @@
     # `cp .env.example .env` is refused without refusing `cp` itself. Write
     # path rules are omitted because Claude Code never consults them — Edit
     # rules govern every file-editing tool (Write/NotebookEdit included).
+    #
+    # .env.* variants are denied individually (not a blanket .env.*) so that
+    # .env.example — a template with no secrets — remains readable.
     "Read(//home/amadeus/code/**/.env)"
-    "Read(//home/amadeus/code/**/.env.*)"
+    "Read(//home/amadeus/code/**/.env.local)"
+    "Read(//home/amadeus/code/**/.env.local.*)"
+    "Read(//home/amadeus/code/**/.env.production)"
+    "Read(//home/amadeus/code/**/.env.production.*)"
+    "Read(//home/amadeus/code/**/.env.staging)"
+    "Read(//home/amadeus/code/**/.env.staging.*)"
+    "Read(//home/amadeus/code/**/.env.development)"
+    "Read(//home/amadeus/code/**/.env.development.*)"
+    "Read(//home/amadeus/code/**/.env.test)"
+    "Read(//home/amadeus/code/**/.env.test.*)"
+    "Read(//home/amadeus/code/**/.env.secret)"
+    "Read(//home/amadeus/code/**/.env.secret.*)"
     "Read(//home/amadeus/code/**/*.env)"
     "Read(//home/amadeus/code/**/secrets/**)"
     "Read(//home/amadeus/code/**/.secrets/**)"
@@ -248,7 +269,18 @@
     "Read(//home/amadeus/code/**/id_ed25519*)"
     "Read(//home/amadeus/code/**/credentials*)"
     "Edit(//home/amadeus/code/**/.env)"
-    "Edit(//home/amadeus/code/**/.env.*)"
+    "Edit(//home/amadeus/code/**/.env.local)"
+    "Edit(//home/amadeus/code/**/.env.local.*)"
+    "Edit(//home/amadeus/code/**/.env.production)"
+    "Edit(//home/amadeus/code/**/.env.production.*)"
+    "Edit(//home/amadeus/code/**/.env.staging)"
+    "Edit(//home/amadeus/code/**/.env.staging.*)"
+    "Edit(//home/amadeus/code/**/.env.development)"
+    "Edit(//home/amadeus/code/**/.env.development.*)"
+    "Edit(//home/amadeus/code/**/.env.test)"
+    "Edit(//home/amadeus/code/**/.env.test.*)"
+    "Edit(//home/amadeus/code/**/.env.secret)"
+    "Edit(//home/amadeus/code/**/.env.secret.*)"
     "Edit(//home/amadeus/code/**/*.env)"
     "Edit(//home/amadeus/code/**/secrets/**)"
     "Edit(//home/amadeus/code/**/.secrets/**)"
