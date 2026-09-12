@@ -156,6 +156,15 @@ in {
       work_mem = "4MB";
       max_connections = 100;
 
+      # Timezone. NixOS generates postgresql.conf from this attrset and drops
+      # the one initdb wrote -- the only place the system zone normally lands --
+      # so without these Postgres falls back to its compiled-in GMT: `now()`,
+      # `timestamp without time zone` casts and every log line ran on GMT while
+      # the host itself was Europe/Berlin (verified via pg_settings 2026-09-12,
+      # `source = default`). Keep in step with modules/common.nix time.timeZone.
+      timezone = config.time.timeZone;
+      log_timezone = config.time.timeZone;
+
       # Logging. This host's pool is 2 HDDs at ~78 IOPS cluster-wide (see the
       # pgadmin TimeoutStartSec note below), and journald fsyncs, so log volume
       # is a direct tax on the same spindles every query needs. `log_statement =
