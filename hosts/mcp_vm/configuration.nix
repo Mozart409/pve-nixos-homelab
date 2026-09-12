@@ -67,6 +67,13 @@
   # `appuser` (was 8086) is absent for the same reason: a scratch database with
   # no writer, whose only reader was this pgmcp instance. Database, role and
   # instance were all dropped. 8086 is free to reuse.
+  #
+  # The uptime-forge TimescaleDB instance (`pgmcp-server`, 8081, vhost
+  # pg-uptime-mcp, secret pg-mcp-uptime-url) went on 2026-09-12 when
+  # uptime-forge was retired on the containers host. That database lived in
+  # a podman volume there, not on the `database` host, so it never belonged
+  # in this attrset. The secret file is still in secrets/ (unreferenced);
+  # 8081 is free to reuse.
   homelabDatabases = {
     appdb = 8085;
     terraform = 8087;
@@ -85,7 +92,6 @@
       job = name;
     }) [
       "pbsmcp-server"
-      "pgmcp-server"
       "prommcp-server"
       "lokimcp-server"
       "hamcp-server"
@@ -151,9 +157,6 @@ in {
         # axon-gateway "hamcp" backend URL stays valid.
         ${vhostKey "mcp"} = mkMcpVhost 8084;
         ${vhostKey "pbs-mcp"} = mkMcpVhost 8080;
-        # Renamed from pg-mcp.homelab.local now that several Postgres MCP
-        # instances exist; this one is the uptime-forge TimescaleDB.
-        ${vhostKey "pg-uptime-mcp"} = mkMcpVhost 8081;
         ${vhostKey "prom-mcp"} = mkMcpVhost 8082;
         ${vhostKey "loki-mcp"} = mkMcpVhost 8083;
         ${vhostKey "wp-mcp"} = mkMcpVhost 8091;
@@ -171,9 +174,6 @@ in {
       pbs-mcp-token = {
         file = ../../secrets/pbs-mcp-token.age;
       };
-      pg-mcp-uptime-url = {
-        file = ../../secrets/pg-mcp-uptime-url.age;
-      };
       woodpecker-mcp-token = {
         file = ../../secrets/woodpecker-mcp-token.age;
       };
@@ -187,9 +187,9 @@ in {
     homelabDatabases;
 
   # Every MCP server from the homelab-mcp-servers monorepo, as hardened native
-  # systemd services (DynamicUser, secrets via LoadCredential). The five named
+  # systemd services (DynamicUser, secrets via LoadCredential). The named
   # instances below map 1:1 onto the workspace binaries; the generated
-  # pgmcp-<db>-server set reuses the pgmcp binary via `serverType`.
+  # pgmcp-<db>-server set is the only user of the pgmcp binary, via `serverType`.
   services.homelab-mcp.servers =
     {
       pbsmcp-server = {
@@ -199,17 +199,6 @@ in {
         tokenFile = config.age.secrets.pbs-mcp-token.path;
         bind = "127.0.0.1:8080";
         allowedHosts = vhostNames "pbs-mcp" ++ ["localhost" "127.0.0.1"];
-      };
-
-      # uptime-forge TimescaleDB (on the containers host).
-      pgmcp-server = {
-        enable = true;
-        package = mcpPackages.pgmcp-server;
-        # The full connection URL (with password) travels via tokenFile ->
-        # PG_DATABASE_URL; no host option needed.
-        tokenFile = config.age.secrets.pg-mcp-uptime-url.path;
-        bind = "127.0.0.1:8081";
-        allowedHosts = vhostNames "pg-uptime-mcp" ++ ["localhost" "127.0.0.1"];
       };
 
       prommcp-server = {
@@ -280,7 +269,7 @@ in {
 
   systemd.services =
     # Secret-consuming servers must wait for agenix to place the credentials.
-    lib.genAttrs (["pbsmcp-server" "pgmcp-server" "hamcp-server" "wpmcp-server"]
+    lib.genAttrs (["pbsmcp-server" "hamcp-server" "wpmcp-server"]
       ++ map pgUnitName (builtins.attrNames homelabDatabases)) (_: {
       wants = ["agenix.target"];
       after = ["agenix.target"];

@@ -49,13 +49,8 @@
     # Postgres: one backend per database. pgmcp holds a single connection pool
     # from one URL and no tool takes a database argument, so each database needs
     # its own server instance (see hosts/mcp_vm/configuration.nix). The backend
-    # name prefixes the tool names — pguptime_run_query, pgforgejo_run_query, …
-    [[backends]]
-    name = "pguptime"
-    url = "https://pg-uptime-mcp.homelab.local/mcp"
-    transport = "http"
-    enabled = true
-
+    # name prefixes the tool names — pgappdb_run_query, pgforgejo_run_query, …
+    # (pguptime, for the uptime-forge TimescaleDB, was retired 2026-09-12.)
     [[backends]]
     name = "pgappdb"
     url = "https://pg-appdb-mcp.homelab.local/mcp"

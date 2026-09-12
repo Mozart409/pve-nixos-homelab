@@ -127,12 +127,8 @@
           name = "step-ca";
           url = "https://ca.homelab.local:8443/health";
         }
-        {
-          name = "Uptime Forge";
-          # Served under base_path = "/uptime-forge" (forge.toml), fronted by
-          # Caddy on containers.homelab.local (step-ca cert, trusted here).
-          url = "https://containers.homelab.local/uptime-forge";
-        }
+        # (Uptime Forge at containers.homelab.local/uptime-forge was retired
+        # 2026-09-12.)
       ];
     };
 

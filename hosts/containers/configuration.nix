@@ -13,7 +13,6 @@
     ../../modules/fluent-bit.nix
     ../../modules/podman.nix
     ../../modules/caddy-http3.nix
-    ./uptime-forge
     ./albyhub
     ./open-webui
     ./searxng
@@ -44,9 +43,9 @@
   };
   networking.defaultGateway = "192.168.2.1";
 
-  # Postgres exporter is configured in ./uptime-forge/default.nix because it
-  # needs access to agenix secrets for the connection string. The node
-  # exporter is enabled fleet-wide by modules/common.nix.
+  # The node exporter is enabled fleet-wide by modules/common.nix. (The
+  # postgres exporter for the uptime-forge TimescaleDB left with it on
+  # 2026-09-12 -- see the retirement note under services.caddy.)
 
   # Ship the axon-gateway container journal to the central Loki.
   services.loki-logs = {
@@ -72,13 +71,8 @@
           get_certificate tailscale
         }
 
-        handle /uptime-forge* {
-          reverse_proxy localhost:3000
-        }
-
         # Open WebUI is a SvelteKit SPA with a build-time base path of "/",
-        # so it must be served at the host root (not a subpath). It is the
-        # catch-all here; uptime-forge keeps its own /uptime-forge prefix above.
+        # so it must be served at the host root (not a subpath).
         handle {
           reverse_proxy localhost:8088
         }
@@ -92,18 +86,19 @@
           ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
-        handle /uptime-forge* {
-          reverse_proxy localhost:3000
-        }
-
         # Open WebUI is a SvelteKit SPA with a build-time base path of "/",
-        # so it must be served at the host root (not a subpath). It is the
-        # catch-all here; uptime-forge keeps its own /uptime-forge prefix above.
+        # so it must be served at the host root (not a subpath).
         handle {
           reverse_proxy localhost:8088
         }
       '';
     };
+
+    # (Both vhosts above carried a `handle /uptime-forge*` -> localhost:3000
+    # until 2026-09-12, when uptime-forge and its TimescaleDB were retired as
+    # unused. hosts/containers/uptime-forge/ is kept on disk, imported nowhere
+    # -- same convention as ./futo-notes and hosts/cache/. The podman volume
+    # `uptime_forge_db` and /var/lib/uptime-forge stay on the host untouched.)
 
     # AlbyHub on its own hostname (SPA expects to be served at root)
     virtualHosts."albyhub.homelab.local albyhub.homelab.internal" = {
@@ -187,11 +182,8 @@
       22 # SSH
       80 # HTTP
       443 # HTTPS (Caddy)
-      3000 # Uptime Forge
-      5444 # TimescaleDB (external access)
       8080 # AlbyHub
       9100 # Node exporter
-      9187 # Postgres exporter
     ];
   };
 }

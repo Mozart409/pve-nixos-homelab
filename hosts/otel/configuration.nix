@@ -360,18 +360,8 @@
           }
         ];
       }
-      {
-        job_name = "containers-postgres";
-        static_configs = [
-          {
-            targets = ["containers.homelab.local:9187"];
-            labels = {
-              instance = "homelab-containers";
-              db = "uptime-forge";
-            };
-          }
-        ];
-      }
+      # (containers-postgres, the exporter for uptime-forge's TimescaleDB,
+      # was dropped 2026-09-12 with the service.)
       # MCP host exporters
       {
         job_name = "mcp-node";

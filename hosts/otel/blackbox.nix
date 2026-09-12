@@ -118,7 +118,6 @@
     homelab-mcp = [
       "mcp.homelab.local"
       "pbs-mcp.homelab.local"
-      "pg-uptime-mcp.homelab.local"
       "pg-appdb-mcp.homelab.local"
       "pg-terraform-mcp.homelab.local"
       "pg-forgejo-mcp.homelab.local"
@@ -187,10 +186,6 @@
         url = "https://containers.homelab.internal";
         instance = "homelab-containers";
       }
-      {
-        url = "https://containers.homelab.internal/uptime-forge";
-        instance = "homelab-containers";
-      }
       # The one name deliberately left on .local: step-ca is not behind Caddy (it
       # serves :8443 itself), so unlike every entry above there is no vhost
       # listing both names -- whether its cert carries a ca.homelab.internal SAN
@@ -246,10 +241,6 @@
       }
       {
         url = "https://pbs-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://pg-uptime-mcp.homelab.local/mcp";
         instance = "homelab-mcp";
       }
       {

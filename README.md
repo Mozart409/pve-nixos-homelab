@@ -17,11 +17,11 @@ set. IPs are the static addresses configured in each host's NixOS config.
 
 | Host | IP | Colmena tags | Role |
 |------|------|------|------|
-| `database` | 192.168.2.134 | `database` | PostgreSQL 18 + pgbouncer + pgAdmin, multi-tenant (tofu state, forgejo, harbor, romm, hofvarpnir, uptime-forge); `postgresqlBackup` |
+| `database` | 192.168.2.134 | `database` | PostgreSQL 18 + pgbouncer + pgAdmin, multi-tenant (tofu state, forgejo, harbor, romm, hofvarpnir); `postgresqlBackup` |
 | `otel` | 192.168.2.135 | `monitoring` | Observability stack: Prometheus, Grafana, Loki, Tempo |
 | `unifi` | 192.168.2.142 | `unifi` | UniFi Network Controller |
 | `dns` | 192.168.2.145 | `dns` | Unbound recursive DNS + authoritative `homelab.local` zone (A + PTR) |
-| `containers` | 192.168.2.149 | `containers` | Podman host: Open WebUI, axon-gateway, SearXNG, Alby Hub, RomM, uptime-forge, homelab-dashboard |
+| `containers` | 192.168.2.149 | `containers` | Podman host: Open WebUI, axon-gateway, SearXNG, Alby Hub, RomM, homelab-dashboard |
 | `mcp` | 192.168.2.152 | `mcp` | MCP servers from the `homelab-mcp-servers` monorepo (pbs, pg, prom, loki, ha) as hardened systemd units |
 | `hermes` | 192.168.2.155 | `ai`, `hermes` | Hermes AI agent (Open WebUI backend, code agent with repo access) |
 | `ca` | 192.168.2.160 | `security`, `ca` | step-ca internal Certificate Authority (ACME for `*.homelab.local`) |
