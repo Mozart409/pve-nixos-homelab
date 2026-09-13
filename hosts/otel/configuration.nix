@@ -60,8 +60,21 @@
           send_batch_size: 1000
 
       exporters:
+        # Kept defined but wired into no pipeline. With `debug` on every
+        # pipeline the collector printed a line per batch (5s timeout) to
+        # stdout -> journald -> fluent-bit -> Loki, i.e. every trace batch
+        # from hofvarpnir cost this IO-starved host two extra disk writes plus
+        # a Loki ingest of its own chatter (2026-09-13 audit: the bulk of the
+        # 120-300 lines/5min otel was shipping). Re-add `debug` to a pipeline's
+        # exporters list only while actually debugging that pipeline.
         debug:
           verbosity: basic
+
+        # Metrics: nothing sends OTLP metrics (the collector has never even
+        # registered otelcol_receiver_accepted_metric_points), and a pipeline
+        # must name at least one exporter. `nop` keeps the OTLP metrics
+        # endpoint answering without turning `debug` back on.
+        nop: {}
 
         otlphttp/tempo:
           endpoint: "http://127.0.0.1:4328"
@@ -75,18 +88,20 @@
 
       service:
         pipelines:
+          # `debug` deliberately absent from every pipeline -- see the
+          # exporters block above.
           traces:
             receivers: [otlp]
             processors: [batch]
-            exporters: [otlphttp/tempo, debug]
+            exporters: [otlphttp/tempo]
           metrics:
             receivers: [otlp]
             processors: [batch]
-            exporters: [debug]
+            exporters: [nop]
           logs:
             receivers: [otlp]
             processors: [batch]
-            exporters: [otlphttp/loki, debug]
+            exporters: [otlphttp/loki]
     '';
   };
 
