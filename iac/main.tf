@@ -147,8 +147,8 @@ resource "proxmox_virtual_environment_vm" "otel_vm" {
   }
 
   memory {
-    dedicated = 1536
-    floating  = 1024
+    dedicated = 4096
+    floating  = 4096
   }
 
   disk {
