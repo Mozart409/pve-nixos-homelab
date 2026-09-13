@@ -125,7 +125,10 @@ resource "proxmox_virtual_environment_vm" "database_vm" {
 
   started = true
 
-  on_boot = true
+  startup {
+    order    = 1
+    up_delay = 30
+  }
 }
 
 # OpenTelemetry Collector VM
@@ -191,7 +194,10 @@ resource "proxmox_virtual_environment_vm" "otel_vm" {
 
   started = true
 
-  on_boot = true
+  startup {
+    order    = 2
+    up_delay = 15
+  }
 }
 
 # DNS Server VM (Unbound)
@@ -302,7 +308,10 @@ resource "proxmox_virtual_environment_vm" "dns_vm" {
 
   started = true
 
-  on_boot = true
+  startup {
+    order    = 2
+    up_delay = 15
+  }
 }
 
 # UniFi Network Controller VM
@@ -368,7 +377,10 @@ resource "proxmox_virtual_environment_vm" "unifi_vm" {
 
   started = true
 
-  on_boot = true
+  startup {
+    order    = 2
+    up_delay = 15
+  }
 }
 # Harbor Registry VM
 resource "proxmox_virtual_environment_vm" "harbor_vm" {
@@ -505,7 +517,10 @@ resource "proxmox_virtual_environment_vm" "containers_vm" {
 
   started = true
 
-  on_boot = true
+  startup {
+    order    = 2
+    up_delay = 15
+  }
 }
 # MCP VM
 resource "proxmox_virtual_environment_vm" "mcp_vm" {
@@ -570,7 +585,10 @@ resource "proxmox_virtual_environment_vm" "mcp_vm" {
 
   started = true
 
-  on_boot = true
+  startup {
+    order    = 2
+    up_delay = 15
+  }
 }
 
 # Hermes Agent VM
@@ -800,7 +818,10 @@ resource "proxmox_virtual_environment_vm" "ca_vm" {
 
   started = true
 
-  on_boot = true
+  startup {
+    order    = 2
+    up_delay = 15
+  }
 }
 
 # Forgejo VM (Git forge - uses external Postgres on database host)
@@ -948,7 +969,10 @@ resource "proxmox_virtual_environment_vm" "jellyfin_vm" {
 
   started = true
 
-  on_boot = true
+  startup {
+    order    = 2
+    up_delay = 15
+  }
 }
 
 # Agent Development VM
@@ -1029,7 +1053,10 @@ resource "proxmox_virtual_environment_vm" "development_vm" {
   }
 
   started = true
-  on_boot = true
+  startup {
+    order    = 2
+    up_delay = 15
+  }
 }
 
 resource "proxmox_virtual_environment_vm" "zeroclaw_vm" {
