@@ -27,7 +27,10 @@ in {
     ../../modules/forgejo-cli.nix
   ];
 
-  home-manager.users.amadeus.imports = [../../modules/jj.nix];
+  home-manager.users.amadeus.imports = [
+    ../../modules/jj.nix
+    ../../modules/lazygit.nix
+  ];
 
   networking.hostName = "homelab-development";
 
@@ -309,7 +312,8 @@ in {
     htop
     httpie
     jq
-    lazygit
+    # lazygit comes from modules/lazygit.nix (home-manager), which also owns
+    # its config -- autoFetch off.
     neovim
     nodejs
     opencode
