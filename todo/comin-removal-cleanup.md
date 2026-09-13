@@ -5,47 +5,32 @@ gitops from every host`). The units disappear as each host is applied, but the
 **on-disk state does not** — `/var/lib/comin` is left behind on every host that
 ever ran it.
 
-**Status — pending, blocked on rolling the fleet.**
+**Status — complete 2026-09-13.**
 
-## What is left behind
+- `/var/lib/comin.removed` deleted on all 8 moved hosts: `containers database
+  development forgejo jellyfin mcp otel unifi`. `nix-collect-garbage -d`
+  returned 0 freed on spot-checks; the weekly `nix.gc` module (`modules/nix-gc.nix`)
+  and pressure-triggered GC (`min-free` / `max-free`) already handle ongoing
+  cleanup.
+- Already clean: `ca dns`.
+- Unreachable + **decommissioned** (VMs no longer exist): `fleet harbor hermes
+  woodpecker`.
+- `cache`: VM decommissioned 2026-09-09.
 
-Per host, roughly:
+## Archive
 
-| Path | What it is |
-| --- | --- |
-| `/var/lib/comin/repository/` | a full git clone of this repo |
-| `/var/lib/comin/store.json` | comin's deployment history |
-| `/var/lib/comin/gcroots/` | **GC roots pinning old system closures** |
-| `/var/lib/comin/grpc.sock` | dead socket |
-
-`gcroots` is the one that actually costs something: it pins closures against
-`nix-collect-garbage`, so leaving it in place keeps dead generations on disk on
-hosts that are already short on IOPS and space.
-
-## Why it is not done yet
-
-The state must only be cleared **after** a host has been applied without comin —
-otherwise a still-running comin recreates it. So this is per-host, and follows
-the rollout rather than leading it.
-
-## Steps, per host
+The steps that were executed, per host:
 
 ```sh
-# 1. confirm comin is actually gone on that host
-systemctl status comin        # expect: Unit comin.service could not be found
-ls /nix/var/nix/gcroots/      # sanity check before touching anything
-
-# 2. move aside (reversible) rather than delete outright
-sudo mv /var/lib/comin /var/lib/comin.removed
-
-# 3. after a few days with nothing missed, drop it and reclaim the closures
-sudo rm -rf /var/lib/comin.removed
-sudo nix-collect-garbage -d
+systemctl status comin                    # confirmed gone
+sudo mv /var/lib/comin /var/lib/comin.removed  # reversible, waited a few days
+sudo rm -rf /var/lib/comin.removed        # confirmed nothing broke
+sudo nix-collect-garbage -d               # 0 freed on spot-checks (GC module
+                                          # already handles ongoing cleanup)
 ```
 
-Hosts to do: `ca cache containers database development dns fleet forgejo harbor
-hermes jellyfin mcp otel unifi woodpecker` — i.e. every colmena node except
-`k3s-cntrl-1` (never deployed).
+Hosts: every colmena node except `k3s-cntrl-1` (never deployed) — see the
+status section above for the per-host outcome.
 
 ## Verify
 
