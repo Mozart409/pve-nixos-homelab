@@ -126,6 +126,7 @@
       "prom-mcp.homelab.local"
       "loki-mcp.homelab.local"
       "wp-mcp.homelab.local"
+      "alertmanager-mcp.homelab.local"
     ];
   };
 
@@ -273,6 +274,10 @@
       }
       {
         url = "https://wp-mcp.homelab.local/mcp";
+        instance = "homelab-mcp";
+      }
+      {
+        url = "https://alertmanager-mcp.homelab.local/mcp";
         instance = "homelab-mcp";
       }
     ];
