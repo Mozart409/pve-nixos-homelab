@@ -109,6 +109,13 @@
     description = "OpenTelemetry Collector";
     after = ["network.target"];
     wantedBy = ["multi-user.target"];
+    # ExecStart reads /etc/otelcol/config.yaml -- a stable path -- so a config
+    # edit changes the etc file but not the unit, and switch-to-configuration
+    # leaves the old process running with the old pipelines (2026-09-13: the
+    # debug-exporter removal deployed "successfully" while the collector kept
+    # its 4-day uptime). Trigger on the store path of the generated file, the
+    # same idiom as AGENTS.md §5's secretNonce / axon-gateway CONFIG_HASH.
+    restartTriggers = [config.environment.etc."otelcol/config.yaml".source];
     serviceConfig = {
       ExecStart = ''${pkgs.opentelemetry-collector-contrib}/bin/otelcol-contrib --config /etc/otelcol/config.yaml'';
       User = "otelcol";
