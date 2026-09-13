@@ -128,23 +128,19 @@
   };
 
   # Tempo for distributed tracing
-  # Ship tempo's journal to the central Loki (the shipper itself is enabled by
-  # modules/fluent-bit.nix, imported for every host from modules/common.nix; the
-  # units list merges across modules, which is why there is no `enable` here).
   #
-  # tempo.service has been in `failed` on this host for some time -- it is what
-  # makes every colmena apply to otel exit 4, and what serves the 502 on
-  # tempo.homelab.local. The comment on services.tempo below says a 3.0 schema
-  # mismatch meant it "never started", and the fix attempted there was
-  # evidently incomplete. Diagnosing that needs the unit's own log, and otel is
-  # unreachable by SSH from the development host (tailnet ACL), so the journal
-  # has to come out through Loki.
-  services.loki-logs.units = [
-    {
-      unit = "tempo.service";
-      job = "tempo";
-    }
-  ];
+  # tempo.service's journal was shipped to the central Loki from 2026-09-08
+  # while the unit sat in `failed` (otel is unreachable by SSH from the
+  # development host, so the log had to come out through Loki). That
+  # diagnostic did its job -- the read-only /var/tempo path below was found and
+  # fixed -- and was retired 2026-09-13: a healthy Tempo logs ~2,300 lines/h
+  # of block-cut / compaction / scheduler-poll chatter, and on this
+  # IO-starved host every one of those lines was a journald write, a
+  # fluent-bit read, an HTTPS push to the local Caddy and a Loki ingest.
+  # Nothing else on otel ships to Loki; if Tempo misbehaves again, re-add
+  #   services.loki-logs.units = [ { unit = "tempo.service"; job = "tempo"; } ];
+  # here (modules/fluent-bit.nix enables the shipper fleet-wide, the units
+  # list merges across modules).
 
   services.tempo = {
     enable = true;
@@ -202,7 +198,26 @@
       live_store = {
         shutdown_marker_dir = "/var/lib/tempo/live-store/shutdown-marker";
         wal.path = "/var/lib/tempo/live-store/traces";
+
+        # Block cadence. Tempo 3.0.3's live-store defaults to
+        # max_block_duration = 30s / max_block_bytes = 50MB
+        # (modules/livestore/config.go), i.e. a block is cut every 30 s no
+        # matter how little arrived. At this lab's ~0.3 spans/s that meant ~105
+        # blocks/h of ~95 KB each, then ~50 compactions/h and ~350 deletes/h
+        # to fold them back together (2026-09-13 journal audit) -- hundreds of
+        # directory creates, parquet writes, fsyncs and unlinks per hour on a
+        # zvol that lives on the saturated HDD mirror. 30 min collapses that to
+        # ~2 blocks/h; the 50MB byte ceiling still cuts early under real load.
+        # Cost: a fresh trace is queryable from the live block either way, so
+        # nothing user-visible changes. Validation only requires > 0.
+        max_block_duration = "30m";
       };
+
+      # The backend-worker long-polls the scheduler for compaction jobs and,
+      # finding none, logs a gRPC warn + an "error calling scheduler" error and
+      # backs off -- capped at 1m by default, so ~90 log lines/h of nothing.
+      # With blocks cut every 30 min there is rarely a job; poll less often.
+      backend_worker.backoff.max_period = "10m";
       block_builder.wal.path = "/var/lib/tempo/block-builder/traces";
       backend_scheduler.local_work_path = "/var/lib/tempo/backend-scheduler";
       metrics_generator = {
@@ -250,7 +265,20 @@
     port = 9090;
     retentionTime = "45d";
     webExternalUrl = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
-    extraFlags = ["--web.route-prefix=/"];
+    extraFlags = [
+      "--web.route-prefix=/"
+      # Tempo's metrics-generator (services.tempo.settings.metrics_generator
+      # above) remote-writes service-graph and span-metrics series here. Without
+      # this flag Prometheus answers 404 and Tempo logged
+      #   non-recoverable error ... url=http://localhost:9090/api/v1/write
+      #   failedSampleCount=369 ... remote write receiver needs to be enabled
+      # once a minute since the generator was configured -- every sample spooled
+      # through /var/lib/tempo/generator/wal and then dropped (found 2026-09-13).
+      # Loopback only: 9090 is opened in the firewall for prom-mcp, but the
+      # receiver accepts unauthenticated writes, so keep this host's 9090 off
+      # anything but the LAN.
+      "--web.enable-remote-write-receiver"
+    ];
 
     # The default `true` runs a full `promtool check config` at BUILD time, which
     # stats every file a scrape job references -- including the woodpecker job's
