@@ -178,7 +178,7 @@ in {
   };
 
   services.woodpecker-agents.agents.podman = {
-    enable = true;
+    enable = false;
 
     # Becomes SupplementaryGroups on the unit, granting access to the
     # group-owned rootful podman socket.
