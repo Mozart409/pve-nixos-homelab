@@ -17,3 +17,12 @@ herdr --skill
 ```
 
 and follow the printed instructions.
+
+## Working from outside Herdr
+
+You do **not** need to be inside a Herdr-managed pane (`HERDR_ENV=1`) to create
+or list workspaces. Commands like `herdr workspace create`, `herdr workspace
+list`, `herdr tab list`, and `herdr agent list` work from any shell that can
+reach the Herdr socket. The `HERDR_ENV` gate only applies to commands that
+require caller context (e.g. `--current`, pane splits, agent starts in a
+specific pane, `pane run`).
