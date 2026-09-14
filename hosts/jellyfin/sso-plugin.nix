@@ -3,14 +3,18 @@
   pkgs,
   ...
 }: let
-  version = "5.0.0.0";
+  version = "5.1.1";
 
   # K0lin/jellyfin-plugin-sso — the maintained fork of the archived
-  # 9p4/jellyfin-plugin-sso. targetAbi 10.11.11.0 matches
-  # services.jellyfin.package (10.11.11). Pocket ID is a tested OIDC provider.
+  # 9p4/jellyfin-plugin-sso. targetAbi 12.0.0.0 matches
+  # services.jellyfin.package (12.0). Pocket ID is a tested OIDC provider.
+  #
+  # 5.1.x is built on .NET 10 against Jellyfin 12 and will not load on 10.x;
+  # 5.0.0.0 was the last release for 10.8–10.11. Keep this in lockstep with the
+  # jellyfin package when bumping nixpkgs in either direction.
   ssoPlugin = pkgs.fetchzip {
     url = "https://github.com/K0lin/jellyfin-plugin-sso/releases/download/v${version}/sso-authentication_${version}.zip";
-    sha256 = "00vmj5vkvk9jxd68pqrir0zz58kz00mw35drwqcxwb8vfq0rmmwv";
+    hash = "sha256-QYzyg8pJvsLvmJbgOujhms7vY7BmLlqgcndxqNGyJcI=";
     stripRoot = false; # DLLs + meta.json sit at the zip root
   };
 
