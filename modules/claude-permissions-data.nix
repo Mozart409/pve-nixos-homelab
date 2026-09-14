@@ -356,5 +356,5 @@
   # Unattended agent sessions are the normal case on this host, so prompts that
   # nobody is present to answer would just hang. The deny list above is what
   # makes that safe: it is the guardrail, not the prompt.
-  defaultMode = "dontAsk";
+  defaultMode = "auto";
 }
