@@ -16,13 +16,15 @@
   # would hit this the same way -- but referencing the store path directly is
   # the standard, unconditionally-correct pattern for anything invoked from
   # system.activationScripts regardless).
+  # The generation number lives in the profile link (system-N-link), NOT in
+  # /run/current-system: that resolves to .../<hash>-nixos-system-<host>-<version>,
+  # and the old `sed 's/.*-system-//'` on it produced "<host>-<version>" -- a
+  # non-numeric sample that made node_exporter reject the whole nixos.prom
+  # (node_textfile_scrape_error=1 on every host, no nixos_* metric ever
+  # scraped; found 2026-09-15).
   generationScript = ''
-    gen=0
-    system_link=$(readlink -f /run/current-system 2>/dev/null || echo "")
-    if [ -n "$system_link" ]; then
-      gen=$(echo "$system_link" | ${pkgs.gnused}/bin/sed 's/.*-system-//')
-    fi
-    echo "$gen"
+    gen=$(readlink /nix/var/nix/profiles/system 2>/dev/null | ${pkgs.gnused}/bin/sed -n 's/^system-\([0-9]*\)-link$/\1/p')
+    echo "''${gen:-0}"
   '';
 in {
   # Enable the node_exporter textfile collector
@@ -52,6 +54,9 @@ in {
       # HELP nixos_system_generation Current NixOS generation number
       # TYPE nixos_system_generation gauge
       nixos_system_generation $(${generationScript})
+      # HELP nixos_system_info Store path of the running system closure (compare against a locally evaluated toplevel)
+      # TYPE nixos_system_info gauge
+      nixos_system_info{system_path="$(readlink -f /run/current-system 2>/dev/null || echo unknown)"} 1
       PROM
       mv "$tmp" ${textfileDir}/nixos.prom
     '';
