@@ -747,7 +747,7 @@
       # Linux-only (dockerTools needs a Linux build); build and push to Harbor with
       # `just ci-image-push` after creating a public `ci` project. The nix pipeline
       # (.woodpecker/nix.yml) uses `nixos/nix` instead, not this image.
-      packages = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+      packages = pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
         ci-image = let
           # kics (nixpkgs) ships WITHOUT its query library, and kics bails
           # out ("unable to find queries") instead of downloading them. Vendor
@@ -867,9 +867,9 @@
             # keep-sorted end
           ]
           # Linux-only in nixpkgs (no darwin client package anymore)
-          ++ pkgs.lib.optionals pkgs.stdenv.isLinux [pkgs.podman]
+          ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.podman]
           # darwin-only in nixpkgs
-          ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [pkgs.git];
+          ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isDarwin [pkgs.git];
         shellHook = ''
           lefthook install
         '';
