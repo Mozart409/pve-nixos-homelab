@@ -55,18 +55,25 @@
       WEBUI_URL = "https://homelab-containers.dropbear-butterfly.ts.net";
       # CORS must list every origin used to reach the UI, or WebSockets break.
       CORS_ALLOW_ORIGIN = "https://homelab-containers.dropbear-butterfly.ts.net;https://containers.homelab.local";
-      # Disable the local email/password signup form. Account creation is only
-      # via OAuth (Pocket ID), which stays enabled below so group members can
-      # still provision accounts on first login.
+      # No account creation at all, by either path. This UI is the front door
+      # to the hermes agent, which runs a shell as its service user with
+      # approvals off (hosts/hermes) -- so "can log in here" means "can run
+      # commands on hermes". Until 2026-09-14 any Pocket ID account could
+      # self-provision on first login; now only accounts that already exist
+      # AND carry the `admins` group can sign in. To add a person: put them
+      # in `admins` in Pocket ID, flip ENABLE_OAUTH_SIGNUP to "true" for one
+      # deploy so their first login creates the account, flip it back.
       ENABLE_SIGNUP = "false";
+      ENABLE_OAUTH_SIGNUP = "false";
       # OIDC authentication
-      ENABLE_OAUTH_SIGNUP = "true";
       OAUTH_PROVIDER_NAME = "Pocket ID";
       OPENID_PROVIDER_URL = "https://pocketid.dropbear-butterfly.ts.net/.well-known/openid-configuration";
       OAUTH_SCOPES = "openid email profile groups";
       ENABLE_OAUTH_ROLE_MANAGEMENT = "true";
       OAUTH_ROLES_CLAIM = "groups";
       OAUTH_ADMIN_ROLES = "admins";
+      # Login is refused unless the groups claim contains one of these.
+      OAUTH_ALLOWED_ROLES = "admins";
       # Web search via local SearXNG instance
       ENABLE_WEB_SEARCH = "true";
       WEB_SEARCH_ENGINE = "searxng";

@@ -30,7 +30,7 @@
   # Bump this string whenever a secret, SOUL.md, USER.md, config.yaml, or a
   # skill changes; that changes restartTriggers -> the unit definition -> a
   # restart on the next colmena apply.
-  secretNonce = "2026-08-15-searxng-internal";
+  secretNonce = "2026-09-14-network-allowlist";
 
   # ── Extra (declarative) skills ────────────────────────────────────────────
   # Custom skills shipped from this repo, exposed to Hermes read-only via the
@@ -834,6 +834,30 @@ in {
         "${hermesHome}/.hermes/config.yaml"
         "${hermesHome}/workspace/SOUL.md"
         "${hermesHome}/workspace/USER.md"
+      ];
+      # ── Network allow-list (added 2026-09-14) ────────────────────────────────
+      # The agent runs a shell with approvals off and has web/browser tools,
+      # so a prompt injection in a fetched page or a vault note is a shell on
+      # the LAN. Confine it to the few LAN peers it legitimately needs; the
+      # internet (DeepSeek, AgentMail, nix substituters) stays open because
+      # deny lists only these private ranges. Applies to every subprocess of
+      # the unit (terminal/code tools included) -- it is a cgroup BPF filter.
+      #   .145 dns, .1 router (second resolver in modules/common.nix)
+      #   .178 forgejo (vault + repo push), .152 mcp (axon gateway)
+      #   .149 containers (searxng)
+      # Everything the agent talks to on the LAN goes through those; the
+      # database, otel, ca, jellyfin, unifi, development hosts are all
+      # unreachable from inside the unit on purpose. Extend the list when a
+      # skill needs a new peer -- an omission shows up as "connection refused"
+      # in the agent's tool output, not as a silent failure.
+      IPAddressDeny = ["192.168.0.0/16" "10.0.0.0/8" "100.64.0.0/10" "172.16.0.0/12"];
+      IPAddressAllow = [
+        "localhost"
+        "192.168.2.145"
+        "192.168.2.1"
+        "192.168.2.178"
+        "192.168.2.152"
+        "192.168.2.149"
       ];
       # ── Resource caps (defense-in-depth) ────────────────────────────────────
       # The tools now share this unit's cgroup. ProtectSystem=strict (module)
