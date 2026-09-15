@@ -26,8 +26,8 @@
     "code.claude.com"
   ];
 
-  # Without an allow list and with defaultMode = "dontAsk", every state-changing
-  # command is refused silently. These are the ones routine work needs — the set
+  # Without an allow list, every state-changing command is refused or prompted
+  # for (depending on mode). These are the ones routine work needs — the set
   # below is what sessions actually accumulated by hand before this file took
   # over, so nothing here is speculative.
   allow = [
@@ -353,8 +353,8 @@
     "Bash(gh pr merge*)"
   ];
 
-  # Unattended agent sessions are the normal case on this host, so prompts that
-  # nobody is present to answer would just hang. The deny list above is what
-  # makes that safe: it is the guardrail, not the prompt.
+  # Auto mode still honors the deny list and uses a safety classifier for
+  # unlisted actions, but prompts rather than silently denying. The deny list
+  # above is the guardrail.
   defaultMode = "auto";
 }

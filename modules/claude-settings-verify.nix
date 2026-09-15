@@ -12,6 +12,7 @@
   # its own hand-maintained subset.
   perms = import ./claude-permissions-data.nix;
   denyArray = lib.concatMapStringsSep " " lib.escapeShellArg perms.deny;
+  expectedMode = lib.escapeShellArg perms.defaultMode;
   # The web-scope allow rules come from the same list that drives the WebSearch
   # restriction hook, so a whitelist change that forgets the allow rules is
   # caught here rather than silently narrowing the boundary.
@@ -75,7 +76,7 @@
         done
 
         mode=$(readSetting '.permissions.defaultMode')
-        [ "$mode" = "dontAsk" ] || problems+=("defaultMode is '$mode', expected 'dontAsk'")
+        [ "$mode" = ${expectedMode} ] || problems+=("defaultMode is '$mode', expected ${expectedMode}")
 
         coauthor=$(readSetting '.includeCoAuthoredBy')
         [ "$coauthor" = "false" ] || problems+=("includeCoAuthoredBy is '$coauthor', expected 'false'")
