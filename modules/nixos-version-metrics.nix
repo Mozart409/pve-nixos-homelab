@@ -40,6 +40,14 @@ in {
   # Write NixOS version metrics on every activation so node_exporter exposes
   # them at the /metrics endpoint. Uses atomic write (temp file + mv) so
   # node_exporter never reads a partially-written file.
+  #
+  # Activation-order trap: the generated `activate` script re-points
+  # /run/current-system only as its LAST step, after every activationScript has
+  # run -- so at this point it still names the PREVIOUS generation (that is
+  # exactly what the first version of nixos_system_info reported, 2026-09-15).
+  # The system being activated is $systemConfig (exported by `activate`, also
+  # set at boot); the profile link is already updated by the time we run, so
+  # its mtime is the deploy time and survives reboots.
   system.activationScripts.nixosVersionMetrics = {
     text = ''
       mkdir -p ${textfileDir}
@@ -48,15 +56,15 @@ in {
       # HELP nixos_info NixOS release and kernel version
       # TYPE nixos_info gauge
       nixos_info{version="${config.system.nixos.release}",kernel_version="${config.boot.kernelPackages.kernel.version}"} 1
-      # HELP nixos_system_build_timestamp_seconds Unix timestamp of the current NixOS system generation
+      # HELP nixos_system_build_timestamp_seconds Unix timestamp of when the current system generation was set (mtime of the system profile link)
       # TYPE nixos_system_build_timestamp_seconds gauge
-      nixos_system_build_timestamp_seconds $(stat -c %Y /run/current-system 2>/dev/null || echo 0)
+      nixos_system_build_timestamp_seconds $(stat -c %Y /nix/var/nix/profiles/system 2>/dev/null || echo 0)
       # HELP nixos_system_generation Current NixOS generation number
       # TYPE nixos_system_generation gauge
       nixos_system_generation $(${generationScript})
       # HELP nixos_system_info Store path of the running system closure (compare against a locally evaluated toplevel)
       # TYPE nixos_system_info gauge
-      nixos_system_info{system_path="$(readlink -f /run/current-system 2>/dev/null || echo unknown)"} 1
+      nixos_system_info{system_path="$(readlink -f "''${systemConfig:-/run/current-system}" 2>/dev/null || echo unknown)"} 1
       PROM
       mv "$tmp" ${textfileDir}/nixos.prom
     '';
