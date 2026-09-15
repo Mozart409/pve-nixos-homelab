@@ -17,7 +17,7 @@
   #
   # Bump this string whenever a secret's *content* changes; that changes
   # restartTriggers -> the unit definition -> a restart on the next colmena apply.
-  secretNonce = "2026-09-14-otel-query-token";
+  secretNonce = "2026-09-15-otel-query-token";
 
   # Since 2026-09-14 no MCP server has a vhost. They all bind loopback and the
   # only client is axon-gateway (./axon-gateway), which now runs on THIS host
