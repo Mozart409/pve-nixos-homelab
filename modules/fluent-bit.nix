@@ -187,8 +187,16 @@ in {
     ];
     systemd.services.fluent-bit.serviceConfig.ExecStart = lib.mkForce fluentBitWithToken;
 
-    # See restartNonce above.
-    systemd.services.fluent-bit.restartTriggers = [restartNonce];
+    # See restartNonce above. The secret's `.file` (its /nix/store path, which
+    # changes on every re-encryption) is in here too: LoadCredential is read
+    # once at unit start, so without this a rotated push token leaves every
+    # host's fluent-bit 401-ing with the old value until something else
+    # restarts it -- which is exactly what happened on 2026-09-15 when the
+    # token was regenerated and a fleet-wide deploy restarted nothing.
+    systemd.services.fluent-bit.restartTriggers = [
+      restartNonce
+      config.age.secrets.otel-push-token.file
+    ];
 
     services.fluent-bit = {
       enable = true;

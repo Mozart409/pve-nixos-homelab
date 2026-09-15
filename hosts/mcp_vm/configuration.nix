@@ -239,7 +239,9 @@ in {
       wants = ["agenix.target"];
       after = ["agenix.target"];
       # See secretNonce above: forces a restart when a secret is re-encrypted.
-      restartTriggers = [secretNonce];
+      # The otel query token additionally triggers on its own store path, so
+      # the three servers that carry it restart on rotation without a bump.
+      restartTriggers = [secretNonce config.age.secrets.otel-query-token.file];
     })
     // {
       # Give Caddy access to Tailscale socket for cert fetching
