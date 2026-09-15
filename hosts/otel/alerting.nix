@@ -108,6 +108,29 @@
         ];
       }
       {
+        name = "observability";
+        rules = [
+          {
+            # modules/nixos-version-metrics.nix wrote a nixos.prom whose
+            # nixos_system_generation sample was "<host>-<version>" instead of
+            # a number, so node_exporter rejected the whole file and no nixos_*
+            # metric was ever scraped from any host. The only trace was this
+            # metric sitting at 1 on every NixOS node, with nothing looking at
+            # it. Found 2026-09-15 while trying to answer "is the fleet on
+            # HEAD?" from Prometheus. A textfile is written atomically on each
+            # activation, so this does not flap; 30m just rides out a deploy.
+            alert = "NodeTextfileScrapeError";
+            expr = "node_textfile_scrape_error == 1";
+            for = "30m";
+            labels.severity = "warning";
+            annotations = {
+              summary = "{{ $labels.instance }} has an unparseable node_exporter textfile";
+              description = "node_exporter on {{ $labels.instance }} is rejecting a file in its textfile collector directory, so every metric in that file is silently missing. Run `promtool check metrics < /var/lib/node_exporter/textfile/*.prom` on the host.";
+            };
+          }
+        ];
+      }
+      {
         name = "resource-usage";
         rules = [
           {
