@@ -755,13 +755,29 @@ in {
     # preStart below guarantees a usable cert either way.
     after = ["acme-finished-${pgCertName}.target"];
     wants = ["acme-${pgCertName}.service"];
-    # Self-signed placeholder until the real leaf lands, so `ssl = true` can
-    # never wedge startup (fresh install, ca.homelab.local unreachable). The
-    # acme postRun overwrites it; clients pinned to verify-full will refuse
-    # the placeholder, which is the correct failure.
+    # Populate pgSslDir before every start, in this order of preference:
+    #  1. the lego-issued cert in /var/lib/acme (files are acme:postgres 0640,
+    #     so this user can read them) -- copied, because postgres refuses a
+    #     key it does not own unless that key is root-owned;
+    #  2. whatever is already there;
+    #  3. a self-signed placeholder, so `ssl = true` can never wedge startup
+    #     (fresh install, ca.homelab.local unreachable). Clients pinned to
+    #     verify-full refuse it, which is the correct failure.
+    # (1) exists because the acme unit's own reloadServices is not enough on a
+    # deploy: switch-to-configuration starts acme-* and restarts postgresql
+    # in separate transactions, so `after` does not order them, and the reload
+    # postRun triggers can land while postgres is still activating and be
+    # lost -- which is exactly what happened on 2026-09-15 (postgres served
+    # the placeholder for an hour while romm's verify-full connections
+    # failed). Renewals while postgres is running still arrive via postRun +
+    # reload; this covers the start path.
     preStart = lib.mkBefore ''
-      if [ ! -s ${pgSslDir}/key.pem ]; then
-        install -d -m 0750 ${pgSslDir}
+      install -d -m 0750 ${pgSslDir}
+      acmeDir=/var/lib/acme/${pgCertName}
+      if [ -r "$acmeDir/key.pem" ] && [ -r "$acmeDir/fullchain.pem" ]; then
+        install -m 0640 "$acmeDir/fullchain.pem" ${pgSslDir}/fullchain.pem
+        install -m 0600 "$acmeDir/key.pem" ${pgSslDir}/key.pem
+      elif [ ! -s ${pgSslDir}/key.pem ]; then
         ${pkgs.openssl}/bin/openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
           -nodes -days 30 -subj "/CN=${pgCertName}" \
           -keyout ${pgSslDir}/key.pem -out ${pgSslDir}/fullchain.pem 2>/dev/null
