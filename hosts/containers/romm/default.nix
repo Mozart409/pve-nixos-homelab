@@ -56,14 +56,23 @@ in {
       "${dataDir}/library:/romm/library"
       "${dataDir}/assets:/romm/assets"
       "${dataDir}/config:/romm/config"
+      # Host CA bundle (step-ca root) so PGSSLROOTCERT can verify the postgres
+      # leaf; the image ships no trust store entry for it.
+      "/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro"
     ];
     environment = {
-      # Database - central PostgreSQL host (hosts/database).
+      # Database - central PostgreSQL host (hosts/database). Addressed by name,
+      # not IP, because the server cert is issued for database.homelab.local
+      # and verify-full checks the hostname.
       ROMM_DB_DRIVER = "postgresql";
-      DB_HOST = "192.168.2.134";
+      DB_HOST = "database.homelab.local";
       DB_PORT = "5432";
       DB_NAME = "romm";
       DB_USER = "romm";
+      # TLS to postgres. RomM has no ssl knob of its own; these are the libpq
+      # env vars its driver honours (hosts/database enables ssl = true).
+      PGSSLMODE = "verify-full";
+      PGSSLROOTCERT = "/etc/ssl/certs/ca-certificates.crt";
 
       # Metadata providers.
       HASHEOUS_API_ENABLED = "true";

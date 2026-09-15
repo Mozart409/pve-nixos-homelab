@@ -6,6 +6,16 @@
 }: let
   psql = "${config.services.postgresql.package}/bin/psql";
 
+  # Where postgres reads its TLS cert/key from. Populated by the acme postRun
+  # below (real step-ca leaf) or, until that first succeeds, by the self-signed
+  # placeholder postgresql's preStart writes -- so `ssl = true` never keeps the
+  # server from starting on a fresh install or while ca.homelab.local is down.
+  pgSslDir = "/var/lib/postgresql/ssl";
+  pgCertName = "database.homelab.local";
+  # lego's standalone HTTP-01 responder. Caddy already owns :80 on this host,
+  # so it proxies the challenge path here instead of lego binding :80 itself.
+  acmeChallengePort = 1360;
+
   # The exemption every service role that runs schema migrations needs from the
   # cluster-wide defaults in services.postgresql.settings. `0` disables the
   # bound for that role only; the global value still applies to everyone else.
@@ -56,10 +66,28 @@
       RemainAfterExit = true;
       User = "postgres";
     };
+    # The password never appears in a logged statement. `log_statement = ddl`
+    # below logs every ALTER ROLE verbatim -- password included -- and that
+    # journal is shipped to Loki by services.loki-logs, so before this guard
+    # every role password (superuser included) was readable in Loki by anyone
+    # on the LAN (audit 2026-09-14: 12 such lines in 30 days). Both GUCs are
+    # SUSET and this runs as the postgres superuser over peer auth, so the
+    # per-session override is honoured; `log_min_error_statement` is raised
+    # too because a *failing* ALTER would otherwise log its text at ERROR,
+    # and `log_min_duration_statement` is off because a *slow* one (this pool
+    # is two HDDs) would log it with its duration.
+    # The value travels as a psql variable (`:'pw'`), not shell interpolation,
+    # so a password containing a quote can neither break nor inject SQL. The
+    # SQL is fed on stdin rather than via -c because psql does not interpolate
+    # variables inside -c strings.
     script =
       ''
-        PASSWORD=$(cat ${secret.path})
-        ${psql} -c "ALTER USER ${role} WITH PASSWORD '$PASSWORD';"
+        ${psql} -v ON_ERROR_STOP=1 -v pw="$(cat ${secret.path})" -f - <<'SQL'
+        SET log_statement = 'none';
+        SET log_min_error_statement = 'panic';
+        SET log_min_duration_statement = -1;
+        ALTER USER ${role} WITH PASSWORD :'pw';
+        SQL
       ''
       + lib.concatMapStrings (sql: "${psql} -c \"${sql}\"\n") (
         extraSql
@@ -260,12 +288,31 @@ in {
       # outright as well, belt and braces. Dead TCP peers are handled far
       # faster by the keepalives above; this only catches the rest.
       idle_session_timeout = "8h";
+
+      # TLS on the wire. Every remote client (forgejo, romm, hofvarpnir, the
+      # pgmcp servers, the OpenTofu `pg` backend) crosses the LAN, and until
+      # 2026-09-14 all of it -- SCRAM handshake aside -- was cleartext. The
+      # cert is a step-ca leaf for database.homelab.local obtained via
+      # security.acme below and copied into pgSslDir by its postRun, so the
+      # key is owned by postgres with the 0600 postgres insists on (the acme
+      # module's own files are acme:postgres 0640, which it refuses).
+      ssl = true;
+      ssl_cert_file = "${pgSslDir}/fullchain.pem";
+      ssl_key_file = "${pgSslDir}/key.pem";
+      ssl_min_protocol_version = "TLSv1.2";
     };
 
     # Enable TCP/IP connections
     enableTCPIP = true;
 
     # Authentication configuration
+    #
+    # TODO(tls): flip the three LAN/tailnet `host` rows to `hostssl` once every
+    # client whose connection URL lives in a secret carries `sslmode=require`
+    # or better: the seven secrets/pg-mcp-*-url.age, hofvarpnir-env.age
+    # (DATABASE_URL) and the OpenTofu `pg` backend conn string. Until then
+    # `host` still accepts TLS -- libpq/pgx default to sslmode=prefer and
+    # upgrade on their own -- but does not require it.
     authentication = pkgs.lib.mkOverride 10 ''
       # TYPE  DATABASE        USER            ADDRESS                 METHOD
       local   all             all                                     peer
@@ -647,6 +694,20 @@ in {
       '';
     };
 
+    # HTTP-01 for the postgres TLS cert (security.acme below). lego answers on
+    # acmeChallengePort; step-ca dials database.homelab.local:80, which is this
+    # site. Everything else on :80 keeps Caddy's default redirect to HTTPS.
+    virtualHosts."http://${pgCertName}" = {
+      extraConfig = ''
+        handle /.well-known/acme-challenge/* {
+          reverse_proxy 127.0.0.1:${toString acmeChallengePort}
+        }
+        handle {
+          redir https://{host}{uri} permanent
+        }
+      '';
+    };
+
     # pgAdmin 4 (native service on 127.0.0.1:5050) served with a step-ca cert.
     virtualHosts."pgadmin.homelab.local pgadmin.homelab.internal" = {
       extraConfig = ''
@@ -665,12 +726,58 @@ in {
   # Give Caddy access to Tailscale socket for cert fetching
   systemd.services.caddy.serviceConfig.BindPaths = "/var/run/tailscale/tailscaled.sock";
 
+  # step-ca leaf for postgres (see services.postgresql.settings.ssl). Caddy
+  # gets its own certs through its built-in ACME client; postgres has none, so
+  # lego (security.acme) does it and hands the files over in postRun.
+  security.acme = {
+    acceptTerms = true;
+    defaults = {
+      email = "acme@homelab.local";
+      server = "https://ca.homelab.local:8443/acme/acme/directory";
+    };
+    certs.${pgCertName} = {
+      listenHTTP = "127.0.0.1:${toString acmeChallengePort}";
+      group = "postgres";
+      # Runs as root after every (re)issuance. Copy rather than point postgres
+      # at /var/lib/acme: postgres refuses a key it does not own unless it is
+      # root-owned 0640, and lego's files are acme-owned.
+      postRun = ''
+        install -d -m 0750 -o postgres -g postgres ${pgSslDir}
+        install -m 0640 -o postgres -g postgres fullchain.pem ${pgSslDir}/fullchain.pem
+        install -m 0600 -o postgres -g postgres key.pem ${pgSslDir}/key.pem
+      '';
+      reloadServices = ["postgresql.service"];
+    };
+  };
+
+  systemd.services.postgresql = {
+    # Don't block on issuance: the target is reached on failure too, and the
+    # preStart below guarantees a usable cert either way.
+    after = ["acme-finished-${pgCertName}.target"];
+    wants = ["acme-${pgCertName}.service"];
+    # Self-signed placeholder until the real leaf lands, so `ssl = true` can
+    # never wedge startup (fresh install, ca.homelab.local unreachable). The
+    # acme postRun overwrites it; clients pinned to verify-full will refuse
+    # the placeholder, which is the correct failure.
+    preStart = lib.mkBefore ''
+      if [ ! -s ${pgSslDir}/key.pem ]; then
+        install -d -m 0750 ${pgSslDir}
+        ${pkgs.openssl}/bin/openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+          -nodes -days 30 -subj "/CN=${pgCertName}" \
+          -keyout ${pgSslDir}/key.pem -out ${pgSslDir}/fullchain.pem 2>/dev/null
+        chmod 0600 ${pgSslDir}/key.pem
+        chmod 0640 ${pgSslDir}/fullchain.pem
+      fi
+    '';
+  };
+
   # Firewall configuration
   networking.firewall = {
     enable = true;
     trustedInterfaces = ["tailscale0"];
     allowedTCPPorts = [
       22 # SSH
+      80 # HTTP (ACME HTTP-01 for the postgres cert; Caddy redirects the rest)
       443 # HTTPS (Caddy)
       5432 # PostgreSQL
       # 6432 (pgbouncer) is deliberately absent: services.pgbouncer above binds

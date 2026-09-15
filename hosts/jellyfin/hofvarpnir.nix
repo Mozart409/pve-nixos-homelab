@@ -85,6 +85,13 @@
       OTEL_SERVICE_NAME = "hofvarpnir";
 
       SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
+      # TLS to postgres (hosts/database has ssl = true). sqlx reads these libpq
+      # env vars as defaults for anything DATABASE_URL (hofvarpnir-env.age)
+      # does not spell out. `require` rather than `verify-full` because the
+      # URL in the secret may still address the host by IP; once it says
+      # `database.homelab.local?sslmode=verify-full` this line can go.
+      PGSSLMODE = "require";
+      PGSSLROOTCERT = "/etc/ssl/certs/ca-certificates.crt";
 
       # --- OIDC (Pocket ID) -------------------------------------------------
       # Non-secret OIDC config lives here; OIDC_CLIENT_ID + OIDC_CLIENT_SECRET
