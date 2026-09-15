@@ -168,7 +168,7 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
             generated unit doesn't change when only the mounted config.toml's
             *contents* do). As of 2026-08-15 `config.toml`'s text is hashed into
             a `CONFIG_HASH` env var on the container (see
-            `hosts/containers/axon-gateway/default.nix`), so the unit changes
+            `hosts/mcp_vm/axon-gateway/default.nix`), so the unit changes
             and `colmena apply` restarts it on its own — no manual step needed.
         -   `caddy` (any host) — restart if newly-added vhosts leave certs stuck
             at HTTP 000 (step-ca ACME `badNonce` storm).
@@ -181,7 +181,7 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
          -   `hosts/hermes/configuration.nix` — bump `secretNonce` when a secret,
              `SOUL.md`, `USER.md`, `config.yaml`, or skill changes; it triggers
              both `hermes-agent` and `hermes-config-check`.
-         -   `hosts/containers/axon-gateway/default.nix` — `configText` is hashed
+         -   `hosts/mcp_vm/axon-gateway/default.nix` — `configText` is hashed
              into `CONFIG_HASH`, so changing the declarative gateway config
              changes the generated container unit automatically.
          -   `modules/loki-logs.nix` — changes to the selected units or Fluent
@@ -403,7 +403,7 @@ These carry step-ca TLS certs, which are trusted on any host importing
 - **WRONG** (in `services.hermes-agent.mcpServers`):
   `url = "https://homelab-mcp.dropbear-butterfly.ts.net/mcp";`  # NXDOMAIN from hermes
 - **CORRECT**:
-  `url = "https://mcp.homelab.local/mcp";`  # resolves + step-ca TLS trusted
+  `url = "https://axon.homelab.local/mcp";`  # resolves + step-ca TLS trusted (the gateway; the MCP backends themselves are loopback-only on `mcp` since 2026-09-14)
 
 ### Tailscale ACLs Filter Ports Before the Host Firewall Ever Sees Them
 
@@ -840,24 +840,43 @@ open the PR, and deploy with `colmena`.
 
 ## 8. Claude Code Permissions on `development`
 
-Claude Code runs **unattended** on this host, so its permission config is a
-guardrail, not a prompt. Do not go looking for it in `~/.claude/settings.json`
-— that file is mutable and partly machine-written.
+**The account is the guardrail; the permission lists are ergonomics.** Since
+2026-09-14 every coding agent on this host (Claude Code, opencode, crush, herdr,
+moshi) runs as the dedicated user **`agent`** (`modules/agent-user.nix`): no
+wheel, an explicit `!ALL` sudoers rule, no access to `~amadeus/.ssh` (where the
+colmena deploy key and your Forgejo key live). It commits and pushes to
+Forgejo — including `main`, on purpose — with the agenix key
+`agent-forgejo-ssh`, and that is the end of what it can do to the fleet.
+Deploys happen as `amadeus` (wheel, NOPASSWD) from **your** clone under
+`/home/amadeus/code`, which `repo-sync-amadeus` keeps fast-forwarded to
+`main`; the agent's checkouts under `/home/agent/code` are never deployed
+directly. Reach the agent with `ssh agent@development` (your keys are in its
+`authorized_keys`) or `sudo -u agent -i`.
+
+Before the split the agents ran as `amadeus`, and the deny list below was the
+only thing between an agent and `colmena apply` — a list that `bash -c`,
+`env`, `xargs` and friends walked straight around, and that lives in a file
+the same user can edit. Read the rest of this section with that in mind: it
+shapes what an agent reaches for, it does not bound what it can do.
+
+The permission config is still applied unattended, so treat it as a guardrail,
+not a prompt. Do not go looking for it in `~agent/.claude/settings.json` —
+that file is mutable and partly machine-written.
 
 ### Source of truth
 
 **`modules/claude-permissions-data.nix`** — plain data (`allow`, `deny`,
-`defaultMode`, plus `webSearchDomains`), imported by exactly two consumers so
-the lists cannot drift:
+`defaultMode`, plus `webSearchDomains`), a function of the agent's home
+directory, imported by exactly two consumers so the lists cannot drift:
 
 | Module | Role |
 | --- | --- |
-| `modules/claude-permissions.nix` | **Writer.** `claude-permissions-apply` jq-merges the three keys and the WebSearch restriction hook into `~/.claude/settings.json` at boot (`claude-permissions.service`). |
+| `modules/claude-permissions.nix` | **Writer.** `claude-permissions-apply` jq-merges the three keys and the WebSearch restriction hook into `~agent/.claude/settings.json` at boot (`claude-permissions.service`, a user unit gated by `ConditionUser` to the agent). |
 | `modules/claude-settings-verify.nix` | **Checker.** Re-reads the same data and confirms it survived; notifies `notify.iphone_von_amadeus` via the axon gateway on drift. Runs after every boot plus a daily timer. |
 
 Both are imported by `hosts/development/configuration.nix`.
 
-**Editing `~/.claude/settings.json` by hand does not stick.** The merge is
+**Editing `~agent/.claude/settings.json` by hand does not stick.** The merge is
 right-biased and wholesale for `permissions.{allow,deny,defaultMode}` and for
 the `PreToolUse` hook group with `matcher == "WebSearch"` — the next boot
 overwrites them, and the daily verify sends a push notification in the
@@ -889,39 +908,46 @@ from 2026-08-31 until 2026-09-10, claiming `includeCoAuthoredBy` and
 Read settings with `if . == null then "unset" else tostring end` — the module's
 `readSetting` helper — never with `//`.
 
-### Why `defaultMode = "dontAsk"`
+### `defaultMode = "auto"` (changed from `dontAsk` on 2026-09-14)
 
-`dontAsk` **auto-denies** anything not pre-approved instead of prompting. That is
-the point: with nobody watching, a prompt is an indefinite hang.
+`auto` lets a safety classifier approve unlisted actions and still prompts on
+risky ones; `dontAsk` auto-denied everything not on the allow list. The switch
+was made because sessions on this host are driven interactively (herdr, mosh)
+far more than headless, and `dontAsk`'s silent mid-task denials read as broken
+tools. The trade-off is only acceptable because the deny list is no longer the
+boundary (see the top of this section): whatever the classifier lets through
+runs as a user that cannot escalate.
 
 | Mode | Unlisted action | Honors `deny` | Unattended |
 | --- | --- | --- | --- |
 | `dontAsk` | denied | yes | ✅ fails closed |
-| `auto` | classifier decides, still prompts on risky calls | yes | ❌ hangs |
+| `auto` | classifier decides, still prompts on risky calls | yes | ⚠️ can hang on a prompt |
 | `acceptEdits` | prompts for anything beyond file edits | yes | ❌ hangs |
 | `bypassPermissions` | allowed | yes | ⚠️ fails open |
 
-`auto` is the mode the UI labels "Auto" (Shift+Tab cycle); it reduces prompts via
-a safety classifier but does not eliminate them, and its availability depends on
-account/model eligibility, so it can silently drop out of the cycle. It is **not**
-a substitute here. `bypassPermissions` still honors `deny`, but discards the allow
-list as the thing defining scope. `dontAsk` is the only mode where the deny list
-is the guardrail *and* nothing blocks.
+`auto` is the mode the UI labels "Auto" (Shift+Tab cycle). Its availability
+depends on account/model eligibility, so it can silently drop out of the
+cycle. For a genuinely headless run (cron, `claude -p`), switch that session to
+`dontAsk` explicitly.
 
 ### Consequences worth knowing
 
-- **Denials are silent.** A command outside `allow` fails mid-task with no
-  prompt — it looks like a broken tool, not a permission problem. The allow list
-  is load-bearing; add to it in `claude-permissions-data.nix` rather than
-  working around a refusal.
-- **`AskUserQuestion` is denied.** Agents cannot ask clarifying questions in this
-  mode. They must assume and proceed, then state the assumption.
+- **Under `dontAsk`, denials are silent.** A command outside `allow` fails
+  mid-task with no prompt — it looks like a broken tool, not a permission
+  problem. Under `auto` the classifier may allow or prompt instead. Either way,
+  add to `claude-permissions-data.nix` rather than working around a refusal.
+- **No shell wrappers in the allow list.** `bash`, `sh`, `env`, `xargs`,
+  `timeout` were removed on 2026-09-14: each takes a whole command line and so
+  re-granted everything the deny list names. `nix`, `python3`, `node` stay
+  because they are the toolchain — the same hole, closed by the account
+  boundary rather than the list.
 - **Precedence is `deny` > `ask` > `allow`**, which is how `Bash(git push:*)` is
   granted while `Bash(git push --force*)` stays blocked. Deny rules apply in
   every mode, `bypassPermissions` included.
-- The deny list is what makes deploys human-gated: `nixos-rebuild`, `nh os`,
-  `colmena apply`, `just deploy*`, `gh pr merge`, and force-push are all blocked
-  regardless of mode.
+- The deny list still names `nixos-rebuild`, `nh os`, `colmena apply`,
+  `just deploy*`, `gh pr merge` and force-push so an agent does not even try;
+  what actually makes deploys human-gated is that the agent user has no sudo
+  and no deploy key.
 - **Subagents need narrow `Bash(<cmd>:*)` rules, not a broad `Bash`.** Delegated
   agents (Explore/Plan/General-purpose) check their tool calls against the same
   allow list, but only narrow rules flow to them: a bare `Bash` / `Bash(*)`
@@ -933,7 +959,7 @@ is the guardrail *and* nothing blocks.
 
 ### MCP tools are allow-listed per server, never with `mcp__*`
 
-`dontAsk` denies every unlisted MCP call silently, and a bare `mcp__*` allow
+An unlisted MCP call is denied (`dontAsk`) or classified (`auto`), and a bare `mcp__*` allow
 rule is **skipped by Claude Code with a warning** — it approves nothing. The
 only valid `allow` forms are a server-level `mcp__<server>__*` wildcard or an
 exact `mcp__<server>__<tool>` name. Rules live in `modules/claude-permissions-data.nix`
@@ -955,7 +981,7 @@ The deny list still guards whatever the underlying command would do.
 ### Scheduling is explicitly allowed
 
 Claude's native scheduling tools are allow-listed so unattended sessions can
-create future work without prompting under `defaultMode = "dontAsk"`:
+create future work without prompting in either mode:
 
 - `CronCreate`
 - `ScheduleWakeup`
@@ -967,7 +993,7 @@ subject to the tooling policy.
 
 ### WebSearch is allowed but domain-restricted (a hook, not a rule)
 
-`WebSearch` is in the allow list, so it works under `dontAsk` — but WebSearch
+`WebSearch` is in the allow list, so it works without a prompt — but WebSearch
 permission rules take **no specifier** (`WebSearch` bare is the only form; no
 domain filter, no wildcards — `WebSearch(domain:…)` is rejected). "No arbitrary
 websearch" therefore has to be enforced outside the permission system, and it

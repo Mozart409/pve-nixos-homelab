@@ -26,11 +26,14 @@ let
 in {
   # keep-sorted start
 
+  # The agent user's Forgejo key on development (modules/agent-user.nix): your own collaborator key, pasted in.
+  "agent-forgejo-ssh.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostDevelopment];
   "attic-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostDatabase]; # raw password; same value inside attic-db-url.age
   "attic-db-url.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostCache]; # env-file: ATTIC_SERVER_DATABASE_URL=postgresql://...
   "attic-push-token.age".publicKeys = [amadeusAge hostCa hostCache hostContainers hostDatabase hostDevelopment hostDns hostFleet hostForgejo hostHarbor hostHermes hostJellyfin hostMcp hostOtel hostUnifi hostWoodpecker]; # plain JWT, not KEY=value
   "attic-server-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostCache];
-  "axon-gateway-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostContainers hostHermes hostDevelopment hostOtel hostZeroclaw];
+  # hostMcp replaced hostContainers on 2026-09-14 when the gateway moved hosts. Run `just reencrypt` after a recipient change.
+  "axon-gateway-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostMcp hostHermes hostDevelopment hostOtel hostZeroclaw];
   "buildbot-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostBuildBotMaster];
   "buildbot-webhook-secret.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostBuildBotMaster];
   "buildbot-worker-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostBuildBotMaster hostBuildBotWorker1];
@@ -43,6 +46,7 @@ in {
   "futo-notes-db-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostContainers hostDatabase];
   "futo-notes-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostContainers];
   "garage-rpc-secret.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostCache];
+  "grafana-admin-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostOtel]; # break-glass local admin; the UI is OIDC-only
   "grafana-oidc-secret.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostOtel];
   "grafana-secret-key.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostOtel];
   "harbor-admin-password.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostHarbor];
@@ -61,6 +65,8 @@ in {
   "k3s-server-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook]; # add hostK3sCntrl1 + `just reencrypt` once k3s-cntrl-1 is installed and its real host key is known
   "moshi-device-id.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostHermes hostDevelopment hostZeroclaw]; # plain auth token
   "open-webui-env.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostContainers];
+  "otel-push-token.age".publicKeys = users; # bare token; every host's fluent-bit pushes to loki with it (write-only side)
+  "otel-query-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostOtel hostMcp]; # bare token; read side of the otel vhosts (prom/loki/tempo/alertmanager MCP servers)
   "pbs-mcp-token.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostMcp];
   "pg-mcp-appdb-url.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostMcp];
   "pg-mcp-appuser-url.age".publicKeys = [amadeus amadeusAge amadeusMacbook hostMcp];
