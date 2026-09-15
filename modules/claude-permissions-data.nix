@@ -1,16 +1,31 @@
-# Canonical Claude Code permission rules for the amadeus user.
+# Canonical Claude Code permission rules for the agent user.
 #
 # Plain data, imported by BOTH modules/claude-permissions.nix (which applies it)
 # and modules/claude-settings-verify.nix (which checks it survived). Keeping one
 # copy is the whole point: this repo already fights drift in ~/.claude/settings.json,
 # and two hand-maintained deny lists would be a new source of it.
 #
+# A function of the agent's home (modules/agent-user.nix) because the path
+# rules below are absolute; both importers pass `config.homelab.agent.home`.
+#
 # Rule syntax is Claude Code's own: `Tool(pattern)`, where a trailing `*` is a
 # prefix match and `Sub(cmd:*)` matches a subcommand and everything after it.
 # Precedence is deny > ask > allow, so a broad allow below is still narrowed by
 # any matching deny — that is how `git push` is granted without granting
 # `git push --force`.
-{
+#
+# WHAT THIS LIST IS AND IS NOT (audit 2026-09-14). It is enforced by the Claude
+# Code client, in the agent's own process, against a settings file the agent's
+# user can write. It shapes what an agent *reaches for*; it is not a security
+# boundary. The boundary is the account it runs as: a user with no sudo
+# (modules/agent-user.nix), so nothing on this list can escalate to root no
+# matter how it is phrased. That is also why `bash`, `sh`, `env`, `xargs`,
+# `timeout` are no longer allowed bare below -- each of them takes a whole
+# command line as an argument and so re-granted everything the deny list
+# names (`bash -c 'colmena apply'`). `nix`, `python3`, `node` stay: they are
+# the toolchain, and the same argument applies to them, which is the point --
+# with no sudo there is nothing left for a wrapper to unlock.
+{home}: {
   # Domains WebSearch may be restricted to. WebSearch permission rules accept no
   # domain specifier, so this list is the single source for two enforcement
   # points: the PreToolUse hook in modules/claude-permissions.nix (which refuses
@@ -178,7 +193,6 @@
     "Bash(pwd)"
     "Bash(rg:*)"
     "Bash(tail:*)"
-    "Bash(timeout:*)"
     "Bash(touch:*)"
     "Bash(tree:*)"
     "Bash(wc:*)"
@@ -192,31 +206,28 @@
     # (the classifier evaluates shell commands then). These cover what a delegated
     # agent runs that is not already granted above and hold in both dontAsk
     # (unattended) and auto (interactive) sessions. They are session-wide, so the
-    # main agent gains them too; the deny list still governs.
+    # main agent gains them too; the deny list still governs. No shell
+    # wrappers here (bash/sh/env/xargs/timeout) -- see the header comment.
     "Bash(awk:*)"
-    "Bash(bash:*)"
     "Bash(cut:*)"
     "Bash(diff:*)"
-    "Bash(env:*)"
     "Bash(node:*)"
     "Bash(npm:*)"
     "Bash(npx:*)"
     "Bash(python3:*)"
     "Bash(sed:*)"
-    "Bash(sh:*)"
     "Bash(sleep:*)"
     "Bash(sort:*)"
     "Bash(stat:*)"
     "Bash(tr:*)"
     "Bash(uniq:*)"
-    "Bash(xargs:*)"
 
     # The workspace itself. Secret files under it are carved back out by the
     # deny list below. `Edit` is the only path rule Claude Code consults for
     # file modification (Write/NotebookEdit/MultiEdit path rules are ignored
     # with a startup warning), so an Edit allow covers all file-editing tools.
-    "Read(//home/amadeus/code/**)"
-    "Edit(//home/amadeus/code/**)"
+    "Read(/${home}/code/**)"
+    "Edit(/${home}/code/**)"
 
     # Secret-adjacent files that are safe to read (contain no secrets themselves).
     # deny > allow, so these must be allowed *and* not matched by a deny rule.
@@ -225,8 +236,8 @@
     # actual secret material inside secrets/ directories.
     # The deny list below denies specific .env.* variants (not a blanket .env.*)
     # so .env.example remains readable.
-    "Read(//home/amadeus/code/**/secrets.nix)"
-    "Read(//home/amadeus/code/**/.env.example)"
+    "Read(/${home}/code/**/secrets.nix)"
+    "Read(/${home}/code/**/.env.example)"
   ];
 
   # Grouped by what they protect, not sorted — the grouping is the documentation.
@@ -234,11 +245,11 @@
     # Credentials. Read-denied rather than merely ask-gated: an agent has no
     # legitimate reason to read a private key, and a prompt is a decision the
     # user would have to get right every single time.
-    "Read(//home/amadeus/.ssh/**)"
-    "Read(//home/amadeus/.claude/.credentials.json)"
-    "Read(//home/amadeus/.aws/**)"
-    "Read(//home/amadeus/.config/gh/**)"
-    "Edit(//home/amadeus/.ssh/**)"
+    "Read(/${home}/.ssh/**)"
+    "Read(/${home}/.claude/.credentials.json)"
+    "Read(/${home}/.aws/**)"
+    "Read(/${home}/.config/gh/**)"
+    "Edit(/${home}/.ssh/**)"
 
     # Secret files inside the workspace. The allow list grants broad
     # Read/Edit on ~/code, so the secret patterns must be carved back out
@@ -250,46 +261,46 @@
     #
     # .env.* variants are denied individually (not a blanket .env.*) so that
     # .env.example — a template with no secrets — remains readable.
-    "Read(//home/amadeus/code/**/.env)"
-    "Read(//home/amadeus/code/**/.env.local)"
-    "Read(//home/amadeus/code/**/.env.local.*)"
-    "Read(//home/amadeus/code/**/.env.production)"
-    "Read(//home/amadeus/code/**/.env.production.*)"
-    "Read(//home/amadeus/code/**/.env.staging)"
-    "Read(//home/amadeus/code/**/.env.staging.*)"
-    "Read(//home/amadeus/code/**/.env.development)"
-    "Read(//home/amadeus/code/**/.env.development.*)"
-    "Read(//home/amadeus/code/**/.env.test)"
-    "Read(//home/amadeus/code/**/.env.test.*)"
-    "Read(//home/amadeus/code/**/.env.secret)"
-    "Read(//home/amadeus/code/**/.env.secret.*)"
-    "Read(//home/amadeus/code/**/*.env)"
-    "Read(//home/amadeus/code/**/.secrets/**)"
-    "Read(//home/amadeus/code/**/*.pem)"
-    "Read(//home/amadeus/code/**/*.key)"
-    "Read(//home/amadeus/code/**/id_rsa*)"
-    "Read(//home/amadeus/code/**/id_ed25519*)"
-    "Read(//home/amadeus/code/**/credentials*)"
-    "Edit(//home/amadeus/code/**/.env)"
-    "Edit(//home/amadeus/code/**/.env.local)"
-    "Edit(//home/amadeus/code/**/.env.local.*)"
-    "Edit(//home/amadeus/code/**/.env.production)"
-    "Edit(//home/amadeus/code/**/.env.production.*)"
-    "Edit(//home/amadeus/code/**/.env.staging)"
-    "Edit(//home/amadeus/code/**/.env.staging.*)"
-    "Edit(//home/amadeus/code/**/.env.development)"
-    "Edit(//home/amadeus/code/**/.env.development.*)"
-    "Edit(//home/amadeus/code/**/.env.test)"
-    "Edit(//home/amadeus/code/**/.env.test.*)"
-    "Edit(//home/amadeus/code/**/.env.secret)"
-    "Edit(//home/amadeus/code/**/.env.secret.*)"
-    "Edit(//home/amadeus/code/**/*.env)"
-    "Edit(//home/amadeus/code/**/.secrets/**)"
-    "Edit(//home/amadeus/code/**/*.pem)"
-    "Edit(//home/amadeus/code/**/*.key)"
-    "Edit(//home/amadeus/code/**/id_rsa*)"
-    "Edit(//home/amadeus/code/**/id_ed25519*)"
-    "Edit(//home/amadeus/code/**/credentials*)"
+    "Read(/${home}/code/**/.env)"
+    "Read(/${home}/code/**/.env.local)"
+    "Read(/${home}/code/**/.env.local.*)"
+    "Read(/${home}/code/**/.env.production)"
+    "Read(/${home}/code/**/.env.production.*)"
+    "Read(/${home}/code/**/.env.staging)"
+    "Read(/${home}/code/**/.env.staging.*)"
+    "Read(/${home}/code/**/.env.development)"
+    "Read(/${home}/code/**/.env.development.*)"
+    "Read(/${home}/code/**/.env.test)"
+    "Read(/${home}/code/**/.env.test.*)"
+    "Read(/${home}/code/**/.env.secret)"
+    "Read(/${home}/code/**/.env.secret.*)"
+    "Read(/${home}/code/**/*.env)"
+    "Read(/${home}/code/**/.secrets/**)"
+    "Read(/${home}/code/**/*.pem)"
+    "Read(/${home}/code/**/*.key)"
+    "Read(/${home}/code/**/id_rsa*)"
+    "Read(/${home}/code/**/id_ed25519*)"
+    "Read(/${home}/code/**/credentials*)"
+    "Edit(/${home}/code/**/.env)"
+    "Edit(/${home}/code/**/.env.local)"
+    "Edit(/${home}/code/**/.env.local.*)"
+    "Edit(/${home}/code/**/.env.production)"
+    "Edit(/${home}/code/**/.env.production.*)"
+    "Edit(/${home}/code/**/.env.staging)"
+    "Edit(/${home}/code/**/.env.staging.*)"
+    "Edit(/${home}/code/**/.env.development)"
+    "Edit(/${home}/code/**/.env.development.*)"
+    "Edit(/${home}/code/**/.env.test)"
+    "Edit(/${home}/code/**/.env.test.*)"
+    "Edit(/${home}/code/**/.env.secret)"
+    "Edit(/${home}/code/**/.env.secret.*)"
+    "Edit(/${home}/code/**/*.env)"
+    "Edit(/${home}/code/**/.secrets/**)"
+    "Edit(/${home}/code/**/*.pem)"
+    "Edit(/${home}/code/**/*.key)"
+    "Edit(/${home}/code/**/id_rsa*)"
+    "Edit(/${home}/code/**/id_ed25519*)"
+    "Edit(/${home}/code/**/credentials*)"
 
     # Destructive filesystem operations.
     "Bash(sudo rm *)"
@@ -354,7 +365,8 @@
   ];
 
   # Auto mode still honors the deny list and uses a safety classifier for
-  # unlisted actions, but prompts rather than silently denying. The deny list
-  # above is the guardrail.
+  # unlisted actions, but prompts rather than silently denying. Acceptable
+  # only because the account boundary (modules/agent-user.nix), not this
+  # list, is what bounds the agent -- see the header comment.
   defaultMode = "auto";
 }

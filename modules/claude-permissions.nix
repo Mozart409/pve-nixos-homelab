@@ -1,8 +1,11 @@
-{pkgs, ...}: let
-  user = "amadeus";
-  home = "/home/amadeus";
+{
+  config,
+  pkgs,
+  ...
+}: let
+  inherit (config.homelab.agent) user home;
 
-  perms = import ./claude-permissions-data.nix;
+  perms = import ./claude-permissions-data.nix {inherit home;};
 
   # The permissions block, the top-level includeCoAuthoredBy setting, and the
   # WebSearch restriction hook, as JSON. Merged into settings.json rather than
@@ -151,11 +154,15 @@
     '';
   };
 in {
+  imports = [./agent-user.nix];
+
   users.users.${user}.linger = true;
 
   systemd.user.services.claude-permissions = {
     description = "Apply Claude Code permission guardrails for ${user}";
     wantedBy = ["default.target"];
+    # Instantiated in every user's manager; only meaningful in the agent's.
+    unitConfig.ConditionUser = user;
 
     # After both writers, so this is the last word on the file each boot. After=
     # on a non-existent unit is a no-op, so this stays valid if either module is

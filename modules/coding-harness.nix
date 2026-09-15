@@ -4,8 +4,9 @@
   pkgs,
   ...
 }: let
-  user = "amadeus";
-  home = "/home/amadeus";
+  # The agent account (modules/agent-user.nix). Defaults to `agent`; a host
+  # that still runs its harness as amadeus sets homelab.agent.user there.
+  inherit (config.homelab.agent) user home;
 
   # Central, single-source-of-truth MCP server list shared by every "coding
   # harness" (Claude Code, opencode) on hosts that import this module. Add an
@@ -116,7 +117,7 @@
   # Everything unlisted keeps its default (ask).
   opencodePermissions = {
     external_directory = {
-      "/home/amadeus/.config/opencode/**" = "allow";
+      "${home}/.config/opencode/**" = "allow";
       "/tmp/**" = "allow";
     };
     bash = {
@@ -373,6 +374,8 @@
     ${applyOpencodeAuth}
   '';
 in {
+  imports = [./agent-user.nix];
+
   systemd.services.coding-harness-config = {
     description = "Central MCP/plugin config for Claude Code + opencode (${user})";
     wantedBy = ["multi-user.target"];

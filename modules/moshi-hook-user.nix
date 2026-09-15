@@ -3,7 +3,7 @@
   pkgs,
   ...
 }: let
-  user = "amadeus";
+  inherit (config.homelab.agent) user;
 
   # Same shape as hosts/hermes/moshi-hook.nix, targeting the interactive
   # amadeus user instead of a service account.
@@ -45,7 +45,7 @@
     "$moshi" install
   '';
 in {
-  imports = [./moshi-hook.nix];
+  imports = [./moshi-hook.nix ./agent-user.nix];
 
   # Start the user manager at boot so the daemon runs without a login session.
   users.users.${user}.linger = true;
@@ -53,6 +53,8 @@ in {
   systemd.user.services.moshi-hook-setup = {
     description = "Pair + install Moshi hooks for ${user}";
     wantedBy = ["default.target"];
+    # Only in this user's manager; the secret is owned by them alone.
+    unitConfig.ConditionUser = user;
     # Fail loudly and retry rather than exiting 0 on a bad/missing token: an
     # unpaired daemon that reports success is the failure mode that hid the
     # broken hook wiring before. The retry also covers the ordering race — user
@@ -73,6 +75,7 @@ in {
 
   systemd.user.services.moshi-hook = {
     description = "Moshi agent hook daemon (${user})";
+    unitConfig.ConditionUser = user;
     after = ["moshi-hook-setup.service"];
     requires = ["moshi-hook-setup.service"];
     wantedBy = ["default.target"];

@@ -11,6 +11,8 @@
   # publishes its own binary cache (cache.numtide.com, wired in below) that
   # has it prebuilt. See flake.nix's nix-ai-tools input comment.
   crushPkg = nix-ai-tools.packages.${pkgs.stdenv.hostPlatform.system}.crush;
+  # The unattended-agent account every harness module below configures.
+  agent = config.homelab.agent.user;
 in {
   imports = [
     ../../modules/common.nix
@@ -18,6 +20,7 @@ in {
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/podman.nix
+    ../../modules/agent-user.nix
     ../../modules/moshi-hook-user.nix
     ../../modules/coding-harness.nix
     ../../modules/herdr.nix
@@ -31,6 +34,33 @@ in {
     ../../modules/jj.nix
     ../../modules/lazygit.nix
   ];
+
+  # ── Two accounts, one boundary ─────────────────────────────────────────────
+  # Since 2026-09-14 the coding agents (Claude Code, opencode, crush, herdr,
+  # moshi) run as `agent`, a user with NO sudo, and everything under
+  # /home/agent/code is theirs. `amadeus` (wheel, NOPASSWD) is the human: you
+  # review on Forgejo, and `just self-deploy` runs from YOUR clone under
+  # /home/amadeus/code, which repo-sync keeps fast-forwarded to main. Nothing
+  # in /home/agent is ever deployed directly -- Forgejo is the hand-off.
+  #
+  # The agent pushes to main deliberately (no PR round-trip from a phone),
+  # with your collaborator identity via the agenix key agent-forgejo-ssh.
+  # What it cannot do any more: read ~amadeus/.ssh (the colmena deploy key,
+  # your Forgejo key), sudo, or `nixos-rebuild`. That is the whole guardrail;
+  # the Claude Code deny list (modules/claude-permissions-data.nix) is a
+  # convenience on top, not the boundary.
+  homelab.agent.enable = true;
+
+  homelab.repoSync = {
+    ${agent} = {
+      sshKey = config.age.secrets.agent-forgejo-ssh.path;
+      push = true;
+    };
+    amadeus = {
+      sshKey = "/home/amadeus/.ssh/id_ed25519";
+      push = false;
+    };
+  };
 
   networking.hostName = "homelab-development";
 
@@ -143,6 +173,9 @@ in {
   # gets a new key and will then be refused until its known_hosts line is
   # dropped; that is the same re-provisioning footgun that breaks agenix.
   programs.ssh.extraConfig = ''
+    # amadeus's own Forgejo key. The agent user never reaches this block: the
+    # `Match user agent` block modules/agent-user.nix prepends pins it to the
+    # agenix key first.
     Host forgejo.homelab.local forgejo.homelab.internal
       Port 2222
       User forgejo
@@ -152,11 +185,11 @@ in {
 
     Host *.homelab.local *.homelab.internal homelab-* 192.168.2.* !forgejo.homelab.local !forgejo.homelab.internal !*.ts.net
       User amadeus
-      # TEMPORARY (revert me): passphraseless deploy key so colmena can push
-      # non-interactively. This DEFEATS the consent gate documented above — any
-      # agent session as amadeus can now deploy the fleet. Swap back to
-      # `~/.ssh/id_colmena` and delete `~/.ssh/id_colmena_deploy` once the whole
-      # fleet has been re-deployed with the current authorized_keys.
+      # Passphraseless deploy key so colmena can push non-interactively. While
+      # the agents ran as amadeus this DEFEATED the consent gate documented
+      # above -- any agent session could deploy the fleet. Since 2026-09-14
+      # they run as `agent`, which cannot read ~amadeus/.ssh, so the key is
+      # gated by the account boundary instead. Keep it out of /home/agent.
       IdentityFile ~/.ssh/id_colmena_deploy
       IdentitiesOnly yes
       IdentityAgent none
@@ -204,21 +237,22 @@ in {
   };
 
   # Moshi pairing token (plain raw text, NOT KEY=value — read directly by
-  # modules/moshi-hook-user.nix's pair script). Owned by amadeus so
-  # moshi-hook-setup (User=amadeus) can read it.
+  # modules/moshi-hook-user.nix's pair script). Owned by the agent so its
+  # moshi-hook-setup user service can read it.
   age.secrets.moshi-device-id = {
     file = ../../secrets/moshi-device-id.age;
-    owner = "amadeus";
+    owner = agent;
     mode = "0400";
   };
 
   # Axon MCP gateway bearer token (file contains AXON_GATEWAY_TOKEN=...).
-  # Owned by amadeus: modules/coding-harness.nix sources it directly into
+  # Owned by the agent: modules/coding-harness.nix sources it directly into
   # every interactive login shell (environment.interactiveShellInit) so
   # Claude Code / opencode can expand it from their MCP config at runtime.
+  # amadeus's shells skip it (the source is gated on readability).
   age.secrets.axon-gateway-env = {
     file = ../../secrets/axon-gateway-env.age;
-    owner = "amadeus";
+    owner = agent;
     mode = "0400";
   };
 
@@ -229,7 +263,7 @@ in {
   # (secrets/axon-gateway-env.age there); see that repo for how it's minted.
   age.secrets.ventara-gateway-env = {
     file = ../../secrets/ventara-gateway-env.age;
-    owner = "amadeus";
+    owner = agent;
     mode = "0400";
   };
 
@@ -240,7 +274,7 @@ in {
   # separate hermes-opencode-zen-key.age.
   age.secrets.opencode-zen-key = {
     file = ../../secrets/development-opencode-zen-key.age;
-    owner = "amadeus";
+    owner = agent;
     mode = "0400";
   };
 
@@ -253,12 +287,12 @@ in {
 
   # Forgejo API token for the `developmentbot` account (env-file:
   # FORGEJO_TOKEN=...). Needed ONLY to create repos over the REST API — git
-  # itself authenticates with the ~/.ssh/id_ed25519 key registered on that
-  # account, so losing this token costs nothing but a re-mint. Owned by amadeus
-  # because Claude Code runs interactively as amadeus.
+  # itself authenticates with the agent-forgejo-ssh key, so losing this token
+  # costs nothing but a re-mint. Owned by the agent, whose sessions are the
+  # ones that drive `fj`.
   age.secrets.development-forgejo-token = {
     file = ../../secrets/development-forgejo-token.age;
-    owner = "amadeus";
+    owner = agent;
     mode = "0400";
   };
 

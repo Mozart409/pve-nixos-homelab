@@ -19,6 +19,16 @@
 
   networking.hostName = "homelab-zeroclaw";
 
+  # The harness modules (coding-harness, moshi-hook-user) default to the
+  # dedicated `agent` account since 2026-09-14 (modules/agent-user.nix). This
+  # host is shut down and was never split; keep its harness on amadeus so the
+  # config still describes what is on disk. Flip to `homelab.agent.enable =
+  # true` (and drop these two lines) if it ever comes back.
+  homelab.agent = {
+    user = "amadeus";
+    home = "/home/amadeus";
+  };
+
   networking.interfaces.ens18 = {
     useDHCP = false;
     ipv4.addresses = [

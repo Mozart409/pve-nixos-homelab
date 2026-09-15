@@ -5,8 +5,7 @@
   herdr,
   ...
 }: let
-  user = "amadeus";
-  home = "/home/amadeus";
+  inherit (config.homelab.agent) user home;
 
   herdrPkg = herdr.packages.${pkgs.stdenv.hostPlatform.system}.herdr;
 
@@ -151,6 +150,8 @@
     ${herdrPkg}/bin/herdr integration install claude
   '';
 in {
+  imports = [./agent-user.nix];
+
   environment.systemPackages =
     [
       herdrPkg

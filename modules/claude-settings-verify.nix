@@ -4,13 +4,12 @@
   config,
   ...
 }: let
-  user = "amadeus";
-  home = "/home/amadeus";
+  inherit (config.homelab.agent) user home;
 
   # Same list modules/claude-permissions.nix applies, so "what must be present"
   # and "what gets written" cannot drift apart. Previously this module carried
   # its own hand-maintained subset.
-  perms = import ./claude-permissions-data.nix;
+  perms = import ./claude-permissions-data.nix {inherit home;};
   denyArray = lib.concatMapStringsSep " " lib.escapeShellArg perms.deny;
   expectedMode = lib.escapeShellArg perms.defaultMode;
   # The web-scope allow rules come from the same list that drives the WebSearch
@@ -157,9 +156,12 @@
     '';
   };
 in {
+  imports = [./agent-user.nix];
+
   systemd.user.services.claude-settings-verify = {
     description = "Verify ~/.claude/settings.json guardrails for ${user}";
     wantedBy = ["default.target"];
+    unitConfig.ConditionUser = user;
 
     # The whole point: run *after* the services that rewrite settings.json, so a
     # clobber is caught on the same boot that causes it rather than on the next
@@ -183,6 +185,7 @@ in {
   systemd.user.timers.claude-settings-verify = {
     description = "Daily Claude settings guardrail check for ${user}";
     wantedBy = ["timers.target"];
+    unitConfig.ConditionUser = user;
     timerConfig = {
       OnCalendar = "daily";
       Persistent = true;
