@@ -16,7 +16,8 @@
     ./albyhub
     ./open-webui
     ./searxng
-    ./axon-gateway
+    # axon-gateway moved to hosts/mcp_vm/axon-gateway on 2026-09-14 so the
+    # MCP servers it fronts could go loopback-only.
     ./homelab-dashboard
     ./romm
     # Harbor moved to dedicated VM (hosts/harbor)
@@ -46,17 +47,6 @@
   # The node exporter is enabled fleet-wide by modules/common.nix. (The
   # postgres exporter for the uptime-forge TimescaleDB left with it on
   # 2026-09-12 -- see the retirement note under services.caddy.)
-
-  # Ship the axon-gateway container journal to the central Loki.
-  services.loki-logs = {
-    enable = true;
-    units = [
-      {
-        unit = "podman-axon-gateway.service";
-        job = "axon-gateway";
-      }
-    ];
-  };
 
   # Open WebUI now lives in ./open-webui (listens on localhost:8088)
 
@@ -121,19 +111,6 @@
         }
 
         reverse_proxy localhost:8089
-      '';
-    };
-
-    # axon-gateway MCP gateway. The container binds 127.0.0.1:8091, so Caddy is
-    # the only thing that proxies to it. Agents connect at
-    # https://axon.homelab.local/mcp (step-ca TLS, trusted on any homelab host).
-    virtualHosts."axon.homelab.local axon.homelab.internal" = {
-      extraConfig = ''
-        tls {
-          ca https://ca.homelab.local:8443/acme/acme/directory
-        }
-
-        reverse_proxy localhost:8091
       '';
     };
 

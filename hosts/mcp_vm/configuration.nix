@@ -17,40 +17,22 @@
   #
   # Bump this string whenever a secret's *content* changes; that changes
   # restartTriggers -> the unit definition -> a restart on the next colmena apply.
-  secretNonce = "2026-08-06-wpmcp-token";
+  secretNonce = "2026-09-14-otel-query-token";
 
-  # Both private zones are served for every name (see hosts/dns/configuration.nix):
-  # Apple clients force *.local to mDNS and never ask a unicast resolver, so
-  # homelab.internal is the reachable one from macOS/iOS over Tailscale split DNS.
-  # The Caddy vhost key lists both names. Caddy issues one certificate *per
-  # hostname*, not per vhost, so each of these is two concurrent ACME orders
-  # against step-ca (two `issue_cert_*` locks in /var/lib/caddy). certmagic's
-  # retry backoff has no jitter, so once both fail together they retry in
-  # lockstep forever -- the badNonce storm seen 2026-09-11 for alertmanager-mcp,
-  # cleared only by restarting step-ca, not Caddy (todo/dns-cache-ssd-xfs-
-  # migration.md D.5). Both names also need A records in
-  # hosts/dns/configuration.nix before the vhost is deployed, or step-ca's
-  # challenge NXDOMAINs and Caddy sits in that same loop. allowedHosts must
-  # list both names too, or the MCP server rejects the Host header Caddy passes.
-  vhostKey = base: "${base}.homelab.local ${base}.homelab.internal";
-  vhostNames = base: ["${base}.homelab.local" "${base}.homelab.internal"];
-
-  # Caddy vhost template: step-ca TLS + reverse proxy to a loopback MCP server.
-  mkMcpVhost = port: {
-    extraConfig = ''
-      tls {
-        ca https://ca.homelab.local:8443/acme/acme/directory
-      }
-
-      handle {
-        # 127.0.0.1, never "localhost": Caddy resolves proxy upstreams through
-        # the system resolver, and a `localhost` lookup here has timed out
-        # against unbound ("dial tcp: lookup localhost: i/o timeout" -> 502 or a
-        # hung request). A literal IP is dialed directly, with no DNS at all.
-        reverse_proxy http://127.0.0.1:${toString port}
-      }
-    '';
-  };
+  # Since 2026-09-14 no MCP server has a vhost. They all bind loopback and the
+  # only client is axon-gateway (./axon-gateway), which now runs on THIS host
+  # with host networking and dials them on 127.0.0.1 directly. Before that
+  # every backend had its own *-mcp.homelab.local Caddy vhost with no
+  # authentication at all -- the audit that day confirmed `initialize` +
+  # `run_query` / `call_service` worked from any LAN or tailnet address,
+  # bypassing the gateway's bearer token entirely. Caddy on this host now
+  # serves exactly one thing: the gateway.
+  #
+  # The old vhost keys (both private zones per name, one ACME order per name,
+  # the badNonce lockstep that caused -- see todo/dns-cache-ssd-xfs-
+  # migration.md D.5) are gone with it, as are their A/PTR records in
+  # hosts/dns/configuration.nix and the blackbox mcp_probe job on otel.
+  loopbackOnly = ["localhost" "127.0.0.1"];
 
   # Postgres MCP servers on the `database` host: one instance per database.
   #
@@ -82,12 +64,17 @@
     hofvarpnir = 8090;
   };
 
-  pgVhostBase = db: "pg-${db}-mcp";
   pgUnitName = db: "pgmcp-${db}-server";
   pgSecretName = db: "pg-mcp-${db}-url";
 
   mcpServerUnits =
-    map (name: {
+    [
+      {
+        unit = "podman-axon-gateway.service";
+        job = "axon-gateway";
+      }
+    ]
+    ++ map (name: {
       unit = "${name}.service";
       job = name;
     }) [
@@ -110,7 +97,9 @@ in {
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
     ../../modules/fluent-bit.nix
+    ../../modules/podman.nix
     ../../modules/caddy-http3.nix
+    ./axon-gateway
   ];
 
   networking.hostName = "homelab-mcp";
@@ -133,38 +122,10 @@ in {
     units = mcpServerUnits;
   };
 
-  # Caddy reverse proxy: one vhost per MCP server. All servers bind loopback,
-  # so Caddy is the only way in. The MCP endpoint is at /mcp on each vhost.
-  services.caddy = {
-    enable = true;
-
-    virtualHosts =
-      {
-        # Tailscale hostname (kept for backwards compatibility -> Home Assistant MCP)
-        "homelab-mcp.dropbear-butterfly.ts.net" = {
-          extraConfig = ''
-            tls {
-              get_certificate tailscale
-            }
-
-            handle {
-              reverse_proxy http://127.0.0.1:8084
-            }
-          '';
-        };
-
-        # Home Assistant MCP keeps the historical mcp.homelab.local name so the
-        # axon-gateway "hamcp" backend URL stays valid.
-        ${vhostKey "mcp"} = mkMcpVhost 8084;
-        ${vhostKey "pbs-mcp"} = mkMcpVhost 8080;
-        ${vhostKey "prom-mcp"} = mkMcpVhost 8082;
-        ${vhostKey "loki-mcp"} = mkMcpVhost 8083;
-        ${vhostKey "wp-mcp"} = mkMcpVhost 8091;
-        ${vhostKey "alertmanager-mcp"} = mkMcpVhost 8086;
-      }
-      # One vhost per database on the `database` host.
-      // lib.mapAttrs' (db: port: lib.nameValuePair (vhostKey (pgVhostBase db)) (mkMcpVhost port)) homelabDatabases;
-  };
+  # Caddy serves exactly one thing on this host: axon-gateway. Its vhosts live
+  # next to the container in ./axon-gateway (they are the only consumer of its
+  # port); the MCP servers below have no vhost at all.
+  services.caddy.enable = true;
 
   age.secrets =
     {
@@ -176,6 +137,12 @@ in {
       };
       woodpecker-mcp-token = {
         file = ../../secrets/woodpecker-mcp-token.age;
+      };
+      # Read-side bearer for the prometheus/loki/alertmanager vhosts on otel
+      # (see hosts/otel/configuration.nix). Bare token; each server exports it
+      # as <PREFIX>_TOKEN from LoadCredential.
+      otel-query-token = {
+        file = ../../secrets/otel-query-token.age;
       };
     }
     # postgres://mcp:<pw>@database.homelab.local:5432/<db> — same read-only role
@@ -198,24 +165,27 @@ in {
         host = "https://pbs.dropbear-butterfly.ts.net/";
         tokenFile = config.age.secrets.pbs-mcp-token.path;
         bind = "127.0.0.1:8080";
-        allowedHosts = vhostNames "pbs-mcp" ++ ["localhost" "127.0.0.1"];
+        allowedHosts = loopbackOnly;
       };
 
       prommcp-server = {
         enable = true;
         package = mcpPackages.prommcp-server;
-        # Prometheus on the otel host; port 9090 is opened in its firewall.
-        host = "http://otel.homelab.local:9090";
+        # Through otel's Caddy with the query token: raw 9090 is closed since
+        # 2026-09-14.
+        host = "https://prometheus.homelab.local";
+        tokenFile = config.age.secrets.otel-query-token.path;
         bind = "127.0.0.1:8082";
-        allowedHosts = vhostNames "prom-mcp" ++ ["localhost" "127.0.0.1"];
+        allowedHosts = loopbackOnly;
       };
 
       lokimcp-server = {
         enable = true;
         package = mcpPackages.lokimcp-server;
-        host = "http://otel.homelab.local:3100";
+        host = "https://loki.homelab.local";
+        tokenFile = config.age.secrets.otel-query-token.path;
         bind = "127.0.0.1:8083";
-        allowedHosts = vhostNames "loki-mcp" ++ ["localhost" "127.0.0.1"];
+        allowedHosts = loopbackOnly;
       };
 
       hamcp-server = {
@@ -224,13 +194,7 @@ in {
         host = "https://homeassistant.dropbear-butterfly.ts.net";
         tokenFile = config.age.secrets.homeassistant-token.path;
         bind = "127.0.0.1:8084";
-        allowedHosts =
-          vhostNames "mcp"
-          ++ [
-            "homelab-mcp.dropbear-butterfly.ts.net"
-            "localhost"
-            "127.0.0.1"
-          ];
+        allowedHosts = loopbackOnly;
       };
 
       # Woodpecker CI, which runs on its own host. `ci.homelab.local` is baked
@@ -242,15 +206,16 @@ in {
         host = "https://ci.homelab.local";
         tokenFile = config.age.secrets.woodpecker-mcp-token.path;
         bind = "127.0.0.1:8091";
-        allowedHosts = vhostNames "wp-mcp" ++ ["localhost" "127.0.0.1"];
+        allowedHosts = loopbackOnly;
       };
 
       alertmanagermcp-server = {
         enable = true;
         package = mcpPackages.alertmanagermcp-server;
         extraEnv.ALERTMANAGER_HOST = "https://alertmanager.homelab.internal";
+        tokenFile = config.age.secrets.otel-query-token.path;
         bind = "127.0.0.1:8086";
-        allowedHosts = vhostNames "alertmanager-mcp" ++ ["localhost" "127.0.0.1"];
+        allowedHosts = loopbackOnly;
       };
     }
     # One pgmcp instance per database on the `database` host. serverType pins the
@@ -263,13 +228,13 @@ in {
         package = mcpPackages.pgmcp-server;
         tokenFile = config.age.secrets.${pgSecretName db}.path;
         bind = "127.0.0.1:${toString port}";
-        allowedHosts = vhostNames (pgVhostBase db) ++ ["localhost" "127.0.0.1"];
+        allowedHosts = loopbackOnly;
       })
     homelabDatabases;
 
   systemd.services =
     # Secret-consuming servers must wait for agenix to place the credentials.
-    lib.genAttrs (["pbsmcp-server" "hamcp-server" "wpmcp-server"]
+    lib.genAttrs (["pbsmcp-server" "hamcp-server" "wpmcp-server" "prommcp-server" "lokimcp-server" "alertmanagermcp-server"]
       ++ map pgUnitName (builtins.attrNames homelabDatabases)) (_: {
       wants = ["agenix.target"];
       after = ["agenix.target"];
