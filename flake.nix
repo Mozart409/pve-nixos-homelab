@@ -227,8 +227,8 @@
 
     # Function to create a NixOS system configuration. Every mkHost host gets
     # home-manager/nixvim (hive parity, see above). The fleet-wide attic push
-    # was retired 2026-09-09 with the cache VM: modules/attic-push.nix is kept
-    # on disk but imported nowhere.
+    # was retired 2026-09-09 with the cache VM; modules/attic-push.nix and its
+    # token were deleted 2026-09-15.
     # The Loki shipper is NOT here -- it is owned by modules/fluent-bit.nix and
     # imported from modules/common.nix, which every host has. Hosts that must NOT
     # (bootstrap/installer images like `minimal` and `iso`) are explicit

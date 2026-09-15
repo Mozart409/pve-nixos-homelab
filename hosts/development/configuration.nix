@@ -279,8 +279,8 @@ in {
   };
 
   # The attic push token / login / auto-push-on-activation is gone: the cache VM
-  # was decommissioned 2026-09-09 (iac/main.tf) and modules/attic-push.nix is no
-  # longer imported anywhere. This host is one of the two that still evaluates
+  # was decommissioned 2026-09-09 (iac/main.tf) and modules/attic-push.nix was
+  # deleted 2026-09-15. This host is one of the two that still evaluates
   # the flake locally (`just self-deploy`, agent `nix develop`), so if GitHub
   # starts returning 429 on flake-input tarballs, add a token to
   # `nix.settings.access-tokens` here rather than reviving the cache.
