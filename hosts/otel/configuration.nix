@@ -551,7 +551,8 @@
           {
             targets = ["axon.homelab.local"];
             labels = {
-              instance = "homelab-containers";
+              # Moved from containers to the mcp host on 2026-09-14.
+              instance = "homelab-mcp";
             };
           }
         ];
@@ -585,6 +586,16 @@
     group = "grafana";
   };
 
+  # Break-glass local admin. Grafana is OIDC-only in the UI (auth block
+  # below); this password exists so `grafana-cli admin reset-admin-password`
+  # / the HTTP API still work if Pocket ID is down. Was the literal "admin"
+  # until 2026-09-14, which the audit confirmed logged in over the LAN.
+  age.secrets.grafana-admin-password = {
+    file = ../../secrets/grafana-admin-password.age;
+    owner = "grafana";
+    group = "grafana";
+  };
+
   services.grafana = {
     enable = true;
     settings = {
@@ -596,13 +607,27 @@
       };
       security = {
         admin_user = "admin";
-        admin_password = "admin";
+        admin_password = "$__file{${config.age.secrets.grafana-admin-password.path}}";
         secret_key = "$__file{${config.age.secrets.grafana-secret-key.path}}";
       };
+      # OIDC is the only interactive login: the username/password form is gone
+      # and the UI bounces straight to Pocket ID. HTTP basic auth stays on
+      # deliberately -- it is the break-glass path (`curl -u admin:<pw>
+      # …/grafana/api/…` from a host that can decrypt the secret) when Pocket
+      # ID is down, and with a random 32-char password it is no longer the
+      # hole it was with "admin".
+      auth = {
+        disable_login_form = true;
+        oauth_auto_login = true;
+      };
+      users.allow_sign_up = false;
       "auth.generic_oauth" = {
         enabled = true;
         name = "Pocket-ID";
-        allow_sign_up = true;
+        # Existing Grafana accounts only. A Pocket ID user without a Grafana
+        # account is refused; create it in the Grafana UI first (or flip this
+        # for one login and back).
+        allow_sign_up = false;
         client_id = "dba3e94b-d22d-444d-82ce-723e433e3d67";
         client_secret = "$__file{${config.age.secrets.grafana-oidc-secret.path}}";
         scopes = "openid email profile groups";
@@ -690,8 +715,114 @@
     };
   };
 
+  # Bearer tokens that gate every non-Grafana vhost on this host. Until
+  # 2026-09-14 prometheus (remote-write receiver included), loki, tempo,
+  # alertmanager and the OTLP receiver were reachable by anyone on the LAN or
+  # tailnet with no credential at all -- and loki held the postgres role
+  # passwords (see hosts/database, mkRolePasswordUnit). Two tokens, two blast
+  # radii:
+  #   push  -- every host's fluent-bit (modules/fluent-bit.nix) and OTLP
+  #            senders. Encrypted to every host key, so it is the one that
+  #            leaks when any single VM does; it can only *write*.
+  #   query -- the read side: the prom/loki/alertmanager MCP servers on the
+  #            mcp host. Only otel + mcp can decrypt it.
+  # Both are bare tokens (no KEY=value): Caddy reads them with the {file.…}
+  # placeholder, fluent-bit and the MCP servers get them via LoadCredential.
+  # Grafana reads all three stores over loopback and is unaffected.
+  age.secrets.otel-push-token = {
+    file = ../../secrets/otel-push-token.age;
+    owner = "caddy";
+    group = "caddy";
+    mode = "0400";
+  };
+  age.secrets.otel-query-token = {
+    file = ../../secrets/otel-query-token.age;
+    owner = "caddy";
+    group = "caddy";
+    mode = "0400";
+  };
+
   # Caddy reverse proxy with Tailscale TLS
-  services.caddy = {
+  services.caddy = let
+    pushToken = "{file.${config.age.secrets.otel-push-token.path}}";
+    queryToken = "{file.${config.age.secrets.otel-query-token.path}}";
+    # Named matchers, declared once per site and referenced by the handles.
+    # `header` matcher values take placeholders, so the comparison is against
+    # the live secret file, not a token baked into the Caddyfile in /nix/store.
+    authMatchers = ''
+      @push header Authorization "Bearer ${pushToken}"
+      @query header Authorization "Bearer ${queryToken}"
+    '';
+    # The otel.homelab.local / ts.net "everything on one name" sites. Grafana
+    # stays open (it has its own OIDC login); every other path needs a token.
+    # Loki's push path takes either token so a host that only holds the push
+    # token can ship logs; reads need the query token.
+    aggregate = ''
+      ${authMatchers}
+      @lokiPush {
+        path /loki/api/v1/push
+        header Authorization "Bearer ${pushToken}"
+      }
+
+      handle /grafana* {
+        reverse_proxy localhost:3000
+      }
+      # `handle` blocks are mutually exclusive and sorted by path length; the
+      # inner `route` keeps the written order so the token check runs before
+      # the 401 fallback (reverse_proxy does not fall through once matched).
+      handle /v1/* {
+        route {
+          reverse_proxy @push localhost:4318
+          respond 401
+        }
+      }
+      handle /prometheus* {
+        route {
+          uri strip_prefix /prometheus
+          reverse_proxy @query localhost:9090
+          respond 401
+        }
+      }
+      handle /loki* {
+        route {
+          reverse_proxy @lokiPush localhost:3100
+          reverse_proxy @query localhost:3100
+          respond 401
+        }
+      }
+      handle /tempo* {
+        route {
+          reverse_proxy @query localhost:3200
+          respond 401
+        }
+      }
+      handle {
+        respond "OK" 200
+      }
+    '';
+    # Single-service vhosts: the query token unlocks everything; on loki the
+    # push token additionally unlocks the push path (that is what every
+    # host's fluent-bit uses). Everything sits in one `route` because Caddy
+    # otherwise orders a bare `reverse_proxy` AFTER `route`, which would let
+    # the 401 fallback win for push requests.
+    single = port: withPush: ''
+      tls {
+        ca https://ca.homelab.local:8443/acme/acme/directory
+      }
+      ${authMatchers}
+      ${lib.optionalString withPush ''
+        @lokiPush {
+          path /loki/api/v1/push
+          header Authorization "Bearer ${pushToken}"
+        }
+      ''}
+      route {
+        ${lib.optionalString withPush "reverse_proxy @lokiPush localhost:${toString port}"}
+        reverse_proxy @query localhost:${toString port}
+        respond 401
+      }
+    '';
+  in {
     enable = true;
 
     # Tailscale hostname
@@ -700,31 +831,7 @@
         tls {
           get_certificate tailscale
         }
-
-        handle_path /prometheus* {
-          reverse_proxy localhost:9090
-        }
-
-        handle /loki* {
-          reverse_proxy localhost:3100
-        }
-
-        handle /tempo* {
-          reverse_proxy localhost:3200
-        }
-
-        handle /grafana* {
-          reverse_proxy localhost:3000
-        }
-
-        # OTLP endpoints (traces, metrics, logs)
-        handle /v1/* {
-          reverse_proxy localhost:4318
-        }
-
-        handle {
-          respond "OK" 200
-        }
+        ${aggregate}
       '';
     };
 
@@ -734,63 +841,21 @@
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
         }
-
-        handle_path /prometheus* {
-          reverse_proxy localhost:9090
-        }
-
-        handle /loki* {
-          reverse_proxy localhost:3100
-        }
-
-        handle /tempo* {
-          reverse_proxy localhost:3200
-        }
-
-        handle /grafana* {
-          reverse_proxy localhost:3000
-        }
-
-        # OTLP endpoints (traces, metrics, logs)
-        handle /v1/* {
-          reverse_proxy localhost:4318
-        }
-
-        handle {
-          respond "OK" 200
-        }
+        ${aggregate}
       '';
     };
 
     # Dedicated per-service hostnames (step-ca certs), each served at root
     virtualHosts."loki.homelab.local loki.homelab.internal" = {
-      extraConfig = ''
-        tls {
-          ca https://ca.homelab.local:8443/acme/acme/directory
-        }
-
-        reverse_proxy localhost:3100
-      '';
+      extraConfig = single 3100 true;
     };
 
     virtualHosts."tempo.homelab.local tempo.homelab.internal" = {
-      extraConfig = ''
-        tls {
-          ca https://ca.homelab.local:8443/acme/acme/directory
-        }
-
-        reverse_proxy localhost:3200
-      '';
+      extraConfig = single 3200 false;
     };
 
     virtualHosts."prometheus.homelab.local prometheus.homelab.internal" = {
-      extraConfig = ''
-        tls {
-          ca https://ca.homelab.local:8443/acme/acme/directory
-        }
-
-        reverse_proxy localhost:9090
-      '';
+      extraConfig = single 9090 false;
     };
   };
 
@@ -805,14 +870,22 @@
     trustedInterfaces = ["tailscale0"];
     allowedTCPPorts = [
       22 # SSH
-      443 # HTTPS (Caddy)
-      4317 # OTLP gRPC
-      4318 # OTLP HTTP
-      3100 # Loki HTTP
-      3200 # Tempo HTTP
-      8888 # Collector metrics
-      9090 # Prometheus HTTP (queried by prommcp on the mcp host)
+      443 # HTTPS (Caddy) -- the only way in; everything below it is token-gated
+      # 9090/3100/3200/8888/4317/4318 are deliberately NOT here any more
+      # (closed 2026-09-14). Prometheus, Loki, Tempo, the collector's own
+      # metrics and both OTLP receivers still bind 0.0.0.0, but only loopback
+      # (grafana, tempo remote_write, the alertmanager bridge) and the one
+      # source-scoped exception below can reach them.
     ];
+    # hofvarpnir (jellyfin host) speaks OTLP/gRPC to 4317 and pushes logs to
+    # Loki's raw 3100 with no way to attach a bearer token, so those two ports
+    # stay open to that single source address. Everything else goes through
+    # Caddy. Drop this once hofvarpnir can send `Authorization` headers and
+    # hosts/jellyfin/hofvarpnir.nix points it at the vhosts.
+    extraCommands = ''
+      iptables -A nixos-fw -p tcp -s 192.168.2.180 --dport 4317 -j nixos-fw-accept
+      iptables -A nixos-fw -p tcp -s 192.168.2.180 --dport 3100 -j nixos-fw-accept
+    '';
   };
 
   environment.systemPackages = with pkgs; [

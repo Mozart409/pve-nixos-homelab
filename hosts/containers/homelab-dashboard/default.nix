@@ -28,9 +28,12 @@
       };
       hofvarpnir.url = "https://hofvarpnir.homelab.internal";
       quick_links = [
+        # Alertmanager's and Prometheus' own UIs sit behind the otel query
+        # bearer token since 2026-09-14 (a browser cannot send it), so both
+        # links land in Grafana, which fronts the same data behind OIDC.
         {
           name = "Alertmanager";
-          url = "https://alertmanager.homelab.internal";
+          url = "https://homelab-otel.dropbear-butterfly.ts.net/grafana/alerting/list";
           icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/alertmanager.svg";
         }
         {
@@ -75,7 +78,7 @@
         }
         {
           name = "Prometheus";
-          url = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
+          url = "https://homelab-otel.dropbear-butterfly.ts.net/grafana/explore";
           icon = "https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/prometheus.svg";
         }
         {

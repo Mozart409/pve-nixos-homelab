@@ -54,10 +54,8 @@
   # the whole point of having found them:
   #   pgadmin.homelab.local        verify=10, CERT EXPIRED (host: database)
   #   unifi.homelab.internal       verify=1
-  #   *-mcp.homelab.internal (11)  verify=1 -- the same .internal gap already
-  #                                described on the mcp_probe list below, whose
-  #                                cause is NOT that the vhost omits the name
-  #                                (mcp_vm/configuration.nix:27 lists both)
+  #   *-mcp.homelab.internal       (moot since 2026-09-14: those vhosts are gone,
+  #                                see the homelab-mcp entry below)
   #
   # Hosts deliberately absent: fleet, harbor, hermes and woodpecker (VMs shut
   # off, 2026-08-31..09-07), zeroclaw and wotan (down since 2026-08-15, see the
@@ -70,8 +68,6 @@
     homelab-containers = [
       "containers.homelab.local"
       "containers.homelab.internal"
-      "axon.homelab.local"
-      "axon.homelab.internal"
       "albyhub.homelab.local"
       "albyhub.homelab.internal"
       "dashboard.homelab.local"
@@ -115,18 +111,13 @@
     homelab-unifi = [
       "unifi.homelab.local"
     ];
+    # Since 2026-09-14 the mcp host serves exactly one vhost: axon-gateway
+    # (moved here from containers). The eleven per-backend *-mcp.homelab.local
+    # names are gone -- the MCP servers are loopback-only and reachable solely
+    # through the gateway, which is the whole point of the move.
     homelab-mcp = [
-      "mcp.homelab.local"
-      "pbs-mcp.homelab.local"
-      "pg-appdb-mcp.homelab.local"
-      "pg-terraform-mcp.homelab.local"
-      "pg-forgejo-mcp.homelab.local"
-      "pg-romm-mcp.homelab.local"
-      "pg-hofvarpnir-mcp.homelab.local"
-      "prom-mcp.homelab.local"
-      "loki-mcp.homelab.local"
-      "wp-mcp.homelab.local"
-      "alertmanager-mcp.homelab.local"
+      "axon.homelab.local"
+      "axon.homelab.internal"
     ];
   };
 
@@ -149,9 +140,15 @@
         url = "https://hofvarpnir.homelab.internal/api/health";
         instance = "hofvarpnir";
       }
+      # axon-gateway lives on the mcp host since 2026-09-14 (it was moved there
+      # so the MCP backends could be taken off the network entirely). This is
+      # now also the only outside-in check of that host's MCP layer: /health
+      # is the gateway's own liveness, and the gateway marks a backend dead in
+      # its logs/metrics rather than in this endpoint -- see the axon-gateway
+      # prometheus job in ./configuration.nix for per-backend state.
       {
         url = "https://axon.homelab.internal/health";
-        instance = "homelab-containers";
+        instance = "homelab-mcp";
       }
       # Stays on .local, but no longer for the original reason. This entry used
       # to carry a note that forgejo's caddy had no usable cert for its
@@ -205,84 +202,13 @@
       }
     ];
 
-    # MCP streamable-HTTP endpoints on mcp_vm (hosts/mcp_vm/configuration.nix).
-    # A bare GET here -- no session id, no `Accept: application/json,
-    # text/event-stream` -- is correctly rejected with 406 by a spec-compliant
-    # server; that is the healthy response, not a failure (see AGENTS.md's
-    # curl guidance: 200/302/406 all mean "up", only 000 means down). Hence
-    # the separate `mcp_probe` module below instead of http_2xx.
-    #
-    # Every one of these shares instance = "homelab-mcp": mcp_vm hosts 11
-    # independent MCP server processes behind one Caddy, and none of them had
-    # any health check at all before this -- TargetDown only proves the host
-    # and node-exporter are up, not that any individual MCP backend behind it
-    # still answers axon-gateway (see hosts/containers/axon-gateway/default.nix
-    # for the backend list this mirrors).
-    #
-    # Stays on .homelab.local: an .internal SNI here still fails TLS
-    # verification (curl ssl_verify_result=1 for prom-mcp and mcp on
-    # 2026-09-07), so the symptom this comment always described is real.
-    #
-    # Its stated CAUSE was wrong, though, and the wrong cause sends you to the
-    # wrong file: the vhosts do NOT "only register the .local names". They list
-    # both -- hosts/mcp_vm/configuration.nix:27 builds every vhost key as
-    # "${base}.homelab.local ${base}.homelab.internal". So this is a cert that
-    # was never successfully obtained or has gone bad for the .internal subject,
-    # not a name missing from the Caddy config. Caddy issues one cert per
-    # subject name rather than one multi-SAN cert per vhost, which is what makes
-    # that possible -- proven by the per-identifier ACME orders in caddy's
-    # journal on homelab-jellyfin, 2026-09-07.
-    #
-    # Consequence: all 11 .internal names are excluded from the tls_cert job
-    # above. Fix them and add them there.
-    mcp_probe = [
-      {
-        url = "https://mcp.homelab.local/mcp"; # Home Assistant (hamcp)
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://pbs-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://pg-appdb-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://pg-terraform-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://pg-forgejo-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://pg-romm-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://pg-hofvarpnir-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://prom-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://loki-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://wp-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-      {
-        url = "https://alertmanager-mcp.homelab.local/mcp";
-        instance = "homelab-mcp";
-      }
-    ];
+    # The former `mcp_probe` list (one GET per *-mcp.homelab.local vhost,
+    # 406 counted as healthy) was removed on 2026-09-14 together with those
+    # vhosts: the MCP servers now bind loopback on the mcp host and nothing
+    # off-box can reach them by design. Their health is observed through
+    # axon-gateway instead (http_2xx above + its prometheus job).
 
-    # Generated from certSubjects above -- 49 subjects across 9 live hosts.
+    # Generated from certSubjects above.
     tls_cert = certTargets;
 
     tcp_connect = [
@@ -313,19 +239,6 @@
           # Blackbox defaults to trying IPv6 first and falling back. Every target
           # here is v4-only, so pinning this skips a guaranteed-failed connect on
           # every probe of every target.
-          preferred_ip_protocol = "ip4";
-        };
-      };
-
-      # See the mcp_probe target comment above for why 406 counts as healthy.
-      mcp_probe = {
-        prober = "http";
-        timeout = "10s";
-        http = {
-          method = "GET";
-          valid_status_codes = [200 406];
-          follow_redirects = true;
-          valid_http_versions = ["HTTP/1.1" "HTTP/2.0"];
           preferred_ip_protocol = "ip4";
         };
       };

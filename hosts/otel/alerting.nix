@@ -283,14 +283,20 @@ in {
 
   # Alertmanager binds loopback only; this vhost is the way in, and the reason
   # to want one is silences -- muting a known-broken host before it re-nags at
-  # the 6h repeat_interval.
+  # the 6h repeat_interval. Gated by the otel query token (declared in
+  # ./configuration.nix) since 2026-09-14: before that anyone on the LAN could
+  # silence every alert. The alertmanager MCP server on the mcp host carries
+  # the token; a human uses the Grafana alerting UI instead of this URL.
   services.caddy.virtualHosts."alertmanager.homelab.local alertmanager.homelab.internal" = {
     extraConfig = ''
       tls {
         ca https://ca.homelab.local:8443/acme/acme/directory
       }
-
-      reverse_proxy localhost:${toString config.services.prometheus.alertmanager.port}
+      @query header Authorization "Bearer {file.${config.age.secrets.otel-query-token.path}}"
+      route {
+        reverse_proxy @query localhost:${toString config.services.prometheus.alertmanager.port}
+        respond 401
+      }
     '';
   };
 }

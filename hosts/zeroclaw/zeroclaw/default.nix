@@ -76,6 +76,9 @@ in {
             # query them via LogQL `| json` instead.
             labels = "job=zeroclaw,host=homelab-zeroclaw";
             line_format = "json";
+            # Same push token as modules/fluent-bit.nix -- that module's
+            # ExecStart wrapper exports it for this whole process.
+            bearer_token = "\${OTEL_PUSH_TOKEN}";
           }
         ];
       };

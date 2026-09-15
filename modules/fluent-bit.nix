@@ -12,6 +12,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }: let
   cfg = config.services.loki-logs;
@@ -29,7 +30,7 @@
   # confirming that a host's shipper actually came back after a change.
   #
   # Bump this when you want every loki-logs host to restart its shipper.
-  restartNonce = "2026-09-08-single-loki-output";
+  restartNonce = "2026-09-14-loki-push-token";
 
   # fluent-bit ships its own journal, on every host, always.
   #
@@ -114,7 +115,23 @@
     labels = "job=$job,host=${config.networking.hostName}";
     remove_keys = "job";
     line_format = "json";
+    # The loki vhost only accepts pushes carrying the otel push token (see
+    # hosts/otel/configuration.nix). Resolved at start from the credential the
+    # unit loads below -- fluent-bit expands ${VAR} in its config, and the
+    # wrapper exports it from $CREDENTIALS_DIRECTORY so the token is never in
+    # /nix/store or a world-readable env file.
+    bearer_token = "\${OTEL_PUSH_TOKEN}";
   };
+
+  # DynamicUser means fluent-bit cannot own an agenix file, so the secret
+  # comes in via LoadCredential and this wrapper turns it into the env var the
+  # config above references. Same command line as the upstream module's
+  # ExecStart, which this replaces.
+  fluentBitWithToken = pkgs.writeShellScript "fluent-bit-with-token" ''
+    OTEL_PUSH_TOKEN="$(< "$CREDENTIALS_DIRECTORY/otel-push-token")"
+    export OTEL_PUSH_TOKEN
+    exec ${lib.getExe config.services.fluent-bit.package} --config ${config.services.fluent-bit.configurationFile}
+  '';
 in {
   options.services.loki-logs = {
     enable = lib.mkEnableOption "shipping journald logs for selected systemd units to the homelab's central Loki";
@@ -160,6 +177,15 @@ in {
     # restarts. DynamicUser + StateDirectory gives the service /var/lib/fluent-bit
     # owned by its dynamic user.
     systemd.services.fluent-bit.serviceConfig.StateDirectory = "fluent-bit";
+
+    age.secrets.otel-push-token = {
+      file = ../secrets/otel-push-token.age;
+      mode = "0400";
+    };
+    systemd.services.fluent-bit.serviceConfig.LoadCredential = [
+      "otel-push-token:${config.age.secrets.otel-push-token.path}"
+    ];
+    systemd.services.fluent-bit.serviceConfig.ExecStart = lib.mkForce fluentBitWithToken;
 
     # See restartNonce above.
     systemd.services.fluent-bit.restartTriggers = [restartNonce];
