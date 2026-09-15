@@ -183,7 +183,8 @@
       80 # HTTP (Caddy redirect to HTTPS)
       443 # HTTPS (Caddy)
       2222 # Forgejo SSH
-      3000 # Forgejo HTTP
+      # 3000 (forgejo HTTP) is deliberately absent: HTTP_ADDR is 127.0.0.1, so
+      # only Caddy reaches it and the old rule merely advertised a closed port.
       9100 # Node exporter
     ];
   };
