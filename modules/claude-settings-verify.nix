@@ -92,12 +92,9 @@
         sessionUrl=$(readSetting '.attribution.sessionUrl')
         [ "$sessionUrl" = "false" ] || problems+=("attribution.sessionUrl is '$sessionUrl', expected 'false'")
 
-        # Redundant while the mode above holds — dontAsk denies AskUserQuestion
-        # outright, so nothing ever waits on this timeout. It matters in exactly
-        # the case this module exists to catch: the mode has already drifted, and
-        # an unattended session would otherwise block forever on a question
-        # nobody is there to answer. Backstop for that window, not for normal
-        # operation.
+        # Under `auto` AskUserQuestion is reachable, so an unattended session
+        # blocks on it until this timeout fires. claude-permissions.nix pins it;
+        # reaching here with it unset means that write did not stick.
         timeout=$(readSetting '.askUserQuestionTimeout')
         case "$timeout" in
           60s | 5m | 10m) ;;

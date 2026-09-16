@@ -30,6 +30,12 @@
       pr = "";
       sessionUrl = false;
     };
+    # Under `auto` a session can reach AskUserQuestion, and an unattended one
+    # would otherwise sit on it forever. 5m is long enough for a human at a
+    # herdr/mosh session to answer, short enough that a headless run fails
+    # instead of hanging. Pinned here so the verifier's check on it is a
+    # confirmation, not a daily notification about a key nothing set.
+    askUserQuestionTimeout = "5m";
   };
 
   # WebSearch is all-or-nothing at the permission level (bare `WebSearch` is the
@@ -141,6 +147,7 @@
         '.permissions = ((.permissions // {}) + $p.permissions)
          | .includeCoAuthoredBy = $p.includeCoAuthoredBy
          | .attribution = ((.attribution // {}) + $p.attribution)
+         | .askUserQuestionTimeout = $p.askUserQuestionTimeout
          | .hooks.PreToolUse = ([((.hooks.PreToolUse // [])[] | select(.matcher != "WebSearch"))] + $h.hooks.PreToolUse)' \
         "$SETTINGS" > "$tmp"
 
