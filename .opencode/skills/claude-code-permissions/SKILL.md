@@ -1,6 +1,6 @@
 ---
 name: claude-code-permissions
-description: Use when updating Claude Code permission guardrails on the development host — editing claude-permissions-data.nix, the allow/deny/defaultMode lists, the webSearchDomains whitelist + WebSearch/WebFetch restriction, dontAsk mode, or MCP allow rules for axon-gateway / internal-dashboard, then committing, deploying with just cah development and verifying ~/.claude/settings.json on the host.
+description: Use when updating Claude Code permission guardrails on the development host — editing claude-permissions-data.nix, the allow/deny/defaultMode lists, the webSearchDomains whitelist + WebSearch/WebFetch restriction, defaultMode, or MCP allow rules for axon-gateway / internal-dashboard, then committing, deploying with just cah development and verifying ~/.claude/settings.json on the host.
 ---
 
 # Claude Code Permissions on `development`
@@ -28,9 +28,11 @@ Both are imported by `hosts/development/configuration.nix`.
 The three keys under `permissions`:
 - `allow` — actions/tools granted without prompting.
 - `deny` — blocked in every mode. **Precedence is `deny` > `ask` > `allow`.**
-- `defaultMode` — `"dontAsk"`: anything unlisted is denied silently. That is the
-  whole point: with nobody watching, a prompt is an indefinite hang. Never set
-  it to a mode that prompts.
+- `defaultMode` — `"auto"` (since 2026-09-14): a classifier decides unlisted
+  actions and still prompts on risky ones. Sessions here are mostly interactive
+  (herdr, mosh), and the agent user cannot escalate, so the deny list is no
+  longer the boundary. `askUserQuestionTimeout = "5m"` bounds the hang for an
+  unattended run; use `dontAsk` per-session for genuinely headless work.
 
 Plus `webSearchDomains` — the domain whitelist that drives **both** the
 WebSearch PreToolUse hook and the `WebFetch(domain:…)` allow rules. Change it in
@@ -58,7 +60,7 @@ one place; the two enforcement points are derived from it.
   outside `[a-zA-Z0-9_-]` become underscores.
   **A bare `mcp__*` allow rule is skipped by Claude Code with a warning and
   approves nothing.** Every server must be named explicitly.
-- `AskUserQuestion` is effectively denied by `dontAsk`.
+- `AskUserQuestion` is reachable under `auto`; `askUserQuestionTimeout` caps it.
 
 ## Editing the allow/deny lists
 
@@ -92,7 +94,7 @@ when the rules changed.
 
 ```bash
 ssh development.homelab.local "systemctl --user status claude-permissions --no-pager | head -4"
-ssh development.homelab.local "jq '.permissions.defaultMode' ~/.claude/settings.json"    # "dontAsk"
+ssh development.homelab.local "jq '.permissions.defaultMode' ~/.claude/settings.json"    # "auto"
 ssh development.homelab.local "jq '.permissions.allow[]' ~/.claude/settings.json | grep -E 'WebSearch|WebFetch'"
 ssh development.homelab.local "grep -o 'claude-websearch-hook' ~/.claude/settings.json | head -1"
 ssh development.homelab.local "jq '.permissions.deny | length' ~/.claude/settings.json"  # 68
@@ -117,7 +119,7 @@ notification is on its way to `notify.iphone_von_amadeus`.
 ## Gotchas
 
 - A rule typo'd to match no known tool warns at startup but does not fail;
-  under `dontAsk` the symptom is a silently-refused tool, so verify the exact
+  under `auto` the symptom is a prompt or a refusal, so verify the exact
   names in `~/.claude/settings.json` after deploy.
 - `moshi-hook-setup.service` / `herdr-setup.service` rewrite other keys in
   settings.json at boot; `claude-permissions.service` runs after them so the
