@@ -1009,7 +1009,7 @@ resource "proxmox_virtual_environment_vm" "development_vm" {
   # enough RAM to never reach for it. floating lets it balloon back down to
   # 4 GB when the sessions are idle.
   memory {
-    dedicated = 12288
+    dedicated = 8192
     floating  = 8192
   }
 
