@@ -89,7 +89,11 @@
         database: "0"
 
       server:
-        address: 0.0.0.0:8080
+        # Loopback only: Caddy terminates TLS for fleet.homelab.local (what
+        # modules/osquery.nix enrols against) and the tailnet name. Bound to
+        # 0.0.0.0 with 8080 open in the firewall, this was the enrolment and
+        # query API over plain HTTP to the whole LAN.
+        address: 127.0.0.1:8080
 
       logging:
         json: true
@@ -156,7 +160,7 @@
           get_certificate tailscale
         }
 
-        reverse_proxy localhost:8080
+        reverse_proxy 127.0.0.1:8080
       '';
     };
 
@@ -166,7 +170,7 @@
           ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
-        reverse_proxy localhost:8080
+        reverse_proxy 127.0.0.1:8080
       '';
     };
   };
@@ -183,7 +187,6 @@
     allowedTCPPorts = [
       22 # SSH
       443 # HTTPS (Caddy)
-      8080 # Fleet server
       9100 # Node exporter
     ];
   };
