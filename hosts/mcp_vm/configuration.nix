@@ -227,6 +227,12 @@ in {
         serverType = "pgmcp-server";
         package = mcpPackages.pgmcp-server;
         tokenFile = config.age.secrets.${pgSecretName db}.path;
+        # The URLs say `sslmode=verify-full`, but sqlx is built with
+        # tls-rustls-ring-webpki: it verifies against bundled Mozilla roots and
+        # rejects the step-ca leaf with UnknownIssuer. sqlx reads this libpq
+        # variable as the default for the URL's `sslrootcert`, and the host
+        # bundle carries the step-ca root (modules/step-ca-trust.nix).
+        extraEnv.PGSSLROOTCERT = "/etc/ssl/certs/ca-certificates.crt";
         bind = "127.0.0.1:${toString port}";
         allowedHosts = loopbackOnly;
       })
