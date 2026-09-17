@@ -321,20 +321,21 @@ in {
 
     # Authentication configuration
     #
-    # TODO(tls): flip the three LAN/tailnet `host` rows to `hostssl` once every
-    # client whose connection URL lives in a secret carries `sslmode=require`
-    # or better: the seven secrets/pg-mcp-*-url.age, hofvarpnir-env.age
-    # (DATABASE_URL) and the OpenTofu `pg` backend conn string. Until then
-    # `host` still accepts TLS -- libpq/pgx default to sslmode=prefer and
-    # upgrade on their own -- but does not require it.
+    # Everything that crosses the wire must be TLS (`hostssl`): a plain-text
+    # attempt from the LAN/tailnet is rejected before auth, so a client with a
+    # stale `sslmode=disable` URL fails loudly instead of sending its password
+    # in the clear. Every remote client -- RomM, hofvarpnir, the five pgmcp
+    # instances, the OpenTofu `pg` backend -- carries `sslmode=verify-full`
+    # since the 2026-09-17 rotation. Loopback stays `host` for pgadmin,
+    # pgbouncer and the exporter on this box.
     authentication = pkgs.lib.mkOverride 10 ''
       # TYPE  DATABASE        USER            ADDRESS                 METHOD
       local   all             all                                     peer
       host    all             all             127.0.0.1/32            scram-sha-256
       host    all             all             ::1/128                 scram-sha-256
-      host    all             all             10.0.0.0/8              scram-sha-256
-      host    all             all             192.168.0.0/16          scram-sha-256
-      host    all             all             100.64.0.0/10           scram-sha-256
+      hostssl all             all             10.0.0.0/8              scram-sha-256
+      hostssl all             all             192.168.0.0/16          scram-sha-256
+      hostssl all             all             100.64.0.0/10           scram-sha-256
     '';
 
     # Initial databases (names must match usernames when using ensureDBOwnership)

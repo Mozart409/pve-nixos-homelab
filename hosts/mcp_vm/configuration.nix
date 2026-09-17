@@ -54,8 +54,8 @@
   # pg-uptime-mcp, secret pg-mcp-uptime-url) went on 2026-09-12 when
   # uptime-forge was retired on the containers host. That database lived in
   # a podman volume there, not on the `database` host, so it never belonged
-  # in this attrset. The secret file is still in secrets/ (unreferenced);
-  # 8081 is free to reuse.
+  # in this attrset. Its secret was dropped on 2026-09-17; 8081 is free to
+  # reuse.
   homelabDatabases = {
     appdb = 8085;
     terraform = 8087;
