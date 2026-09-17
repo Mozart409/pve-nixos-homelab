@@ -19,7 +19,7 @@
   virtualisation.oci-containers.containers.hofvarpnir = {
     # Pin to the released tag for reproducibility — never :latest. Matches the tag
     # that was running on the LXC.
-    image = "ghcr.io/mozart409/hofvarpnir:0.8.0";
+    image = "ghcr.io/mozart409/hofvarpnir:0.9.0";
     autoStart = true;
 
     # Container :3000 -> host 127.0.0.1:3000. Loopback only so it is reachable
@@ -85,12 +85,11 @@
       OTEL_SERVICE_NAME = "hofvarpnir";
 
       SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
-      # TLS to postgres (hosts/database has ssl = true). sqlx reads these libpq
-      # env vars as defaults for anything DATABASE_URL (hofvarpnir-env.age)
-      # does not spell out. `require` rather than `verify-full` because the
-      # URL in the secret may still address the host by IP; once it says
-      # `database.homelab.local?sslmode=verify-full` this line can go.
-      PGSSLMODE = "require";
+      # TLS to postgres (hosts/database has ssl = true). DATABASE_URL in
+      # hofvarpnir-env.age says `database.homelab.local?sslmode=verify-full`;
+      # sqlx takes the root cert from this libpq env var (its rustls build
+      # would otherwise verify against bundled webpki roots, which do not
+      # include step-ca) and the host CA bundle is mounted above.
       PGSSLROOTCERT = "/etc/ssl/certs/ca-certificates.crt";
 
       # --- OIDC (Pocket ID) -------------------------------------------------
@@ -114,7 +113,9 @@
     };
 
     # Secrets injected as root before podman launches:
-    #   DATABASE_URL       — central Postgres (database.homelab.local, sslmode=disable)
+    #   DATABASE_URL       — central Postgres (database.homelab.local, sslmode=verify-full);
+    #                        embeds the hofvarpnir role password, so rotating
+    #                        hofvarpnir-db-password.age means re-encrypting this too
     #   OIDC_CLIENT_ID     — from Pocket ID (not strictly secret, kept here for convenience)
     #   OIDC_CLIENT_SECRET — from Pocket ID (secret)
     environmentFiles = [config.age.secrets.hofvarpnir-env.path];
@@ -124,4 +125,10 @@
     file = ../../secrets/hofvarpnir-env.age;
     mode = "0400";
   };
+
+  # The env file is read once at container start and lives at a stable
+  # /run/agenix path, so a re-encrypted secret changes nothing in the unit and
+  # colmena apply would keep the container running on the old DATABASE_URL.
+  # The secret's .file is its store path, which changes on every re-encryption.
+  systemd.services.podman-hofvarpnir.restartTriggers = [config.age.secrets.hofvarpnir-env.file];
 }

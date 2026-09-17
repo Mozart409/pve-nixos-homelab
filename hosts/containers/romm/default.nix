@@ -94,4 +94,9 @@ in {
 
   # Generate /run/romm/db.env from the agenix secret before the container starts.
   systemd.services.podman-romm.serviceConfig.ExecStartPre = ["${generateDbEnv}"];
+  # ExecStartPre only runs on (re)start, and a re-encrypted secret at the same
+  # /run/agenix path changes nothing in this unit, so without this a rotated
+  # romm-db-password would leave the container on the old DB_PASSWD until
+  # something else restarted it. The .file is the store path of the .age file.
+  systemd.services.podman-romm.restartTriggers = [config.age.secrets.romm-db-password.file];
 }

@@ -61,6 +61,16 @@
     after = ["postgresql-setup.service" "agenix.service"];
     requires = ["postgresql-setup.service"];
     wantedBy = ["multi-user.target"];
+    # Re-run on rotation. The unit only references the secret's stable
+    # /run/agenix path, so re-encrypting the .age file changes nothing in the
+    # unit text and switch-to-configuration would leave this RemainAfterExit
+    # oneshot alone -- the role would keep its old password while every
+    # consumer moved to the new one. The secret's .file is its /nix/store
+    # path, which changes on every re-encryption (age is non-deterministic),
+    # so listing it here makes a rotation re-run the ALTER on the next apply.
+    # Same fix as modules/fluent-bit.nix and modules/tailscale.nix; a
+    # redundant re-run is harmless, every statement here is idempotent.
+    restartTriggers = [secret.file];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -548,6 +558,11 @@ in {
     before = ["pgbouncer.service"];
     after = ["postgresql-superuser-password.service"];
     requires = ["postgresql-superuser-password.service"];
+    # requires/after do not propagate a restart, so when the superuser setter
+    # re-runs on rotation (see restartTriggers in mkRolePasswordUnit) this
+    # must re-read the new hash on its own trigger, and pgbouncer below must
+    # restart to reload the rewritten auth_file.
+    restartTriggers = [config.age.secrets.postgres-superuser-password.file];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
@@ -566,6 +581,7 @@ in {
       chmod 600 /var/lib/pgbouncer/userlist.txt
     '';
   };
+  systemd.services.pgbouncer.restartTriggers = [config.age.secrets.postgres-superuser-password.file];
 
   # Postgres exporter. The node exporter is enabled fleet-wide by
   # modules/common.nix.

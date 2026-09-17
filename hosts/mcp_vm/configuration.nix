@@ -17,7 +17,7 @@
   #
   # Bump this string whenever a secret's *content* changes; that changes
   # restartTriggers -> the unit definition -> a restart on the next colmena apply.
-  secretNonce = "2026-09-15-otel-query-token";
+  secretNonce = "2026-09-17-pg-rotation";
 
   # Since 2026-09-14 no MCP server has a vhost. They all bind loopback and the
   # only client is axon-gateway (./axon-gateway), which now runs on THIS host
@@ -234,8 +234,7 @@ in {
 
   systemd.services =
     # Secret-consuming servers must wait for agenix to place the credentials.
-    lib.genAttrs (["pbsmcp-server" "hamcp-server" "wpmcp-server" "prommcp-server" "lokimcp-server" "alertmanagermcp-server"]
-      ++ map pgUnitName (builtins.attrNames homelabDatabases)) (_: {
+    lib.genAttrs ["pbsmcp-server" "hamcp-server" "wpmcp-server" "prommcp-server" "lokimcp-server" "alertmanagermcp-server"] (_: {
       wants = ["agenix.target"];
       after = ["agenix.target"];
       # See secretNonce above: forces a restart when a secret is re-encrypted.
@@ -243,6 +242,17 @@ in {
       # the three servers that carry it restart on rotation without a bump.
       restartTriggers = [secretNonce config.age.secrets.otel-query-token.file];
     })
+    # The pgmcp instances trigger on their own connection-URL secret instead:
+    # the URL embeds the `mcp` role password, so rotating it on the database
+    # host re-encrypts all five and restarts exactly these five, with no nonce
+    # bump and without bouncing the servers above.
+    // lib.mapAttrs' (db: _:
+      lib.nameValuePair (pgUnitName db) {
+        wants = ["agenix.target"];
+        after = ["agenix.target"];
+        restartTriggers = [secretNonce config.age.secrets.${pgSecretName db}.file];
+      })
+    homelabDatabases
     // {
       # Give Caddy access to Tailscale socket for cert fetching
       caddy = {
