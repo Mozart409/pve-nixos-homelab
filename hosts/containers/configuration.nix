@@ -97,7 +97,7 @@
           ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
-        reverse_proxy localhost:8080
+        reverse_proxy 127.0.0.1:8080
       '';
     };
 
@@ -159,7 +159,6 @@
       22 # SSH
       80 # HTTP
       443 # HTTPS (Caddy)
-      8080 # AlbyHub
       9100 # Node exporter
     ];
   };
