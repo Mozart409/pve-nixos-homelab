@@ -4,8 +4,6 @@ let
   amadeusMacbook = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/HCRJuzlIbgcWk68ehApZl6kN+7PnKIgYSLRZ5IjzQ amadeus@Amadeuss-MacBook-Pro.local";
   amadeusMacbookAge = "age1uslcewyhmagupmfg4nf9tc6alj8edapzexnjvuhrkkmwd3wmy4nqpmel7t"; # ~/.config/age/keys.txt on the MacBook
   amadeusWotanAge = "age108er4kc0200y2at2fauw08t77u506nah2qxqlkxn8hq5c58e037qx226tw"; # ~/.config/age/keys.txt on wotan
-  hostBuildBotMaster = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIwy8ohPS5E6ElmFvYoNYNBfbiYjAfFQBVtBA5hePSiN root@homelab-buildbot-master";
-  hostBuildBotWorker1 = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIIZK5rnXUBhINU4lzEWkhxhdRWsLR7IxLeQID8HqLKF root@homelab-buildbot-worker-1";
   hostCa = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF8i5IfaebQeFqqmZnIKrFNFNfnEvCIsnRamVnO/YyWx root@homelab-ca";
   hostCache = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK3zPdNuF7/Xwxxhs6isTeG1K3fodO+lbQdWcfZUid4k root@homelab-cache";
   hostContainers = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKHmDtkEG9WNd6bvbEM3+HhdfnSu29o5bYskujiM6VdF root@homelab-containers";
@@ -22,7 +20,15 @@ let
   hostUnifi = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG1dva0wW3yY7pu0bT2HafVcn08BZMjzTwEh3CGcdfb8 root@homelab-unifi";
   hostWoodpecker = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIACJjy5GtvoeSP5muZFLj3/rMvIAlm7gfXZ80micVVgm root@homelab-woodpecker";
   hostZeroclaw = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIF8hvOMPXx4HOK9/yxL/r8oj1itQIFQDpnk362IwrIfy root@homelab-minimal";
-  users = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostHermes hostCa hostFleet hostHarbor hostCache hostForgejo hostBuildBotMaster hostBuildBotWorker1 hostJellyfin hostZeroclaw hostDevelopment hostWoodpecker];
+  # Fleet-wide secrets (tailscale auth key, otel push token, fleet enrol
+  # secret) go to the humans plus every host that is currently deployed --
+  # and only those. A decommissioned VM's host key lives on in its PBS
+  # backups and old disk images, so leaving it here keeps every fleet-wide
+  # secret decryptable by an artefact nobody is watching. Decommissioned but
+  # kept in the tree (hosts/{hermes,fleet,harbor,cache}) keep their own
+  # per-host secrets below; reviving one is: add its key back here (and to
+  # the shared secrets it needs, e.g. axon-gateway-env), `just reencrypt`.
+  users = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostCa hostForgejo hostJellyfin hostZeroclaw hostDevelopment hostWoodpecker];
   # keep-sorted end
 in {
   # keep-sorted start
@@ -33,10 +39,7 @@ in {
   "attic-db-url.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostCache]; # env-file: ATTIC_SERVER_DATABASE_URL=postgresql://...
   "attic-server-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostCache];
   # hostMcp replaced hostContainers on 2026-09-14 when the gateway moved hosts. Run `just reencrypt` after a recipient change.
-  "axon-gateway-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostMcp hostHermes hostDevelopment hostOtel hostZeroclaw];
-  "buildbot-db-password.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostBuildBotMaster];
-  "buildbot-webhook-secret.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostBuildBotMaster];
-  "buildbot-worker-password.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostBuildBotMaster hostBuildBotWorker1];
+  "axon-gateway-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostMcp hostDevelopment hostOtel hostZeroclaw];
   "dashboard-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostContainers];
   "development-forgejo-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDevelopment];
   "development-opencode-zen-key.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDevelopment];
@@ -63,7 +66,7 @@ in {
   "hofvarpnir-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostJellyfin];
   "homeassistant-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostMcp];
   "k3s-server-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook]; # add hostK3sCntrl1 + `just reencrypt` once k3s-cntrl-1 is installed and its real host key is known
-  "moshi-device-id.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes hostDevelopment hostZeroclaw]; # plain auth token
+  "moshi-device-id.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDevelopment hostZeroclaw]; # plain auth token
   "open-webui-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostContainers];
   "otel-push-token.age".publicKeys = users; # bare token; every host's fluent-bit pushes to loki with it (write-only side)
   "otel-query-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostOtel hostMcp]; # bare token; read side of the otel vhosts (prom/loki/tempo/alertmanager MCP servers)
