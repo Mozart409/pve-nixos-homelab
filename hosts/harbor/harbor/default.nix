@@ -435,15 +435,23 @@
     chmod 600 /run/harbor/core.env
     # Create the secret key file for encrypting config values
     # Harbor requires exactly 16 bytes for AES-128
-    # Harbor core runs as UID 10000, needs read access
+    # Harbor core runs as UID 10000 (rootful podman, no userns remap, so that
+    # is host UID 10000 too). Owned by that UID and 0400 -- these used to be
+    # 0644, readable by every local account: the AES key protects every
+    # credential Harbor stores (OIDC secret, robot accounts, replication
+    # endpoints) and the RSA key signs the registry's bearer tokens, so either
+    # one hands out full registry access.
+    umask 077
     echo -n "$CORE_SECRET" | ${pkgs.coreutils}/bin/head -c 16 > /run/harbor/secretkey
-    chmod 644 /run/harbor/secretkey
+    chown 10000:10000 /run/harbor/secretkey
+    chmod 0400 /run/harbor/secretkey
     # Generate RSA private key for JWT token signing (only if not exists)
     # Harbor requires traditional RSA format (BEGIN RSA PRIVATE KEY), not PKCS#8
     if [ ! -f /run/harbor/private_key.pem ]; then
       ${pkgs.openssl}/bin/openssl genrsa -traditional -out /run/harbor/private_key.pem 4096
-      chmod 644 /run/harbor/private_key.pem
     fi
+    chown 10000:10000 /run/harbor/private_key.pem
+    chmod 0400 /run/harbor/private_key.pem
   '';
 
   generateJobserviceEnv = pkgs.writeShellScript "generate-harbor-jobservice-env" ''
@@ -538,10 +546,13 @@ in {
       ];
     };
 
+    # No host port: core and jobservice reach it as harbor-registry:5000 over
+    # harbor-net, and every client goes Caddy -> core (/v2/*), which is the
+    # auth layer. Published on 0.0.0.0:5000 it was a token-less registry on
+    # the LAN.
     harbor-registry = {
       image = "goharbor/registry-photon:v2.11.2";
       autoStart = true;
-      ports = ["5000:5000"];
       volumes = [
         "harbor_registry:/var/lib/registry"
         "/etc/harbor/registry.yml:/etc/registry/config.yml:ro"
@@ -555,10 +566,12 @@ in {
       ];
     };
 
+    # Loopback only: Caddy (hosts/harbor/configuration.nix) and the bootstrap
+    # script are the sole host-side clients.
     harbor-core = {
       image = "goharbor/harbor-core:v2.11.2";
       autoStart = true;
-      ports = ["8080:8080"];
+      ports = ["127.0.0.1:8080:8080"];
       volumes = [
         "/etc/harbor/core.conf:/etc/core/app.conf:ro"
         "/run/harbor/secretkey:/etc/core/key:ro"
@@ -596,7 +609,7 @@ in {
     harbor-portal = {
       image = "goharbor/harbor-portal:v2.11.2";
       autoStart = true;
-      ports = ["8081:8080"];
+      ports = ["127.0.0.1:8081:8080"];
       volumes = ["/etc/harbor/nginx.conf:/etc/nginx/nginx.conf:ro"];
       dependsOn = ["harbor-core"];
       extraOptions = ["--network=harbor-net"];

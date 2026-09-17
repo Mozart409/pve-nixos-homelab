@@ -42,27 +42,27 @@
 
         # Docker registry API
         handle /v2/* {
-          reverse_proxy localhost:8080
+          reverse_proxy 127.0.0.1:8080
         }
 
         # Harbor API - direct to core
         handle /api/* {
-          reverse_proxy localhost:8080
+          reverse_proxy 127.0.0.1:8080
         }
 
         # OIDC callbacks - direct to core
         handle /c/* {
-          reverse_proxy localhost:8080
+          reverse_proxy 127.0.0.1:8080
         }
 
         # Service endpoints - direct to core
         handle /service/* {
-          reverse_proxy localhost:8080
+          reverse_proxy 127.0.0.1:8080
         }
 
         # Harbor portal (static UI)
         handle {
-          reverse_proxy localhost:8081
+          reverse_proxy 127.0.0.1:8081
         }
       '';
     };
@@ -76,27 +76,27 @@
 
         # Docker registry API
         handle /v2/* {
-          reverse_proxy localhost:8080
+          reverse_proxy 127.0.0.1:8080
         }
 
         # Harbor API - direct to core
         handle /api/* {
-          reverse_proxy localhost:8080
+          reverse_proxy 127.0.0.1:8080
         }
 
         # OIDC callbacks - direct to core
         handle /c/* {
-          reverse_proxy localhost:8080
+          reverse_proxy 127.0.0.1:8080
         }
 
         # Service endpoints - direct to core
         handle /service/* {
-          reverse_proxy localhost:8080
+          reverse_proxy 127.0.0.1:8080
         }
 
         # Harbor portal (static UI)
         handle {
-          reverse_proxy localhost:8081
+          reverse_proxy 127.0.0.1:8081
         }
       '';
     };
@@ -116,13 +116,16 @@
     # can't resolve harbor-redis/db and hangs at "initializing cache", which in
     # turn wedges harbor-bootstrap and stalls every colmena activation.
     trustedInterfaces = ["tailscale0" "podman1"];
+    # Only Caddy is reachable. Harbor's own ports (core 8080, portal 8081) are
+    # published on loopback for Caddy alone (hosts/harbor/harbor), and the
+    # registry (5000) is not published at all: core reaches it over harbor-net
+    # by name, and clients go through Caddy -> core, which is where auth lives.
+    # They used to be open here, which exposed the token-less registry and the
+    # core API over plain HTTP to the whole LAN.
     allowedTCPPorts = [
       22 # SSH
-      80 # HTTP
+      80 # HTTP (Caddy redirect)
       443 # HTTPS (Caddy)
-      5000 # Harbor registry
-      8080 # Harbor core API
-      8081 # Harbor portal
       9100 # Node exporter
     ];
   };
