@@ -12,6 +12,10 @@
   # server from starting on a fresh install or while ca.homelab.local is down.
   pgSslDir = "/var/lib/postgresql/ssl";
   pgCertName = "database.homelab.local";
+  # Second SAN: clients address this host by either name (hofvarpnir's
+  # DATABASE_URL says .internal) and `verify-full` matches the URL's host
+  # against the SANs, so the cert has to carry both. Same A record.
+  pgCertAltNames = ["database.homelab.internal"];
   # lego's standalone HTTP-01 responder. Caddy already owns :80 on this host,
   # so it proxies the challenge path here instead of lego binding :80 itself.
   acmeChallengePort = 1360;
@@ -711,9 +715,9 @@ in {
     };
 
     # HTTP-01 for the postgres TLS cert (security.acme below). lego answers on
-    # acmeChallengePort; step-ca dials database.homelab.local:80, which is this
+    # acmeChallengePort; step-ca dials each SAN on :80, all of which are this
     # site. Everything else on :80 keeps Caddy's default redirect to HTTPS.
-    virtualHosts."http://${pgCertName}" = {
+    virtualHosts."http://${lib.concatStringsSep ", http://" ([pgCertName] ++ pgCertAltNames)}" = {
       extraConfig = ''
         handle /.well-known/acme-challenge/* {
           reverse_proxy 127.0.0.1:${toString acmeChallengePort}
@@ -752,6 +756,7 @@ in {
       server = "https://ca.homelab.local:8443/acme/acme/directory";
     };
     certs.${pgCertName} = {
+      extraDomainNames = pgCertAltNames;
       listenHTTP = "127.0.0.1:${toString acmeChallengePort}";
       group = "postgres";
       # Runs as root after every (re)issuance. Copy rather than point postgres
