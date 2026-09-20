@@ -790,6 +790,7 @@
                   mkdir -p $out/opt/kics-queries
                   cp -r ${kicsQueries}/assets/queries/. $out/opt/kics-queries/
                 '')
+                (pkgs.callPackage ./pkgs/opencode-v2.nix {})
               ];
               # Link /bin so every tool lands on PATH, /etc so cacert's bundle
               # lands at /etc/ssl/certs (tofu/kics hit public registries), and
@@ -832,6 +833,7 @@
 
             # IaC
 
+            (pkgs.callPackage ./pkgs/opencode-v2.nix {})
             agenixPkg
             alejandra
             bacon
