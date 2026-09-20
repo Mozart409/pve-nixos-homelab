@@ -28,6 +28,7 @@ in {
     ../../modules/claude-permissions.nix
     ../../modules/claude-settings-verify.nix
     ../../modules/forgejo-cli.nix
+    ../../modules/devenv.nix
   ];
 
   home-manager.users.amadeus.imports = [
