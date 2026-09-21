@@ -485,7 +485,7 @@ in {
 
   virtualisation.oci-containers.containers = {
     harbor-db = {
-      image = "postgres:13-alpine";
+      image = "docker.io/library/postgres:13-alpine";
       autoStart = true;
       volumes = ["harbor_db:/var/lib/postgresql/data"];
       environmentFiles = ["/run/harbor/db.env"];
@@ -499,7 +499,7 @@ in {
     };
 
     harbor-redis = {
-      image = "redis:7-alpine";
+      image = "docker.io/library/redis:7-alpine";
       autoStart = true;
       extraOptions = [
         "--network=harbor-net"
@@ -515,7 +515,7 @@ in {
     # auth layer. Published on 0.0.0.0:5000 it was a token-less registry on
     # the LAN.
     harbor-registry = {
-      image = "goharbor/registry-photon:v2.11.2";
+      image = "docker.io/goharbor/registry-photon:v2.11.2";
       autoStart = true;
       volumes = [
         "harbor_registry:/var/lib/registry"
@@ -533,7 +533,7 @@ in {
     # Loopback only: Caddy (hosts/harbor/configuration.nix) and the bootstrap
     # script are the sole host-side clients.
     harbor-core = {
-      image = "goharbor/harbor-core:v2.11.2";
+      image = "docker.io/goharbor/harbor-core:v2.11.2";
       autoStart = true;
       ports = ["127.0.0.1:8080:8080"];
       volumes = [
@@ -553,7 +553,7 @@ in {
     };
 
     harbor-jobservice = {
-      image = "goharbor/harbor-jobservice:v2.11.2";
+      image = "docker.io/goharbor/harbor-jobservice:v2.11.2";
       autoStart = true;
       volumes = [
         "/etc/harbor/jobservice.yml:/etc/jobservice/config.yml:ro"
@@ -571,7 +571,7 @@ in {
     };
 
     harbor-portal = {
-      image = "goharbor/harbor-portal:v2.11.2";
+      image = "docker.io/goharbor/harbor-portal:v2.11.2";
       autoStart = true;
       ports = ["127.0.0.1:8081:8080"];
       volumes = ["/etc/harbor/nginx.conf:/etc/nginx/nginx.conf:ro"];
@@ -580,7 +580,7 @@ in {
     };
 
     harbor-trivy = {
-      image = "goharbor/trivy-adapter-photon:v2.11.2";
+      image = "docker.io/goharbor/trivy-adapter-photon:v2.11.2";
       autoStart = true;
       volumes = ["harbor_trivy_cache:/home/scanner/.cache"];
       environment = {

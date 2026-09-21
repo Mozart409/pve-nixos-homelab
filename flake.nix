@@ -247,7 +247,6 @@
           disko.nixosModules.disko
           agenix.nixosModules.default
           homeManagerNixvim
-          ./modules/container-registries.nix
           ./hosts/${hostname}/configuration.nix
         ];
       };
@@ -297,7 +296,6 @@
             agenix.nixosModules.default
             homelab-mcp.nixosModules.default
             homeManagerNixvim
-            ./modules/container-registries.nix
             ./hosts/mcp_vm/configuration.nix
           ];
         };
@@ -320,7 +318,6 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             homeManagerNixvim
-            ./modules/container-registries.nix
             ./hosts/development/configuration.nix
           ];
         };
@@ -341,7 +338,6 @@
             disko.nixosModules.disko
             agenix.nixosModules.default
             homeManagerNixvim
-            ./modules/container-registries.nix
             ./hosts/jellyfin/configuration.nix
           ];
         };
@@ -384,7 +380,6 @@
             agenix.nixosModules.default
             hermes-agent.nixosModules.default
             homeManagerNixvim
-            ./modules/container-registries.nix
             ./hosts/hermes/configuration.nix
           ];
         };
@@ -411,7 +406,7 @@
 
         # Applied to every node in the hive
         defaults = {
-          imports = [homeManagerNixvim ./modules/container-registries.nix];
+          imports = [homeManagerNixvim];
 
           # NOTE: there is no `deployment.substituteOnDestination` in this
           # colmena. It was added here on 2026-09-09 to stop targets pulling from

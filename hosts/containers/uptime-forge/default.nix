@@ -71,7 +71,7 @@ in {
   # OCI Containers
   virtualisation.oci-containers.containers = {
     uptime-forge-db = {
-      image = "timescale/timescaledb:latest-pg16";
+      image = "docker.io/timescale/timescaledb:latest-pg16";
       autoStart = true;
       ports = ["5444:5432"];
       volumes = [
