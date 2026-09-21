@@ -21,8 +21,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   src = fetchFromGitHub {
     owner = "anomalyco";
     repo = "opencode";
-    rev = "refs/heads/v2";
-    hash = "sha256-0TWksTXb+s+3+EJSycXeNMDTNA/tHGU8VxBnH9ktz00=";
+    rev = "ab60f08c69c79bd6c89bd4203c548a0a3a530ea5"; # v2 branch, 2026-09-21
+    hash = "sha256-N1VRyAk2EiJFL2vkMciMqvyA7/PXxCe32Le9Z8qk134=";
   };
 
   # NOTE: node_modules is built as a fixed-output derivation upstream.
