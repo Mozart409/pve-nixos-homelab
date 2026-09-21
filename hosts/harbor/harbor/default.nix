@@ -28,12 +28,6 @@
     POSTGRES_PASSWORD=__DB_PASSWORD__
   '';
 
-  anchoreDbEnvTemplate = pkgs.writeText "harbor-anchore-db-env-template" ''
-    POSTGRES_DB=anchore
-    POSTGRES_USER=postgres
-    POSTGRES_PASSWORD=__DB_PASSWORD__
-  '';
-
   coreEnvTemplate = pkgs.writeText "harbor-core-env-template" ''
     POSTGRESQL_HOST=harbor-db
     POSTGRESQL_PORT=5432
@@ -74,41 +68,11 @@
     _REDIS_URL_JOB=redis://harbor-redis:6379/2
   '';
 
-  anchoreEngineEnvTemplate = pkgs.writeText "harbor-anchore-engine-env-template" ''
-    ANCHORE_ENDPOINT_HOSTNAME=harbor-anchore-engine
-    ANCHORE_DB_HOST=harbor-anchore-db
-    ANCHORE_DB_PORT=5432
-    ANCHORE_DB_USER=postgres
-    ANCHORE_DB_PASSWORD=__DB_PASSWORD__
-    ANCHORE_DB_NAME=anchore
-    ANCHORE_ADMIN_PASSWORD=__ANCHORE_ADMIN_PASSWORD__
-    ANCHORE_PASSWORD=__ANCHORE_ADMIN_PASSWORD__
-    ANCHORE_VULNERABILITIES_PROVIDER=grype
-  '';
-
   generateDbEnv = pkgs.writeShellScript "generate-harbor-db-env" ''
     mkdir -p /run/harbor
     DB_PASSWORD=$(cat ${config.age.secrets.harbor-db-password.path})
     ${pkgs.gnused}/bin/sed "s/__DB_PASSWORD__/$DB_PASSWORD/" ${dbEnvTemplate} > /run/harbor/db.env
     chmod 600 /run/harbor/db.env
-  '';
-
-  generateAnchoreDbEnv = pkgs.writeShellScript "generate-harbor-anchore-db-env" ''
-    mkdir -p /run/harbor
-    DB_PASSWORD=$(cat ${config.age.secrets.harbor-db-password.path})
-    ${pkgs.gnused}/bin/sed "s/__DB_PASSWORD__/$DB_PASSWORD/" ${anchoreDbEnvTemplate} > /run/harbor/anchore-db.env
-    chmod 600 /run/harbor/anchore-db.env
-  '';
-
-  generateAnchoreEngineEnv = pkgs.writeShellScript "generate-harbor-anchore-engine-env" ''
-    mkdir -p /run/harbor
-    DB_PASSWORD=$(cat ${config.age.secrets.harbor-db-password.path})
-    ANCHORE_ADMIN_PASSWORD=$(cat ${config.age.secrets.harbor-core-secret.path})
-    ${pkgs.gnused}/bin/sed \
-      -e "s/__DB_PASSWORD__/$DB_PASSWORD/" \
-      -e "s/__ANCHORE_ADMIN_PASSWORD__/$ANCHORE_ADMIN_PASSWORD/" \
-      ${anchoreEngineEnvTemplate} > /run/harbor/anchore-engine.env
-    chmod 600 /run/harbor/anchore-engine.env
   '';
 
   # Per-project bootstrap block for `securedProjects` entries: create-if-missing
@@ -640,128 +604,6 @@ in {
         "--health-retries=3"
       ];
     };
-
-    harbor-anchore-db = {
-      image = "postgres:13-alpine";
-      # Anchore is disabled -- Harbor already scans via Trivy (WITH_TRIVY=true
-      # above). Containers are kept defined (not deleted) so re-enabling is a
-      # one-line flip back to `autoStart = true` per container, plus restoring
-      # the wait/registration steps removed from harborBootstrap below and the
-      # scanner-adapter dependency removed from harbor-bootstrap's
-      # after/requires.
-      autoStart = false;
-      volumes = ["harbor_anchore_db:/var/lib/postgresql/data"];
-      environmentFiles = ["/run/harbor/anchore-db.env"];
-      extraOptions = [
-        "--network=harbor-net"
-        "--health-cmd=pg_isready -U postgres -d anchore"
-        "--health-interval=10s"
-        "--health-timeout=5s"
-        "--health-retries=5"
-      ];
-    };
-
-    harbor-anchore-catalog = {
-      image = "anchore/anchore-engine:v1.1.0";
-      autoStart = false;
-      environmentFiles = ["/run/harbor/anchore-engine.env"];
-      dependsOn = ["harbor-anchore-db"];
-      extraOptions = [
-        "--network=harbor-net"
-        "--entrypoint=anchore-manager"
-        "--health-cmd=curl -fsS http://localhost:8228/health || exit 1"
-        "--health-interval=30s"
-        "--health-timeout=10s"
-        "--health-retries=3"
-      ];
-      cmd = ["service" "start" "catalog"];
-    };
-
-    harbor-anchore-simplequeue = {
-      image = "anchore/anchore-engine:v1.1.0";
-      autoStart = false;
-      environmentFiles = ["/run/harbor/anchore-engine.env"];
-      dependsOn = ["harbor-anchore-db" "harbor-anchore-catalog"];
-      extraOptions = [
-        "--network=harbor-net"
-        "--entrypoint=anchore-manager"
-        "--health-cmd=curl -fsS http://localhost:8228/health || exit 1"
-        "--health-interval=30s"
-        "--health-timeout=10s"
-        "--health-retries=3"
-      ];
-      cmd = ["service" "start" "simplequeue"];
-    };
-
-    harbor-anchore-policy-engine = {
-      image = "anchore/anchore-engine:v1.1.0";
-      autoStart = false;
-      environmentFiles = ["/run/harbor/anchore-engine.env"];
-      dependsOn = ["harbor-anchore-db" "harbor-anchore-catalog"];
-      extraOptions = [
-        "--network=harbor-net"
-        "--entrypoint=anchore-manager"
-        "--health-cmd=curl -fsS http://localhost:8228/health || exit 1"
-        "--health-interval=30s"
-        "--health-timeout=10s"
-        "--health-retries=3"
-      ];
-      cmd = ["service" "start" "policy_engine"];
-    };
-
-    harbor-anchore-analyzer = {
-      image = "anchore/anchore-engine:v1.1.0";
-      autoStart = false;
-      environmentFiles = ["/run/harbor/anchore-engine.env"];
-      dependsOn = ["harbor-anchore-db" "harbor-anchore-catalog"];
-      extraOptions = [
-        "--network=harbor-net"
-        "--entrypoint=anchore-manager"
-        "--health-cmd=curl -fsS http://localhost:8228/health || exit 1"
-        "--health-interval=30s"
-        "--health-timeout=10s"
-        "--health-retries=3"
-      ];
-      cmd = ["service" "start" "analyzer"];
-    };
-
-    harbor-anchore-api = {
-      image = "anchore/anchore-engine:v1.1.0";
-      autoStart = false;
-      environmentFiles = ["/run/harbor/anchore-engine.env"];
-      dependsOn = ["harbor-anchore-db" "harbor-anchore-catalog"];
-      extraOptions = [
-        "--network=harbor-net"
-        "--entrypoint=anchore-manager"
-        "--health-cmd=curl -fsS http://localhost:8228/health || exit 1"
-        "--health-interval=30s"
-        "--health-timeout=10s"
-        "--health-retries=3"
-      ];
-      cmd = ["service" "start" "apiext"];
-    };
-
-    harbor-anchore-scanner-adapter = {
-      image = "anchore/harbor-scanner-adapter:1.5.2";
-      autoStart = false;
-      environment = {
-        SCANNER_ADAPTER_LISTEN_ADDR = ":8080";
-        SCANNER_ADAPTER_LOG_LEVEL = "info";
-        SCANNER_ADAPTER_REGISTRY_TLS_VERIFY = "false";
-        ANCHORE_ENDPOINT = "http://harbor-anchore-api:8228";
-        ANCHORE_USERNAME = "admin";
-        ANCHORE_CLIENT_TIMEOUT_SECONDS = "60";
-      };
-      environmentFiles = ["/run/harbor/anchore-engine.env"];
-      dependsOn = ["harbor-anchore-api"];
-      extraOptions = [
-        "--network=harbor-net"
-        "--health-cmd=curl -fsS http://localhost:8080/probe/healthy || exit 1"
-        "--health-interval=30s"
-        "--health-timeout=10s"
-        "--health-retries=3"
-      ];
-    };
   };
 
   systemd.services.podman-network-harbor = {
@@ -774,13 +616,6 @@ in {
       "podman-harbor-jobservice.service"
       "podman-harbor-portal.service"
       "podman-harbor-trivy.service"
-      "podman-harbor-anchore-db.service"
-      "podman-harbor-anchore-catalog.service"
-      "podman-harbor-anchore-simplequeue.service"
-      "podman-harbor-anchore-policy-engine.service"
-      "podman-harbor-anchore-analyzer.service"
-      "podman-harbor-anchore-api.service"
-      "podman-harbor-anchore-scanner-adapter.service"
     ];
     before = [
       "podman-harbor-db.service"
@@ -790,13 +625,6 @@ in {
       "podman-harbor-jobservice.service"
       "podman-harbor-portal.service"
       "podman-harbor-trivy.service"
-      "podman-harbor-anchore-db.service"
-      "podman-harbor-anchore-catalog.service"
-      "podman-harbor-anchore-simplequeue.service"
-      "podman-harbor-anchore-policy-engine.service"
-      "podman-harbor-anchore-analyzer.service"
-      "podman-harbor-anchore-api.service"
-      "podman-harbor-anchore-scanner-adapter.service"
     ];
     serviceConfig = {
       Type = "oneshot";
@@ -849,48 +677,6 @@ in {
   systemd.services.podman-harbor-trivy = {
     after = ["podman-harbor-redis.service" "podman-network-harbor.service"];
     requires = ["podman-network-harbor.service"];
-  };
-
-  systemd.services.podman-harbor-anchore-db = {
-    after = ["podman-network-harbor.service"];
-    requires = ["podman-network-harbor.service"];
-    serviceConfig.ExecStartPre = ["${generateAnchoreDbEnv}"];
-  };
-
-  systemd.services.podman-harbor-anchore-catalog = {
-    after = ["podman-harbor-anchore-db.service" "podman-network-harbor.service"];
-    requires = ["podman-network-harbor.service"];
-    serviceConfig.ExecStartPre = ["${generateAnchoreEngineEnv}"];
-  };
-
-  systemd.services.podman-harbor-anchore-simplequeue = {
-    after = ["podman-harbor-anchore-db.service" "podman-harbor-anchore-catalog.service" "podman-network-harbor.service"];
-    requires = ["podman-network-harbor.service"];
-    serviceConfig.ExecStartPre = ["${generateAnchoreEngineEnv}"];
-  };
-
-  systemd.services.podman-harbor-anchore-policy-engine = {
-    after = ["podman-harbor-anchore-db.service" "podman-harbor-anchore-catalog.service" "podman-network-harbor.service"];
-    requires = ["podman-network-harbor.service"];
-    serviceConfig.ExecStartPre = ["${generateAnchoreEngineEnv}"];
-  };
-
-  systemd.services.podman-harbor-anchore-analyzer = {
-    after = ["podman-harbor-anchore-db.service" "podman-harbor-anchore-catalog.service" "podman-network-harbor.service"];
-    requires = ["podman-network-harbor.service"];
-    serviceConfig.ExecStartPre = ["${generateAnchoreEngineEnv}"];
-  };
-
-  systemd.services.podman-harbor-anchore-api = {
-    after = ["podman-harbor-anchore-db.service" "podman-harbor-anchore-catalog.service" "podman-network-harbor.service"];
-    requires = ["podman-network-harbor.service"];
-    serviceConfig.ExecStartPre = ["${generateAnchoreEngineEnv}"];
-  };
-
-  systemd.services.podman-harbor-anchore-scanner-adapter = {
-    after = ["podman-harbor-anchore-api.service" "podman-network-harbor.service"];
-    requires = ["podman-network-harbor.service"];
-    serviceConfig.ExecStartPre = ["${generateAnchoreEngineEnv}"];
   };
 
   systemd.services.harbor-bootstrap = {
