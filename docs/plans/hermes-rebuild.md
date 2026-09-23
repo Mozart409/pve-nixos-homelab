@@ -652,7 +652,10 @@ dashboard:
     provider: self-hosted
     self_hosted:
       issuer: https://pocketid.dropbear-butterfly.ts.net
-      client_id: hermes-dashboard
+      # Public PKCE client (authorization code + S256), registered in Pocket ID
+      # 2026-09-23. No client secret exists for it by design, so there is no
+      # agenix entry here and this id is not a credential.
+      client_id: 92fac046-8ab4-4081-bdef-e0795bac8c2c
       scopes: "openid profile email"
   public_url: "https://hermes-dashboard.homelab.internal"
   trusted_proxies:
@@ -660,11 +663,19 @@ dashboard:
 ```
 
 Pocket ID is already this homelab's OIDC provider (forgejo, harbor, open-webui, romm,
-pgadmin and grafana all point at that issuer), so this is a new **public PKCE client** —
-`client_id` only, **no client secret**, therefore no new agenix entry. Register it in
-Pocket ID with the callback under `public_url`, and restrict the client to your own user
-or group: **authorization is not per profile** — anyone who logs in reaches every
-profile, `coding`'s terminal included.
+pgadmin and grafana all point at that issuer). **The client exists** — public,
+authorization-code + PKCE (S256), with access restricted to a single user. Every other
+client in this homelab uses a secret; this one deliberately does not.
+
+**The redirect URI must be registered as `<public_url>/auth/callback`**, i.e.
+`https://hermes-dashboard.homelab.internal/auth/callback`. Login starts at `/login`.
+Confirm that exact path is in the client's allowed redirect URIs before the first
+deploy — a mismatch fails at the provider, after the browser has already left the
+dashboard, which is an annoying place to debug from a phone.
+
+Access control is worth restating: **authorization is not per profile.** Anyone who can
+log in reaches every profile, `coding`'s terminal included — which is why the client is
+restricted to one user rather than to a group.
 
 Env-var overrides exist if the config route proves awkward:
 `HERMES_DASHBOARD_OIDC_ISSUER`, `HERMES_DASHBOARD_OIDC_CLIENT_ID`,
@@ -878,8 +889,8 @@ receives `tailscale-auth-key.age`.
 - **`hosts/dns/configuration.nix`** — keep the `hermes.homelab.{local,internal}` A
   records at 192.168.2.155 (still wanted for ssh/mosh) and the PTR entry, and **add
   `hermes-dashboard.homelab.{internal,local}`** at the same address (§9.1).
-  `pocketid.homelab.{internal,local}` → 192.168.2.102 and its PTR are **done** — landed
-  with this plan; see §9.3 for why that does not change the issuer.
+  `pocketid.homelab.{internal,local}` → 192.168.2.102 and its PTR are **done and
+  deployed** (2026-09-23); see §9.3 for why that does not change the issuer.
 - **`hosts/otel/*`** — the hermes blackbox probes were already removed on 2026-09-10;
   the `hermes-node` scrape job can come back once the host is up, since node exporter
   on 9100 stays.
@@ -913,8 +924,9 @@ receives `tailscale-auth-key.age`.
 6. Uncomment the hive entry (§12) and `just cah hermes`.
 7. Post-install manual steps that cannot be declarative:
    - `claude login` as the `hermes` user (§6.2), if Claude Code is to be used.
-   - Pocket ID: register the `hermes-dashboard` public client with the callback under
-     `public_url`, restricted to your own user/group (§9.1).
+   - Pocket ID: client already created (public + PKCE, single allowed user). Confirm
+     `https://hermes-dashboard.homelab.internal/auth/callback` is among its allowed
+     redirect URIs (§9.1).
    - Forgejo web UI: create the `hermes` account, register the new public key on it,
      grant collaborator access, and add it to the push whitelist on each protected
      `main` (§5.2, §5.2.1). Verify with a throwaway commit pushed from the host before
@@ -954,9 +966,6 @@ receives `tailscale-auth-key.age`.
   Claude Code appears to need an interactive login, which does not suit cron.
 - **Does `user` + `createUser = false` + a `/home` `stateDir` work on `v2026.9.21`?**
   (§5.1) Read from the module source, not exercised.
-- **Does Pocket ID issue public PKCE clients?** (§9.1) Every existing homelab client
-  (forgejo, harbor, pgadmin) uses a client *secret*; the dashboard wants a secret-less
-  PKCE client. Confirm in Pocket ID before assuming no agenix entry is needed.
 - **Should Pocket ID serve a step-ca cert for its new LAN name?** (§9.3) The records
   exist now; the certificate does not, so the LAN path is DNS-only until someone
   configures it on that LXC. Not needed for this rebuild.
