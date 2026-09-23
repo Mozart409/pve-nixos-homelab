@@ -19,8 +19,9 @@ old state dir is migrated.
 - `hermes-agent` unpinned to `v2026.9.21`.
 - Profiles: `default`, `coding`, `research`, `kb` — separate `config.yaml`, `.env`,
   `SOUL.md`, memory, sessions and **cron jobs** per profile (§8).
-- A dedicated non-sudo agent account with a Forgejo collaborator SSH key (§5),
-  pushing `main` directly, with `repo-sync` keeping its `~/code` checkouts current.
+- A dedicated non-sudo unix account `hermes` with its **own** Forgejo account `hermes`
+  and its own SSH key (§5), pushing `main` directly, with `repo-sync` keeping its
+  `~/code` checkouts current.
 - The shared coding harness: Claude Code + opencode, repo skills and commands, MCP
   wiring (§6).
 - moshi-hook (per profile) + mosh/ssh over Tailscale as the *only* human interfaces.
@@ -152,7 +153,10 @@ to a session that can absorb the compile.
 `hosts/development` is the working precedent. Import it and turn it on:
 
 ```nix
-homelab.agent.enable = true;   # user = "agent", home = /home/agent, no sudo
+homelab.agent.enable = true;
+homelab.agent.user   = "hermes";   # default is "agent"; on this host the unix
+                                   # account, the machine and the Forgejo
+                                   # identity should all read "hermes"
 ```
 
 What that gives, for free:
@@ -161,55 +165,76 @@ What that gives, for free:
   `security.sudo.extraRules` deny, not just an absent grant, so a later `extraRules`
   cannot quietly widen it. The OS is the boundary; the harness deny-lists are
   convenience on top (AGENTS.md §8).
-- `amadeus`'s SSH keys in its `authorized_keys`, so `ssh agent@homelab-hermes` and
+- `amadeus`'s SSH keys in its `authorized_keys`, so `ssh hermes@homelab-hermes` and
   mosh work straight from the phone (§9), plus `linger = true` so its user services
   start at boot without a login.
-- The Forgejo key wired as an ssh `Match user agent host forgejo.*` block — port 2222,
+- The Forgejo key wired as an ssh `Match user hermes host forgejo.*` block — port 2222,
   `User forgejo`, `IdentitiesOnly yes`, `IdentityAgent none` — so every git operation
-  by that account uses the collaborator key and nothing else.
+  by that account uses that key and nothing else.
 
 ### 5.1 One account, not two
 
-The upstream module creates its own `hermes` user (`createUser = true`, `user = "hermes"`,
-home = `stateDir`). Two modules defining `users.users.<name>` with different
-`isNormalUser` / `home` / `shell` will conflict, and more importantly a *second*
-account defeats the point: the Hermes agent's `terminal` tool must run as the same user
-whose `$HOME` holds the harness config (`~/.claude`, `~/.config/opencode`) and the repo
-checkouts. So run the agent as the agent account:
+The upstream module also creates a `hermes` user of its own (`createUser = true`,
+`user = "hermes"`, home = `stateDir` = `/var/lib/hermes`) — a **system** account, where
+`agent-user.nix` wants a normal one with a real home. Two modules defining
+`users.users.hermes` with different `isNormalUser` / `home` / `shell` will conflict,
+and a second account would defeat the point anyway: the Hermes agent's `terminal` tool
+must run as the same user whose `$HOME` holds the harness config (`~/.claude`,
+`~/.config/opencode`) and the repo checkouts. So let `agent-user.nix` own the account
+and point the service at it:
 
 ```nix
 services.hermes-agent = {
-  user        = config.homelab.agent.user;   # "agent"
+  user        = config.homelab.agent.user;   # "hermes"
   createUser  = false;                       # agent-user.nix owns the account
-  stateDir    = config.homelab.agent.home;   # /home/agent → .hermes/ inside it
+  stateDir    = config.homelab.agent.home;   # /home/hermes → .hermes/ inside it
 };
 ```
 
-Profiles then live at `/home/agent/.hermes/profiles/<name>/`, and the same `$HOME` is
+Profiles then live at `/home/hermes/.hermes/profiles/<name>/`, and the same `$HOME` is
 what an interactive mosh session sees. The module's `commonServiceConfig` sets
-`ProtectHome = false`, so `/home/agent` is reachable from inside the unit;
+`ProtectHome = false`, so `/home/hermes` is reachable from inside the unit;
 `ReadWritePaths` is `[stateDir, workingDirectory]`, which now covers the home.
 
 **Verify during the bump** that `user`, `createUser` and a non-`/var/lib` `stateDir`
 behave as documented on `v2026.9.21` — the option list was read from
 `nix/nixosModules.nix` on main, not exercised.
 
-### 5.2 The Forgejo key
+### 5.2 Its own Forgejo identity
 
-`modules/agent-user.nix` hardcodes `age.secrets.agent-forgejo-ssh` pointing at
-`secrets/agent-forgejo-ssh.age`. Two ways to give hermes a key:
+**Hermes gets a Forgejo account of its own, named `hermes`, with its own SSH key.** Not
+a shared key, not amadeus's identity: Forgejo resolves the account from the key
+fingerprint, so one public key belongs to exactly one account, and a per-host key is
+what makes revocation and attribution per-host too.
 
-1. **Add `hostHermes` to `agent-forgejo-ssh.age`.** One line, but both hosts then push
-   as the same Forgejo identity — attribution and revocation stop being per-host.
-2. **Give the module an option** (`homelab.agent.forgejoKeyFile`, defaulting to the
-   current path) and point hermes at its own secret. `hermes-forgejo-ssh.age` already
-   exists — it is the `hermes-bot` account's key, and `hermes-bot` is already a Write
-   collaborator on `amadeus/pve-nixos-homelab` (AGENTS.md §7). Reuse it.
+`todo/forgejo-bot-account-development.md` is the working recipe (it is how
+`developmentbot` was created); the hermes version is:
 
-**Recommend (2).** It is a ~6-line module change, keeps `hermes-bot` as a distinct
-Forgejo identity that can be revoked alone, and reuses a secret and a collaborator
-grant that already exist. Note this reverses the earlier plan's "delete
-`hermes-forgejo-ssh`" — that secret stays.
+| Thing | Value |
+| --- | --- |
+| Forgejo account | `hermes` / `hermes@homelab.local`, unrestricted, **not** admin |
+| SSH key | fresh ed25519, generated for this purpose, registered on that account as `homelab-hermes` |
+| Private key | agenix, `secrets/hermes-forgejo-ssh.age`, `0400` to the unix `hermes` user |
+| Commit identity | `programs.git.config` → `user.name = hermes`, `user.email = hermes@homelab.local` |
+| API token (optional) | `secrets/hermes-forgejo-token.age`, scopes `write:repository,write:user`, only if `forgejo-cli.nix` is imported (§6) |
+
+Three details that follow from it:
+
+- **`hermes-forgejo-ssh.age` is re-minted, not reused.** The file exists today holding
+  the *`hermes-bot`* account's key — the account that served the Obsidian vault and the
+  feature-branch flow, both of which this rebuild drops. Generate a new keypair and
+  `agenix -e` the private half into that filename. `hermes-bot` itself is then retired:
+  either rename it to `hermes` in the web UI (keeps its past commits attributed) or
+  delete it once nothing references it.
+- **`modules/agent-user.nix` needs one small change.** It hardcodes
+  `age.secrets.agent-forgejo-ssh` and its path. Add an option —
+  `homelab.agent.forgejoKeyFile`, defaulting to the current
+  `../secrets/agent-forgejo-ssh.age` — so `development` keeps its behaviour unchanged
+  and hermes points at its own secret. ~6 lines, and the ssh `Match` block then
+  references `config.age.secrets.${name}.path` as before.
+- **The API token is only for the REST API.** Git authenticates with the SSH key; the
+  token exists solely so `fj` can create repos. Losing it costs a re-mint and nothing
+  else — same division of labour `development` uses.
 
 ### 5.2.1 It pushes `main` — decided
 
@@ -221,10 +246,11 @@ SOUL.md entirely — it commits and pushes like a person would.
 needed.** `development`'s agent was never blocked because `agent-forgejo-ssh` holds
 *amadeus's own collaborator key* — that host pushes as you (`modules/agent-user.nix`:
 "The agent still commits and pushes with your Forgejo identity — that is deliberate").
-`hermes-bot` is a separate account, and `main` on `amadeus/pve-nixos-homelab` is
-protected with no push whitelist precisely so that account could not land changes
-(AGENTS.md §7). So: **add `hermes-bot` to the push whitelist on the protected `main`
-branch**, per repo it should work in. Web UI, one setting; nothing in this repo.
+The `hermes` account is a separate identity, and `main` on
+`amadeus/pve-nixos-homelab` is protected with no push whitelist precisely so the old
+`hermes-bot` could not land changes (AGENTS.md §7). So: **add `hermes` to the push
+whitelist on the protected `main` branch**, per repo it should work in. Web UI, one
+setting; nothing in this repo.
 
 Two consequences worth stating before doing it:
 
@@ -238,16 +264,11 @@ Two consequences worth stating before doing it:
   "main is branch-protected, so the bot can never land changes directly". All four are
   superseded here; rewriting it is part of the work (§12).
 
-The alternative — pasting amadeus's collaborator key into a hermes-side secret, as
-`development` does — would also work and need no Forgejo change, but it gives up
-per-host revocation and makes every hermes commit indistinguishable from yours. Not
-recommended.
-
 ### 5.3 Repo checkouts
 
 ```nix
 homelab.repoSync.${config.homelab.agent.user} = {
-  sshKey = config.age.secrets.hermes-forgejo-ssh.path;   # or agent-forgejo-ssh, per §5.2
+  sshKey = config.age.secrets.hermes-forgejo-ssh.path;
   push   = true;
 };
 ```
@@ -257,7 +278,7 @@ homelab.repoSync.${config.homelab.agent.user} = {
 commits or rebases, and exits 0 on every skippable state, so a dirty tree is not a
 failure. That is how agent commits reach Forgejo without a human step, and it answers
 the old plan's open question about what the `coding` profile operates on: clones under
-`/home/agent/code`.
+`/home/hermes/code`.
 
 ## 6. Coding Harness — opencode and Claude Code
 
@@ -291,7 +312,7 @@ module — `axon-gateway` and `ventara-gateway` — so hermes inherits both by i
 Hermes' `terminal` toolset (backend `local`) executes as the agent account, so the
 harness is simply on its PATH. The `coding` profile's SOUL.md directs it to shell out
 rather than edit directly, e.g. `opencode run "<task>"` inside
-`/home/agent/code/<repo>`, or `claude -p "<prompt>"`. Consequences worth writing into
+`/home/hermes/code/<repo>`, or `claude -p "<prompt>"`. Consequences worth writing into
 the config comments:
 
 - **Guardrails come from the harness, not from Hermes.** Hermes' approval layer sees
@@ -381,7 +402,7 @@ upstream. So the profiles need a small local module, e.g. `modules/hermes-profil
 - For each profile, render `config.yaml` (via `pkgs.writeText` + the same YAML shape
   the module uses) and `SOUL.md` into the Nix store.
 - A root activation script installs them to
-  `/home/agent/.hermes/profiles/<name>/`, `chown` to the agent account, and
+  `/home/hermes/.hermes/profiles/<name>/`, `chown` to the agent account, and
   concatenates the profile's agenix secret files into that profile's `.env`
   (mode 0600) — the same pattern the upstream module already uses for the root home.
 - Bind each rendered `config.yaml` and `SOUL.md` read-only in the unit's
@@ -507,9 +528,9 @@ No Caddy, no 443, no api_server. The host is reached as:
    and opens udp 60000–61000, and `trustedInterfaces = ["tailscale0"]` covers the
    tailnet side. Firewall shrinks to `allowedTCPPorts = [22 9100]` (ssh + node
    exporter); drop 443.
-2. **Log in as the agent account.** `modules/agent-user.nix` puts `amadeus`'s SSH keys
-   in its `authorized_keys`, so the phone session is `mosh agent@homelab-hermes` →
-   `coding chat`, with no sudo hop and no wrapper script. `sudo -u agent -i` from
+2. **Log in as the `hermes` account.** `modules/agent-user.nix` puts `amadeus`'s SSH
+   keys in its `authorized_keys`, so the phone session is `mosh hermes@homelab-hermes` →
+   `coding chat`, with no sudo hop and no wrapper script. `sudo -u hermes -i` from
    `amadeus` works too when you are at a real terminal.
 3. **moshi-hook** for push out of agent sessions (§7.5) and, ideally, out of cron runs
    (§8.1).
@@ -574,7 +595,8 @@ Recipients in `secrets/secrets.nix`, corrected for the new design:
 | `hermes-deepseek-key.age` | keep; likely split per profile (below) |
 | `hermes-opencode-zen-key.age` | keep — now also the harness's `opencode-zen-key` (§6.2) |
 | `hermes-agentmail-key.age` | keep (MCP carried over) |
-| `hermes-forgejo-ssh.age` | **keep** — repurposed as the agent account's collaborator key (§5.2) |
+| `hermes-forgejo-ssh.age` | **keep, re-minted** — now the new `hermes` Forgejo account's own key (§5.2) |
+| `hermes-forgejo-token.age` | **new**, optional — REST-API token for `fj`, only if `forgejo-cli.nix` is imported |
 | `axon-gateway-env.age` | keep **and add `hostHermes`** — line 42 lists `hostMcp hostDevelopment hostOtel hostZeroclaw` only; the harness needs it too |
 | `moshi-device-id.age` | **add `hostHermes`** — line 69 omits it (§7.5) |
 | `ventara-gateway-env.age` | add if `ventara-gateway` MCP is wanted; `coding-harness.nix` registers it |
@@ -617,9 +639,9 @@ receives `tailscale-auth-key.age`.
 - **`flake.nix`** — uncomment the `hermes` entry in `colmenaHive` (disabled 2026-09-09
   for "No route to host"). Until then only `nix eval` / `just deploy` reach this host,
   and `just cah hermes` does not work.
-- **Forgejo** — confirm `hermes-bot`'s collaborator grants cover every repo the
-  `coding` profile should touch, and add it to the push whitelist on each protected
-  `main` (§5.2.1).
+- **Forgejo** — create the `hermes` account, register its new SSH key, give it
+  collaborator access to every repo the `coding` profile should touch, and add it to
+  the push whitelist on each protected `main` (§5.2, §5.2.1). Retire `hermes-bot`.
 - **`AGENTS.md` §7** — rewrite. It documents the superseded feature-branch workflow,
   the `~/workspace/pve-nixos-homelab` checkout, the `homelab-config-repo` skill, and
   branch protection as the thing that stops the bot landing changes. Replace it with
@@ -644,9 +666,10 @@ receives `tailscale-auth-key.age`.
 6. Uncomment the hive entry (§12) and `just cah hermes`.
 7. Post-install manual steps that cannot be declarative:
    - `claude login` as the agent account (§6.2), if Claude Code is to be used.
-   - Forgejo web UI: confirm `hermes-bot`'s collaborator grants, and add it to the
-     push whitelist on each protected `main` (§5.2.1). Verify with a throwaway commit
-     pushed from the host before trusting the `coding` profile with real work.
+   - Forgejo web UI: create the `hermes` account, register the new public key on it,
+     grant collaborator access, and add it to the push whitelist on each protected
+     `main` (§5.2, §5.2.1). Verify with a throwaway commit pushed from the host before
+     trusting the `coding` profile with real work.
 8. Verify, in this order:
    - `systemctl status hermes-config-check` → active/exited, no "repaired" surprises.
    - `journalctl -u hermes-agent -b | grep -c 'Falling back to default config'` → 0.
@@ -656,11 +679,11 @@ receives `tailscale-auth-key.age`.
      (findings §3.1).
    - `moshi-hook status --json | jq .paired` → `true`, and a test notification lands on
      the phone (§7.5).
-   - `sudo -u agent -i`, then `opencode run "print the repo name"` in a `~/code`
+   - `sudo -u hermes -i`, then `opencode run "print the repo name"` in a `~/code`
      checkout → completes, and `claude -p` likewise if logged in.
    - A throwaway one-minute cron job on one profile → runs, and the result reaches the
      phone by whichever path §8.1 established.
-   - `mosh agent@homelab-hermes` from the phone → `coding chat` starts.
+   - `mosh hermes@homelab-hermes` from the phone → `coding chat` starts.
 9. Only then remove the hermes backend from Open WebUI (§12) — the last thing still
    pointed at the old interface.
 
