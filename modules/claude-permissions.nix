@@ -142,13 +142,21 @@
       # The hooks merge is deliberately scoped to PreToolUse groups with
       # matcher == "WebSearch": any group with that matcher is dropped (so a
       # store path from an older build cannot linger) and the current hook is
-      # appended, while the groups herdr and moshi-hook write are preserved.
+      # re-added, while the groups herdr and moshi-hook write are preserved.
+      #
+      # PREPENDED, not appended, and that position is load-bearing.
+      # `moshi-hook status` reports the claude target as `stale` ("PreToolUse
+      # entries outdated") whenever any group sits after its own two -- and
+      # `moshi-hook install`, which runs from moshi-hook-setup.service just
+      # before this unit, fixes that by moving its groups to the tail. Appending
+      # here undid that on every boot, so the host permanently reported stale
+      # hooks while both writers were in fact doing their job.
       jq --argjson p '${permsJson}' --argjson h '${hooksJson}' \
         '.permissions = ((.permissions // {}) + $p.permissions)
          | .includeCoAuthoredBy = $p.includeCoAuthoredBy
          | .attribution = ((.attribution // {}) + $p.attribution)
          | .askUserQuestionTimeout = $p.askUserQuestionTimeout
-         | .hooks.PreToolUse = ([((.hooks.PreToolUse // [])[] | select(.matcher != "WebSearch"))] + $h.hooks.PreToolUse)' \
+         | .hooks.PreToolUse = ($h.hooks.PreToolUse + [((.hooks.PreToolUse // [])[] | select(.matcher != "WebSearch"))])' \
         "$SETTINGS" > "$tmp"
 
       # Written via rename so a crash mid-write cannot leave truncated JSON,
