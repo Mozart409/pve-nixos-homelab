@@ -595,7 +595,7 @@ resource "proxmox_virtual_environment_vm" "mcp_vm" {
 resource "proxmox_virtual_environment_vm" "hermes_vm" {
   name        = "hermes"
   description = "Hermes AI Agent - NixOS with hermes-agent for homelab automation"
-  tags        = ["terraform", "debian", "nixos-target", "ai", "hermes"]
+  tags        = ["terraform", "nixos", "nixos-target", "ai", "hermes"]
 
   node_name = "pve-gigabyte"
   vm_id     = 4334
@@ -604,22 +604,60 @@ resource "proxmox_virtual_environment_vm" "hermes_vm" {
 
   keyboard_layout = "de"
 
+  # 4 cores / 8 GB is sized for the HARNESS, not the agent. A bare Hermes would
+  # be fine at 2/6144. What pushes it up is that the `coding` profile shells out
+  # to nested opencode/claude runs, `nix develop` realises devShells, and
+  # several repo clones live under ~/code -- `development` is the precedent for
+  # how much that actually costs. This node is already oversubscribed
+  # (todo/pve-gigabyte-memory-oversubscription.md); if 8 GB cannot be spared,
+  # 6144 works and devShell realisation is the thing that will hurt.
   cpu {
-    cores = 2
+    cores = 4
     type  = "host"
   }
 
+  # Pinned: floating == dedicated, i.e. no ballooning. An agent that is idle for
+  # an hour and then realises a devShell is exactly the workload the balloon
+  # driver reclaims from and then cannot hand memory back to fast enough.
   memory {
-    dedicated = 2048
-    floating  = 1024
+    dedicated = 8192
+    floating  = 8192
   }
 
+  # ssd_pool + XFS, same reasoning as dns_vm/ca_vm (modules/disko-xfs.nix).
+  # BLANK disk, NO file_id: importing a cloud image onto this zfspool fails with
+  # "no zvol device link ... after 10 sec". The installer comes from the CD-ROM
+  # below instead.
+  #
+  # Dropping file_id and changing datastore_id is a REPLACEMENT, not the
+  # in-place move the woodpecker block documents (that one kept its file_id).
+  # That is the intent -- this is a from-scratch rebuild and the old 256 GB
+  # zvol on zfs_pool is meant to die here. Confirm with `tofu plan` that it
+  # shows the disk replaced and every other guest untouched before applying.
+  # `discard = "on"` is what makes modules/disko-xfs.nix's weekly fstrim
+  # actually return blocks to the pool.
   disk {
-    datastore_id = "zfs_pool"
-    file_id      = proxmox_virtual_environment_download_file.debian_cloud_image.id
+    datastore_id = "ssd_pool"
     interface    = "scsi0"
-    size         = 256
+    size         = 64
+    discard      = "on"
+    file_format  = "raw"
   }
+
+  # The repo's own installer ISO (`just iso-build`), same as dns and ca. The
+  # name carries the nixpkgs revision, so it changes on every ISO rebuild --
+  # re-upload to the `local` datastore and update all three occurrences, or the
+  # next apply fails on a missing volume.
+  cdrom {
+    file_id   = "local:iso/nixos-homelab-26.11.20260907.dc5d91f-x86_64-linux.iso"
+    interface = "ide0"
+  }
+
+  # Disk FIRST, CD second. A freshly created zvol is all zeroes with no MBR
+  # signature, so SeaBIOS skips it and falls through to the ISO -- but once
+  # nixos-anywhere has installed, the disk boots and the still-attached ISO is
+  # ignored. Nothing needs detaching afterwards.
+  boot_order = ["scsi0", "ide0"]
 
   network_device {
     bridge = "vmbr0"
@@ -652,9 +690,11 @@ resource "proxmox_virtual_environment_vm" "hermes_vm" {
     timeout = "60s"
   }
 
-  started = false
+  # Starts itself onto the installer ISO; the host is then deployed with
+  # `just deploy hermes <dhcp-ip> --phases disko,install,reboot`.
+  started = true
 
-  on_boot = false
+  on_boot = true
 }
 
 # Fleet (osquery management) VM
