@@ -59,8 +59,10 @@ together:
   per-host.
 - **herdr** (`v0.7.5`, pinned as a flake input) is installed with its
   opencode + claude integrations as a user service; `moshi-hook` pairs the iOS
-  companion app from `moshi-device-id.age` and runs its hook daemon. Both need
-  `users.users.amadeus.linger = true`, which the modules set.
+  companion app from `moshi-device-id.age` and runs its hook daemon. The moshi
+  units run in **both** the `agent` and `amadeus` user managers — one daemon,
+  pairing and socket per login, so a notification reaches the phone whichever
+  account raised it. Both need `linger = true`, which the modules set.
 - **Podman** is available for experiments, with `podman+` in
   `trustedInterfaces` so containers on any per-experiment bridge can reach
   aardvark-dns.

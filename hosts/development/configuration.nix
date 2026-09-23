@@ -238,12 +238,16 @@ in {
   };
 
   # Moshi pairing token (plain raw text, NOT KEY=value — read directly by
-  # modules/moshi-hook-user.nix's pair script). Owned by the agent so its
-  # moshi-hook-setup user service can read it.
+  # modules/moshi-hook-user.nix's pair script). Group-readable rather than
+  # 0400/agent: moshi-hook-setup runs in BOTH user managers (agent and amadeus)
+  # and each pairs its own daemon, so both have to read this on a host that has
+  # not paired yet. `users` is the common primary group of exactly those two
+  # accounts here — no third login exists to widen it to.
   age.secrets.moshi-device-id = {
     file = ../../secrets/moshi-device-id.age;
     owner = agent;
-    mode = "0400";
+    group = "users";
+    mode = "0440";
   };
 
   # Axon MCP gateway bearer token (file contains AXON_GATEWAY_TOKEN=...).
