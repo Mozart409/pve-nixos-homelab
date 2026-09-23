@@ -489,11 +489,26 @@
           }
         ];
       }
+      # hermes-node came BACK with the 2026-09 rebuild of that host
+      # (docs/plans/hermes-rebuild.md). Node exporter on 9100 is one of the
+      # three ports its firewall opens; the api_server and its blackbox probes
+      # are gone for good, so do not re-add those to ./blackbox.nix.
+      {
+        job_name = "hermes-node";
+        static_configs = [
+          {
+            targets = ["hermes.homelab.local:9100"];
+            labels = {
+              instance = "homelab-hermes";
+            };
+          }
+        ];
+      }
       # Removed on 2026-09-10, for the same reason as the 2026-08-15 note above:
-      # homelab-hermes, homelab-harbor, homelab-woodpecker, homelab-fleet and
+      # homelab-harbor, homelab-woodpecker, homelab-fleet and
       # homelab-k3s-cntrl-1 are all deliberately shut down and are not expected
-      # back. Their node jobs (hermes-node, harbor-node, woodpecker-node,
-      # fleet-node, k3s-cntrl-1-node), the woodpecker application job, and their
+      # back. Their node jobs (harbor-node, woodpecker-node, fleet-node,
+      # k3s-cntrl-1-node), the woodpecker application job, and their
       # http_2xx probes in ./blackbox.nix were scraped anyway, which left
       # TargetDown and ProbeFailed firing permanently -- nine standing alerts,
       # and a board that is always red is a board you stop reading. Host configs,
