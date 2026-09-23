@@ -179,8 +179,10 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
              credential changes; it is wired to the secret-consuming units'
              `restartTriggers`.
          -   `hosts/hermes/configuration.nix` — bump `secretNonce` when a secret,
-             `SOUL.md`, `USER.md`, `config.yaml`, or skill changes; it triggers
-             both `hermes-agent` and `hermes-config-check`.
+             ANY profile's `SOUL.md` / `config.yaml`, `USER.md`, or a skill
+             changes. All five profiles are written at stable paths under
+             `/home/hermes/agent/.hermes/`, so nothing in the generated unit
+             changes on its own.
          -   `hosts/mcp_vm/axon-gateway/default.nix` — `configText` is hashed
              into `CONFIG_HASH`, so changing the declarative gateway config
              changes the generated container unit automatically.
@@ -466,31 +468,45 @@ process, or persistent container — so the whole class of "execute_code → Doc
 version failed" wedges (stale `pause.pid`, orphan `conmon`/`pasta` helpers, undetermined
 runroot) is gone by construction. If the tools misbehave, debug the `hermes-agent`
 unit directly (`journalctl -u hermes-agent`, `systemctl status hermes-agent`) — there
-is no podman layer to reset. The old podman image storage under
-`/var/lib/hermes/.local/share/containers` is inert leftover and can be GC'd.
+is no podman layer to reset. (Since the 2026-09 rebuild the state dir is
+`/home/hermes/agent`, not `/var/lib/hermes`, and the old podman image storage is
+gone with the wiped disk.)
 
-### Hermes API Server (Open WebUI) Ignores Top-Level `toolsets`
+### Hermes Platforms Ignore the Top-Level `toolsets` List
 
-The Open WebUI chat-completions gateway is the `api_server` *platform*. Per
-`hermes_cli/tools_config.py` (`_get_platform_tools`), every gateway platform resolves
-its enabled tools from **`platform_toolsets.<platform>`** in `config.yaml`, and the
-top-level `toolsets` list is **never consulted by the API server**. When
-`platform_toolsets.api_server` is absent, the platform falls back to its built-in
-`default_toolset` preset (`hermes-api-server`), which is why Open WebUI showed only a
-trimmed ~13-tool set despite a fuller top-level `toolsets`.
+Per `hermes_cli/tools_config.py` (`_get_platform_tools`), every gateway
+*platform* resolves its enabled tools from **`platform_toolsets.<platform>`** in
+`config.yaml`. The top-level `toolsets` list is **never consulted per-platform**.
+When a platform's key is absent it falls back to that platform's built-in
+`default_toolset` preset (`hermes-cli`, `hermes-cron`, …) — which is how Open
+WebUI once showed a trimmed ~13-tool set despite a fuller top-level `toolsets`.
 
-- **Fix (declarative):** set `services.hermes-agent.settings.platform_toolsets.api_server`
-  to the desired toolset keys (mirror the top-level `toolsets`). Each name must be a
-  `CONFIGURABLE_TOOLSETS` key (`file`, `web`, `browser`, `terminal`, `code_execution`,
-  `skills`, `memory`, `session_search`, `delegation`, …).
+Platform keys come from `hermes_cli/platforms.py` (`cli`, `cron`, `webhook`,
+`api_server`, the chat platforms); every list entry must be a
+`CONFIGURABLE_TOOLSETS` key (`file`, `web`, `browser`, `terminal`,
+`code_execution`, `skills`, `memory`, `session_search`, `delegation`,
+`cronjob`, `clarify`, …).
+
+- **Fix (declarative):** pin `platform_toolsets.<platform>` explicitly for every
+  platform you use, so the tool surface is deterministic across redeploys.
+  `hosts/hermes/configuration.nix` does this with an `mkToolsets` helper that
+  derives `cli` and `cron` from one per-profile list.
+- **Keep `cron` leaner than `cli`.** Cron jobs run unattended in a fresh
+  session; upstream warns that heavy toolsets bloat the tool-schema prompt on
+  every LLM call of every job. `clarify` has nobody to ask, and `cronjob` is
+  force-disabled inside cron runs anyway (anti-recursion guard), so listing it
+  only pays its schema cost. Per-job `enabled_toolsets` on `cronjob.create`
+  still overrides the default.
+- **A dead toolset still costs tokens.** `browser` is enabled-but-engineless
+  unless a Chromium/CDP backend is wired up; leave it out until it has one.
 - **Do NOT** use `hermes config set` / hand-edit `~/.hermes/config.yaml` — that file is
   **merged** from the Nix store config on every activation by `hermes-config-merge`
   (`deep_merge(existing, nix)`, Nix wins for keys it sets), so manual edits to
   Nix-managed keys are overwritten on the next deploy. Note the merge only *adds/updates*
   keys; it never prunes, so keys removed from the Nix config (e.g. a retired
-  `mcp_servers` entry) linger in the live file until removed by hand.
-- **Verify live:** `GET http://localhost:8642/v1/toolsets` (Bearer = the API-server key)
-  lists every toolset with its `enabled` flag for the `api_server` platform.
+  `mcp_servers` entry) linger in the live file until removed by hand. The same
+  applies per profile: `modules/hermes-profiles.nix` merges each secondary
+  profile's `config.yaml` the same way.
 
 ### Open WebUI 0.9.6+ Derives the OAuth Callback From the Request Host (not `WEBUI_URL`)
 
@@ -550,7 +566,7 @@ Confirm with the startup log — it says so explicitly, and saves a copy:
 ```bash
 sudo journalctl -u hermes-agent | grep -A3 'Failed to parse'
 # ⚠️  hermes config: Failed to parse …/config.yaml … Falling back to default config
-ls /var/lib/hermes/.hermes/config.yaml.corrupt.*
+ls /home/hermes/agent/.hermes/config.yaml.corrupt.*        # and profiles/*/
 ```
 
 **Root cause (2026-07-24 → 07-27 incident): two writers with incompatible list
@@ -572,10 +588,16 @@ The agent ran three days on built-in defaults before anyone chatted with it, so
 **absence of errors is not evidence the config is live.**
 
 - **Fixed by:** a version-stamped guard so `moshi-hook install` runs once per
-  release instead of every boot (`hosts/hermes/moshi-hook.nix`), plus a
-  `hermes-config-check` oneshot ordered after it and `requires`-d by `hermes-agent`
-  (`hosts/hermes/configuration.nix`) that repairs mixed-indent duplicates and
-  **blocks startup** on an unparseable config or a missing `model`.
+  (profile, release) pair instead of every boot (`hosts/hermes/moshi-hook.nix`),
+  plus a `hermes-config-check` oneshot ordered after it and `requires`-d by
+  `hermes-agent` (`modules/hermes-profiles.nix`) that repairs mixed-indent
+  duplicates and **blocks startup** on an unparseable config or a missing
+  `model`.
+- **Since the 2026-09 rebuild there are FIVE config.yaml files** — one per
+  profile — so the check loops over `$HERMES_HOME/config.yaml` plus
+  `$HERMES_HOME/profiles/*/config.yaml`. A corrupt secondary profile fails the
+  same gate and blocks the shared agent unit, which is intended: an agent
+  running on silent defaults is worse than one that did not start.
 - **Bumping `moshi-hook`'s `version` re-triggers the corruption once — expected.**
   The stamp is keyed on the version, so a bump in `modules/moshi-hook.nix` makes
   `install` run again on the next deploy, and it will re-insert the mis-indented
@@ -782,61 +804,159 @@ in the Nix config — do not "simplify" them away:
 - Rootless podman + `docker:dind`-style plugins do not work. Use Buildah or
   Kaniko for image builds.
 
-## 7. Hermes Agent Access to This Repo (feature-branch dev)
+## 7. Hermes: Five Agent Profiles on One Account, Pushing `main`
 
-The Hermes agent (driven from Open WebUI) can develop changes to *this* repo. Under
-the `local` terminal backend it runs its file/terminal/nix tools **as the `hermes`
-user directly on the VM** (no container). It commits on feature branches and **pushes
-them to Forgejo itself** with the `hermes-forgejo-ssh` key on `~/.ssh`. `main` is
-branch-protected, so the bot can never land changes directly — you review the branch,
-open the PR, and deploy with `colmena`.
+`hermes` (192.168.2.155) is a NixOS VM that exists to run agents. It was rebuilt
+from scratch in September 2026 — XFS root on `ssd_pool`, `hermes-agent`
+unpinned to `v2026.9.21`, no api_server, no Obsidian vault, no feature-branch
+protocol. `docs/plans/hermes-rebuild.md` is the design; this section is what an
+agent working on the repo needs to know.
 
-### One-time Forgejo setup (done in the web UI, not in this repo)
-- Add `hermes-bot` as a **Write** collaborator on `amadeus/pve-nixos-homelab`.
-- Protect `main`: block direct pushes (no push whitelist, or whitelist only you)
-  so changes must go through pull requests.
-- Auto-PR is intentionally **off** — no API token is configured. The agent only
-  pushes the branch; you open the PR yourself.
+**The previous shape of this section is obsolete in every particular.** There is
+no `~/workspace/pve-nixos-homelab` checkout, no `homelab-config-repo` skill, no
+`$HOMELAB_REPO_PATH`, and `main` is no longer the thing that stops this host
+landing changes.
 
-### How it works (declarative, in `hosts/hermes/configuration.nix`)
-- Access reuses the existing `hermes-forgejo-ssh` key (same `hermes-bot` account
-  as the Obsidian vault, same `forgejo.homelab.local:2222` host the `~/.ssh/config`
-  already routes). **No new secret.** Under `local` the agent runs as `hermes`, so
-  it reads the key directly and pushes on its own.
-- The checkout lives at `~/workspace/pve-nixos-homelab` (`$HOMELAB_REPO_PATH`). The
-  `hermes-repo-sync` oneshot + timer only **bootstrap** it (clone-if-missing + a
-  periodic `git fetch` to keep `origin/main` fresh); it never commits, merges, or
-  pushes. The agent fetches + pushes feature branches itself.
-- `nix` is on the agent's service PATH (via `extraPackages`) and talks to the **host
-  nix-daemon natively** — no socket bind-mount, no `NIX_REMOTE`. So the agent can
-  `nix develop -c just …` / scoped `nix eval` to validate flake changes.
-- Config integrity: `config.yaml`, `SOUL.md`, and `USER.md` are bound **read-only**
-  to the running agent via `serviceConfig.ReadOnlyPaths` (they are (re)written by a
-  root activation script outside the unit namespace), so the agent cannot rewrite its
-  own config/system prompt — Nix stays the source of truth.
-- The agent loads the `homelab-config-repo` skill
-  (`hosts/hermes/skills/development/homelab-config-repo/SKILL.md`) describing this
-  workflow.
+### Five profiles, one unix user
 
-### Agent workflow (enforced by SOUL.md)
-- Never commits to `main`; one feature branch per task, started from a fresh
-  `origin/main` (`git switch -c feat/<slug> origin/main`).
-- Validates with `nix develop -c just fmt`, then a **scoped per-host eval** —
-  `nix eval ".#nixosConfigurations.<host>.config.system.build.toplevel.drvPath"`
-  for each edited host — NOT the full `just nixos-check` / `nix flake check`,
-  which evaluates all ~16 hosts and gets OOM-killed (exit 137) on the host
-  nix-daemon. The full check stays the user's pre-merge gate.
-- Commits **through the dev shell** (`nix develop -c git commit`) so the lefthook
-  `alejandra`/`keep-sorted` pre-commit hooks resolve; a bare `git commit` fails them.
-  Then pushes the feature branch itself (`git push -u origin feat/<slug>`).
+A Hermes *profile* is a second `HERMES_HOME`: its own `config.yaml`, `.env`,
+`SOUL.md`, memories, sessions, cron jobs, checkpoints and `state.db`. All five
+live under `/home/hermes/agent/.hermes/` and share the **one** unix user
+`hermes`:
 
-### Deploy-time checks (cannot be validated offline)
-- Confirm `execute_code` finds `python3`/`node`, and `terminal` finds `nix`/`git`/
-  `ssh`, from the `local`-backend service PATH (`extraPackages`).
-- Confirm the config lock: as `hermes`, writing `config.yaml`/`SOUL.md`/`USER.md`
-  fails (read-only), while other `~/.hermes/` writes succeed.
-- An agent-pushed `feat/*` branch should appear on Forgejo; a push to `main` is
-  rejected by branch protection.
+| Profile | Model | Purpose |
+| --- | --- | --- |
+| `default` | flash | owns the multiplexing gateway and the dashboard; routes work |
+| `coding` | pro | the only profile with a shell; drives opencode/claude in `~/code` |
+| `research` | pro | web search + extract, no shell |
+| `kb` | flash | notes and knowledge capture; memory only |
+| `infra` | pro | homelab observability through the axon-gateway MCP backends |
+
+Reach one with `hermes -p coding chat`, the auto-generated `~/.local/bin/coding`
+wrapper, or a sticky `hermes profile use`. **Never point two agent processes at
+one profile home** — both write memory, and each loads the other's writes into
+its system prompt at session start.
+
+One unix user is deliberate, and it is what makes the two features this rebuild
+exists for work: one dashboard that enumerates the invoking user's `profiles/`
+directory, and one multiplexing gateway (v2026.9.21 enforces a host-wide
+singleton lock, so a second gateway would start observe-only anyway). The trade
+is stated plainly: isolation between profiles is Hermes' bookkeeping, not the
+kernel — `coding` and `research` can read each other's `.env`.
+
+The boundary that does hold is the account. `hermes` is not `amadeus`: no sudo
+(an explicit `!ALL` rule), no access to `~amadeus/.ssh` (the colmena deploy key),
+no `nixos-rebuild`. Plus the unit sandbox — `ProtectSystem=strict`, an
+`IPAddress*` allow-list, and a `ReadOnlyPaths` bind on all ten
+`config.yaml`/`SOUL.md` files so a running agent cannot rewrite its own model or
+system prompt.
+
+### Declaring a profile
+
+`modules/hermes-profiles.nix` renders the four secondary profiles from
+`homelab.hermesProfiles.profiles`; the **default** profile is not declared there
+— it is the upstream module's own home, configured with
+`services.hermes-agent.{settings,hermesHomeFiles}`.
+
+Two things bite when editing this:
+
+- **`mcpServers` and `environmentFiles` on `services.hermes-agent` reach the
+  DEFAULT profile only.** The module writes `mcp_servers` into
+  `$HERMES_HOME/config.yaml` and concatenates `environmentFiles` into
+  `$HERMES_HOME/.env` — not into the unit's process environment. A secondary
+  profile that wants an MCP server needs the server in its own `settings` AND
+  the token file in its own `environmentFiles`. Both halves or neither, or the
+  header expands to an empty string and the call 401s.
+- **SOUL.md goes in `hermesHomeFiles`, not `documents`.** Hermes reads the
+  system prompt and `memories/` from `HERMES_HOME`; `documents` installs into
+  `workingDirectory`, where nothing reads them. v2026.9.21 asserts on
+  `documents` without an explicit `workingDirectory` for exactly this reason.
+
+### The agent pushes `main` directly
+
+`modules/repo-sync.nix` sweeps every checkout under `/home/hermes/code` on a
+timer: fetch → `merge --ff-only` (refuses on divergence) → plain `push` (no
+`--force`, ever). It never commits or rebases and exits 0 on every skippable
+state, so a dirty tree is not a failure. Committing is therefore enough — work
+reaches Forgejo with no human step.
+
+This host has its **own Forgejo account**, `hermes`, with its own SSH key
+(`secrets/hermes-forgejo-ssh.age`, re-minted for the rebuild — it used to hold
+the retired `hermes-bot` account's key). That is different from `development`,
+which pushes with *amadeus's* collaborator key. So `hermes` must be on the push
+whitelist of each protected `main` it should work on — one setting in the
+Forgejo web UI, nothing in this repo.
+
+Two consequences worth stating:
+
+- **Nothing auto-deploys from `main`.** Comin was removed 2026-09-08, so a push
+  reaches Forgejo and stops there; `repo-sync` fast-forwards the human clone and
+  a person still runs `just self-deploy` / `colmena`.
+- **Commits are single-line conventional-commit subjects with no body** (§2),
+  and the `coding` profile's SOUL.md says so.
+
+### It shells out to a harness, it does not hand-edit
+
+`hosts/hermes/configuration.nix` imports the same harness modules
+`development` does — `coding-harness.nix`, `claude-permissions.nix`,
+`claude-settings-verify.nix`, `herdr.nix`, `moshi-hook-user.nix`,
+`forgejo-cli.nix` — so Claude Code and opencode are installed and configured in
+`/home/hermes` with this repo's skills, slash-commands and MCP servers. The
+`coding` profile's SOUL.md directs it to `opencode run "<task>"` / `claude -p`
+rather than using Hermes' own `write_file`/`patch` for anything multi-file.
+
+Those modules read **`config.homelab.codingHarness.{user,home}`**, which
+defaults to `homelab.agent.{user,home}`. On `development` the two coincide
+(`agent`). On `hermes` there is no second account to split off — the whole
+machine is the agent — so `homelab.agent.enable` stays **false** and
+`homelab.codingHarness.user` is pointed at `hermes`. Do not "simplify" this back
+to setting `homelab.agent.user`: that option names the account
+`modules/agent-user.nix` *creates*, and on this host it creates nothing.
+
+Consequences of the nested-harness shape:
+
+- **Guardrails come from the harness, not from Hermes.** Hermes' approval layer
+  sees one `opencode` invocation; everything the nested agent then does is
+  governed by `modules/claude-permissions-data.nix` and the `opencodePermissions`
+  block — plus the unprivileged account, which is the real boundary.
+- **opencode is the unattended path, Claude Code the interactive one.**
+  opencode authenticates from an agenix key on disk; Claude Code needs a
+  one-time interactive `claude login` whose OAuth session is a poor fit for
+  cron. A scheduled job should call `opencode`.
+- **Cost compounds.** Each nested run bills its own provider — a cron job that
+  calls `opencode` is two agents' worth of tokens per tick.
+
+### Validation, from the agent's side
+
+- Format with `nix develop -c just fmt`, then type-check **only the edited
+  hosts** with a scoped eval:
+  `nix eval '.#nixosConfigurations.<host>.config.system.build.toplevel.drvPath'`.
+- Do **not** run `just nixos-check` / `nix flake check` there — they evaluate
+  ~16 hosts and get OOM-killed (exit 137) on the host nix-daemon. The full check
+  is the human's pre-merge gate.
+- Commit **through the dev shell** (`nix develop -c git commit`) so the
+  `alejandra` / `keep-sorted` pre-commit hooks resolve; a bare `git commit`
+  fails them, and `--no-verify` is not the answer.
+
+### Reaching it
+
+ssh/mosh over the tailnet (`ssh hermes@homelab-hermes`), Moshi push from the
+phone, and the OIDC-gated web dashboard at
+`https://hermes-dashboard.homelab.internal`. There is no api_server and no Open
+WebUI backend any more.
+
+**`hermes` is the one host in this repo that does NOT set
+`networking.firewall.trustedInterfaces = ["tailscale0"]`.** That line accepts
+every port from the tailnet, and this is the host running an agent with a shell.
+Only 22, 443 and 9100 are open; the dashboard on 9119 is loopback-only and
+reachable solely through Caddy. Do not add it back.
+
+The dashboard binds `127.0.0.1` **and** is authenticated: since v2026.9.21,
+declaring a non-loopback `dashboard.public_url` engages the auth gate even on a
+loopback bind, and the hostname in that URL is accepted as an exact `Host` /
+WebSocket `Origin` value. Authorization is **not** per profile — anyone who can
+log in reaches every profile, `coding`'s terminal included, which is why the
+Pocket ID client is restricted to a single user.
 
 ## 8. Claude Code Permissions on `development`
 

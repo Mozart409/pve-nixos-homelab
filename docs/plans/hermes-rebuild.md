@@ -1,34 +1,92 @@
 # Hermes Rebuild Plan — Wipe, XFS on ssd_pool, Multi-Profile, Agent Account
 
 Date: 2026-09-23
-Status: plan only. Nothing here is built; the build happens on another machine.
+Status: **implemented in the repo; not yet deployed.** Everything below §1 is
+now written and type-checks (`nix eval .#nixosConfigurations.hermes…drvPath`).
+Nothing has been applied — no `tofu apply`, no `nixos-anywhere`, no `colmena`.
 Companion: `docs/hermes-agent-findings-2026-09-23.md` (upstream state, capability gaps).
 
-## 0. Handoff
+## 0. Handoff — what is done, and what changed against this plan
 
-Everything below is designed and agreed but unbuilt — no `iac/main.tf` edit, no
-`hosts/hermes/configuration.nix` rewrite, no `flake.nix` bump. Two things *are* done and
-deployed: `pocketid.homelab.{internal,local}` → 192.168.2.102 with its PTR in
-`hosts/dns/configuration.nix`, and the Pocket ID OIDC client for the dashboard (public,
-authorization-code + PKCE S256, client id `92fac046-8ab4-4081-bdef-e0795bac8c2c`, single
-allowed user, callback `https://hermes-dashboard.homelab.internal/auth/callback`
-registered).
+**Built (2026-09-23):**
 
-Work the sections in order — §2/§3 (terraform + disko) are independent of §5–§9 (the
-NixOS config) and can be written first. Validate every host change with a scoped
-`nix eval '.#nixosConfigurations.<host>.config.system.build.toplevel.drvPath'`, never
-`nix flake check` (evaluates ~16 hosts, OOM-killed). Do not run `colmena apply` — it is
-blocked in the agent session and belongs to the human at the console; `colmena build` is
-fine, though building hermes compiles Rust from source and is slow.
+- `flake.nix` — `hermes-agent` unpinned to `v2026.9.21`, pin comment replaced
+  with why it existed and why it is gone. `herdr` added to the hermes
+  `nixosSystem`'s `specialArgs` (the harness needs it; the hive already had it).
+- `iac/main.tf` — `hermes_vm` at 4 cores / 8192 pinned / blank 64 GB
+  `ssd_pool` disk / installer ISO on ide0 / `started = on_boot = true`.
+- `modules/disko-xfs.nix` — imported by the host (replacing `disko-config.nix`).
+- `modules/hermes-profiles.nix` — **new.** Renders the secondary profiles and
+  owns `hermes-config-check`, which now loops over every profile's config.yaml.
+- `modules/agent-user.nix` — **new options** `homelab.codingHarness.{user,home}`,
+  defaulting to `homelab.agent.*`. The five harness modules now read those.
+  `development` is unchanged (the defaults resolve to `agent`).
+- `hosts/hermes/configuration.nix` — full rewrite. `hosts/hermes/souls/*.md` —
+  five SOUL files plus a shared `user.md`.
+- `hosts/hermes/moshi-hook.nix` — rewritten as a per-profile plugin
+  registration; pairing and the daemon moved to `modules/moshi-hook-user.nix`.
+- Deleted: the `obsidian-vault-notes`, `homelab-config-repo` and
+  `cron-result-delivery` skills; `secrets/hermes-api-server-key.age`.
+- `secrets/secrets.nix` — `hostHermes` added to `users`, `axon-gateway-env`,
+  `moshi-device-id` and `ventara-gateway-env`; five new per-profile env secrets.
+- Cross-host: `hermes-dashboard` A records (dns), `hermes-node` scrape job
+  (otel), hermes backend removed from Open WebUI, AGENTS.md §7 rewritten.
 
-The decisions already taken, so they are not relitigated: one unix user `hermes` with
-per-profile Hermes homes under `~/.hermes/profiles/` (not one user per profile — that
-was considered and rejected because it breaks the unified dashboard and the multiplexing
-gateway); the agent pushes `main` directly with its own Forgejo identity; no api_server
-and no Open WebUI; Tailscale stays but `trustedInterfaces` goes; holographic memory for
-now, Honcho deferred. The open items that need a running machine to settle are in §14 —
-chiefly whether `user` + `createUser = false` + a `/home` `stateDir` works on
-`v2026.9.21`, and whether moshi hooks fire on unattended cron runs.
+**Deviations from this plan, and why.** Both came out of reading the
+`v2026.9.21` module source rather than the docs, and both are improvements:
+
+1. **`stateDir` is `/home/hermes/agent`, not `/home/hermes`** (§5.1). The
+   upstream module `chmod 2770`s the stateDir unconditionally — the
+   "Directories" block in `nix/nixosModules.nix` is not gated on `createUser` —
+   and a group-writable home makes sshd's `StrictModes` refuse public-key auth
+   for that user, which would break the only interactive way into this host.
+   One subdirectory down costs nothing: `addToSystemPackages` exports
+   `HERMES_HOME` system-wide, so `hermes -p coding chat` still works from any
+   shell. This also **answers §14's open question**: `user` + `createUser = false`
+   works, a `/home` stateDir specifically does not.
+2. **The dashboard binds `127.0.0.1` and is still authenticated** (§9.1, §9.2).
+   The plan assumed a loopback bind skips the auth gate. On `v2026.9.21`,
+   declaring a non-loopback `dashboard.public_url` engages the gate *even on a
+   loopback bind*, and the hostname in that URL is accepted as an exact `Host` /
+   WebSocket `Origin` value (satisfying the DNS-rebinding guard behind Caddy).
+   So Caddy is the only thing that can reach the socket at all, AND every
+   request through it carries a verified Pocket ID session — strictly better
+   than the planned `0.0.0.0` bind. §9.2's firewall stance is unchanged and
+   still right; it is now belt-and-braces rather than the only lock.
+
+**Also resolved from §14:** SOUL.md goes in `hermesHomeFiles`, not `documents`
+(HERMES_HOME, not workingDirectory — upstream now asserts on the latter);
+`gateway.multiplex_profiles` defaults to `true` and is pinned anyway; the
+harness modules got proper options.
+
+**Still blocking, in order:**
+
+1. **The five per-profile secrets are PLACEHOLDERS.** `secrets/hermes-{default,
+   coding,research,kb,infra}-env.age` were created encrypted to the right
+   recipients but contain only a commented template — no machine here had an
+   age identity to seed them from. `cd secrets && agenix -e hermes-<n>-env.age`
+   for each, with that profile's `DEEPSEEK_API_KEY` (and `OPENCODE_ZEN_API_KEY`
+   where the profile shells out to opencode), before the first deploy.
+2. **`secrets/hermes-forgejo-ssh.age` must be re-minted** for the new `hermes`
+   Forgejo account (§5.2) — it currently holds the retired `hermes-bot` key.
+3. **Re-key after the wipe.** nixos-anywhere mints a fresh host key, so
+   `hostHermes` in `secrets/secrets.nix` must be replaced and `just reencrypt`
+   run, or activation dies with "no identity matched any of the recipients".
+4. **The colmena hive entry is still commented out**, deliberately — uncomment
+   it at §13 step 6, after the host exists, so fleet-wide applies keep working
+   until then.
+5. Forgejo web UI: create the `hermes` account, register its key, add it to the
+   push whitelist on each protected `main`.
+
+Do not run `colmena apply` from an agent session; `colmena build` is fine,
+though building hermes compiles Rust from source and is slow.
+
+The decisions already taken, so they are not relitigated: one unix user `hermes`
+with per-profile Hermes homes under `~/.hermes/profiles/` (not one user per
+profile — that was considered and rejected because it breaks the unified
+dashboard and the multiplexing gateway); the agent pushes `main` directly with
+its own Forgejo identity; no api_server and no Open WebUI; Tailscale stays but
+`trustedInterfaces` goes; holographic memory for now, Honcho deferred.
 
 ## 1. What Changes
 
@@ -408,12 +466,24 @@ the config comments:
 
 ### 7.1 The profiles
 
-| Profile | Purpose | Model | Toolsets | Harness |
-| --- | --- | --- | --- | --- |
-| `default` | host multiplexer + dashboard owner, catch-all | `deepseek-v4-flash` | file, memory, skills, session_search, cronjob | — |
-| `coding` | drives opencode/claude in `~/code` | `deepseek-v4-pro` | + terminal, code_execution, delegation | yes |
-| `research` | reading, synthesis | `deepseek-v4-pro` | + web (search **and** extract, findings §4.1) | — |
-| `kb` | notes / knowledge capture | `deepseek-v4-flash` | file, memory, skills, session_search | — |
+As built — five, not the four originally planned:
+
+| Profile | Purpose | Model | Toolsets | MCP | Harness |
+| --- | --- | --- | --- | --- | --- |
+| `default` | host multiplexer + dashboard owner, catch-all | `deepseek-v4-flash` | file, memory, skills, session_search, cronjob | axon-gateway, agentmail | — |
+| `coding` | drives opencode/claude in `~/code` | `deepseek-v4-pro` | + terminal, code_execution, delegation | — | yes |
+| `research` | reading, synthesis | `deepseek-v4-pro` | + web (search **and** extract, findings §4.1) | — | — |
+| `kb` | notes / knowledge capture | `deepseek-v4-flash` | file, memory, skills, session_search | — | — |
+| `infra` | homelab observability | `deepseek-v4-pro` | + cronjob (no shell, deliberately) | axon-gateway | — |
+
+The MCP column is not decoration. `services.hermes-agent.mcpServers` writes into
+the DEFAULT profile's config.yaml only, and `environmentFiles` are concatenated
+into the DEFAULT profile's `.env` rather than the unit's process environment —
+so a secondary profile needs the server in its own `settings` AND the token file
+in its own `environmentFiles`, or the header expands empty and the call 401s.
+Withholding MCP from `coding`/`research`/`kb` is also a token decision: an MCP
+server's whole tool surface costs schema tokens on every LLM call, and `coding`
+reaches those backends through the nested harness's own MCP config anyway.
 
 `default` exists because the multiplexer and the machine dashboard are both owned by the
 default profile (§7.4, §9.1); giving it a cheap model and a thin toolset keeps that
@@ -996,25 +1066,51 @@ receives `tailscale-auth-key.age`.
 
 ## 14. Open Questions
 
-- **Do moshi hooks fire on unattended cron runs?** (§8.1) Decides whether cron needs a
-  `deliver` target at all.
-- **Claude Code credentials for unattended use** (§6.2). opencode has an agenix key;
-  Claude Code appears to need an interactive login, which does not suit cron.
-- **Does `user` + `createUser = false` + a `/home` `stateDir` work on `v2026.9.21`?**
-  (§5.1) Read from the module source, not exercised.
-- **Should Pocket ID serve a step-ca cert for its new LAN name?** (§9.3) The records
-  exist now; the certificate does not, so the LAN path is DNS-only until someone
-  configures it on that LXC. Not needed for this rebuild.
-- **Do the harness modules get proper options?** (§6) They read `homelab.agent.*`, which
-  no longer describes this host; `enable = false` + a repointed `user` works but is a
-  lie in the option name.
-- **`hermesHomeFiles` vs `documents`** for SOUL.md on the new version (findings §3.2) —
-  affects §7.3's activation script and the `ReadOnlyPaths` list. Check before writing
-  the module.
-- **Which profiles get which provider/model**, and therefore how many per-profile
-  secrets to create (§11). The table in §7.2 is a starting proposal.
-- **Is a `default` profile worth it**, or should `coding` own the multiplexer and the
-  dashboard? A thin default keeps their overhead off a working profile, at the cost of a
-  fourth home.
-- **Does one Moshi token pair three hosts?** Unverified, and this rebuild makes hermes
-  the host where it matters most (§7.5).
+**Resolved during implementation** (kept for the record, since each was a real
+fork in the road):
+
+- ~~Does `user` + `createUser = false` + a `/home` `stateDir` work on
+  `v2026.9.21`?~~ The first two yes, the third no — the module `chmod 2770`s
+  the stateDir unconditionally and that breaks sshd `StrictModes`. stateDir is
+  `/home/hermes/agent`. See §0.
+- ~~`hermesHomeFiles` vs `documents` for SOUL.md~~ — `hermesHomeFiles`. Hermes
+  reads the prompt and `memories/` from HERMES_HOME only, and `v2026.9.21`
+  asserts on `documents` without an explicit `workingDirectory`.
+- ~~Do the harness modules get proper options?~~ Yes:
+  `homelab.codingHarness.{user,home}`, defaulting to `homelab.agent.*`.
+- ~~Is a `default` profile worth it?~~ Kept, and a fifth (`infra`) added.
+  `default` is flash-tier and thin, so the multiplexer and dashboard overhead
+  stays off a working profile.
+
+**Still open — these need a running machine:**
+
+- **Do moshi hooks fire on unattended cron runs?** (§8.1) Decides whether
+  `cron.deliver = "homeassistant"` (currently set on every profile that has
+  cron) is load-bearing or merely redundant. Verify with a throwaway
+  one-minute job.
+- **Claude Code credentials for unattended use** (§6.2). opencode has an agenix
+  key and is therefore the cron path; Claude Code needs an interactive
+  `claude login`. Until there is a key-based answer, a scheduled job must call
+  `opencode`, and the `coding` profile's SOUL.md says so.
+- **Does one Moshi token pair three hosts?** (development, zeroclaw, hermes)
+  Unverified, and this rebuild makes hermes the host where it matters most.
+- **Does `moshi-hook install` resolve the Hermes home from `$HERMES_HOME` or
+  `$HOME/.hermes`?** `hosts/hermes/moshi-hook.nix` sets both to the same
+  directory per profile so either resolution is correct, but which one it
+  actually uses is untested — check that each profile's `config.yaml` gained
+  its `moshi-hooks` entry (and that `hermes-config-check` repaired the
+  indentation) after the first boot.
+- **Is the `infra` profile's read-only posture right?** It was given the
+  axon-gateway MCP surface and deliberately NO `terminal` / `code_execution`,
+  on the reasoning that everything it needs arrives through MCP and a shell
+  would only widen the blast radius of a bad tool result. Widen it if that
+  proves wrong in practice.
+- **Should Pocket ID serve a step-ca cert for its new LAN name?** (§9.3) The
+  records exist; the certificate does not, so the LAN path is DNS-only. Not
+  needed for this rebuild — the issuer stays the ts.net name.
+- **Does the `firecrawl` keyless tier hold up for `web_extract`?** (§4.1 of the
+  findings doc) If it throttles, add a `FIRECRAWL_API_KEY` or `EXA_API_KEY` to
+  `hermes-research-env.age`.
+- **Cross-profile memory.** Not solved by this rebuild, deliberately (§10).
+  Holographic is per profile. Honcho self-hosted is the only provider with
+  native cross-profile sharing and is a separate plan.
