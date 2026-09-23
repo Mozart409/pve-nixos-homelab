@@ -25,10 +25,17 @@ let
   # and only those. A decommissioned VM's host key lives on in its PBS
   # backups and old disk images, so leaving it here keeps every fleet-wide
   # secret decryptable by an artefact nobody is watching. Decommissioned but
-  # kept in the tree (hosts/{hermes,fleet,harbor,cache}) keep their own
-  # per-host secrets below; reviving one is: add its key back here (and to
-  # the shared secrets it needs, e.g. axon-gateway-env), `just reencrypt`.
-  users = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostCa hostForgejo hostJellyfin hostZeroclaw hostDevelopment hostWoodpecker];
+  # kept in the tree (hosts/{fleet,harbor,cache}) keep their own per-host
+  # secrets below; reviving one is: add its key back here (and to the shared
+  # secrets it needs, e.g. axon-gateway-env), `just reencrypt`.
+  #
+  # hostHermes is back as of the 2026-09 rebuild (docs/plans/hermes-rebuild.md).
+  # NOTE: the rebuild wipes the VM, and nixos-anywhere mints a FRESH ssh host
+  # key -- so hostHermes above must be replaced with the new one and every
+  # hermes secret re-keyed (`just get-host-key 192.168.2.155`, then
+  # `just reencrypt`) before the first colmena apply, or activation fails with
+  # "no identity matched any of the recipients".
+  users = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostCa hostForgejo hostJellyfin hostZeroclaw hostDevelopment hostWoodpecker hostHermes];
   # keep-sorted end
 in {
   # keep-sorted start
@@ -39,7 +46,7 @@ in {
   "attic-db-url.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostCache]; # env-file: ATTIC_SERVER_DATABASE_URL=postgresql://...
   "attic-server-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostCache];
   # hostMcp replaced hostContainers on 2026-09-14 when the gateway moved hosts. Run `just reencrypt` after a recipient change.
-  "axon-gateway-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostMcp hostDevelopment hostOtel hostZeroclaw];
+  "axon-gateway-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostMcp hostDevelopment hostOtel hostZeroclaw hostHermes];
   "dashboard-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostContainers];
   "development-forgejo-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDevelopment];
   "development-opencode-zen-key.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDevelopment];
@@ -58,15 +65,29 @@ in {
   "harbor-oidc-client-id.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHarbor];
   "harbor-oidc-client-secret.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHarbor];
   "hermes-agentmail-key.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes];
-  "hermes-api-server-key.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes];
+  # Per-profile provider credentials. A named Hermes profile resolves its
+  # providers only from its OWN .env, so each profile home gets its own file
+  # (env-file format: DEEPSEEK_API_KEY=..., optionally OPENCODE_ZEN_API_KEY=...).
+  # hosts/hermes/configuration.nix names them; modules/hermes-profiles.nix
+  # concatenates each into profiles/<name>/.env at 0600. This separates what
+  # each profile USES, not what it could read -- one uid owns all five.
+  "hermes-coding-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes];
+  # Superseded by hermes-default-env.age (the default profile's own .env).
+  # Kept as a recipient entry only while the file still exists in the tree.
   "hermes-deepseek-key.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes];
+  "hermes-default-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes];
+  # Re-minted for the 2026-09 rebuild: this now holds the `hermes` Forgejo
+  # ACCOUNT's own key, not the retired `hermes-bot` account's.
   "hermes-forgejo-ssh.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes];
+  "hermes-infra-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes];
+  "hermes-kb-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes];
   "hermes-opencode-zen-key.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes];
+  "hermes-research-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostHermes];
   "hofvarpnir-db-password.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDatabase hostJellyfin];
   "hofvarpnir-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostJellyfin];
   "homeassistant-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostMcp];
   "k3s-server-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook]; # add hostK3sCntrl1 + `just reencrypt` once k3s-cntrl-1 is installed and its real host key is known
-  "moshi-device-id.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDevelopment hostZeroclaw]; # plain auth token
+  "moshi-device-id.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDevelopment hostZeroclaw hostHermes]; # plain auth token
   "open-webui-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostContainers];
   "otel-push-token.age".publicKeys = users; # bare token; every host's fluent-bit pushes to loki with it (write-only side)
   "otel-query-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostOtel hostMcp]; # bare token; read side of the otel vhosts (prom/loki/tempo/alertmanager MCP servers)
@@ -86,7 +107,7 @@ in {
   "tailscale-auth-key.age".publicKeys = users;
   "terraform-state-db-password.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDatabase];
   "uptime-forge-db-password.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostContainers];
-  "ventara-gateway-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDevelopment];
+  "ventara-gateway-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDevelopment hostHermes];
   "woodpecker-agent-env.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostWoodpecker]; # WOODPECKER_AGENT_SECRET only; must match the server's byte-for-byte
   "woodpecker-mcp-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostMcp]; # WP_TOKEN for wpmcp-server; a Woodpecker personal access token
   "woodpecker-metrics-token.age".publicKeys = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostOtel]; # bare bearer token for prometheus; same value as WOODPECKER_PROMETHEUS_AUTH_TOKEN in woodpecker-server-env.age
