@@ -25,20 +25,18 @@
       url = "git+https://forgejo.homelab.local/amadeus/homelab-mcp-servers.git";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    # PINNED — do not float this input back to the branch head without testing.
-    # hermes-agent 0.20.1 (rev d0021673, pulled in by `chore(deps): upgrade
-    # flake`) ships a `hermes_cli/plugins.py` that imports a module missing from
-    # the built env, so the gateway crash-loops on startup:
-    #   File ".../hermes_cli/plugins.py", line 62, in <module>
-    #       from registration_lifecycle import replacement_coordinator
-    #   ModuleNotFoundError: No module named 'registration_lifecycle'
-    # It dies in `_install_plugin_message_injector`, i.e. the plugin-manager
-    # path, so `plugins.enabled = ["moshi-hooks"]` is enough to trip it. Nothing
-    # about the moshi/config.yaml layer is at fault — hermes-config-check passes
-    # and `model` resolves. 98105f31 is the last rev that starts. Unpin once
-    # upstream ships the missing module.
+    # Tagged release, not a branch head. Upstream tags by date (vYYYY.M.D) with
+    # a parallel semver in the release title; v2026.9.21 is 0.21.4.
+    #
+    # This input WAS pinned to rev 98105f31 (2026-07-31) because 0.20.1 shipped a
+    # `hermes_cli/plugins.py` importing `registration_lifecycle`, a module missing
+    # from the sealed uv2nix venv, so the gateway crash-looped on any host with
+    # `plugins.enabled` set. That was a packaging bug (the module was never listed
+    # in pyproject.toml's py-modules), fixed upstream in 89d3e43 and now guarded by
+    # a build-time check that imports it in the sealed venv (PR #85160). See
+    # docs/hermes-agent-findings-2026-09-23.md §2.
     hermes-agent = {
-      url = "github:NousResearch/hermes-agent/98105f31f46d3de58a8f69a2a439cee3f7a5e389";
+      url = "github:NousResearch/hermes-agent/v2026.9.21";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     homelab-dashboard = {
@@ -369,6 +367,13 @@
         #   ];
         # };
         hermes = nixpkgs.lib.nixosSystem {
+          # Explicit (not mkHost) so `herdr` can be passed via specialArgs --
+          # modules/herdr.nix reads it as a module argument, and this host
+          # imports the same coding harness `development` does. The colmenaHive
+          # below already supplies it fleet-wide via meta.specialArgs; a plain
+          # nixosSystem has to be told separately or eval fails with
+          # "attribute 'herdr' missing".
+          specialArgs = {inherit herdr;};
           modules = [
             {
               nixpkgs.hostPlatform = system;
