@@ -1,8 +1,34 @@
 # Hermes Rebuild Plan — Wipe, XFS on ssd_pool, Multi-Profile, Agent Account
 
-Date: 2026-09-23 (rev. 2026-09-23: cron, agent account, coding harness)
-Status: plan only, nothing implemented.
+Date: 2026-09-23
+Status: plan only. Nothing here is built; the build happens on another machine.
 Companion: `docs/hermes-agent-findings-2026-09-23.md` (upstream state, capability gaps).
+
+## 0. Handoff
+
+Everything below is designed and agreed but unbuilt — no `iac/main.tf` edit, no
+`hosts/hermes/configuration.nix` rewrite, no `flake.nix` bump. Two things *are* done and
+deployed: `pocketid.homelab.{internal,local}` → 192.168.2.102 with its PTR in
+`hosts/dns/configuration.nix`, and the Pocket ID OIDC client for the dashboard (public,
+authorization-code + PKCE S256, client id `92fac046-8ab4-4081-bdef-e0795bac8c2c`, single
+allowed user, callback `https://hermes-dashboard.homelab.internal/auth/callback`
+registered).
+
+Work the sections in order — §2/§3 (terraform + disko) are independent of §5–§9 (the
+NixOS config) and can be written first. Validate every host change with a scoped
+`nix eval '.#nixosConfigurations.<host>.config.system.build.toplevel.drvPath'`, never
+`nix flake check` (evaluates ~16 hosts, OOM-killed). Do not run `colmena apply` — it is
+blocked in the agent session and belongs to the human at the console; `colmena build` is
+fine, though building hermes compiles Rust from source and is slow.
+
+The decisions already taken, so they are not relitigated: one unix user `hermes` with
+per-profile Hermes homes under `~/.hermes/profiles/` (not one user per profile — that
+was considered and rejected because it breaks the unified dashboard and the multiplexing
+gateway); the agent pushes `main` directly with its own Forgejo identity; no api_server
+and no Open WebUI; Tailscale stays but `trustedInterfaces` goes; holographic memory for
+now, Honcho deferred. The open items that need a running machine to settle are in §14 —
+chiefly whether `user` + `createUser = false` + a `/home` `stateDir` works on
+`v2026.9.21`, and whether moshi hooks fire on unattended cron runs.
 
 ## 1. What Changes
 
@@ -916,10 +942,20 @@ receives `tailscale-auth-key.age`.
    `hermes_vm` resource is still in `iac/main.tf` with `started = false`. If the guest
    is already gone in Proxmox this is a create, not a replace, and the plan output
    will say so.
-3. Boot the VM from the ISO; note its DHCP address.
-4. `just deploy hermes <ip> --phases disko,install,reboot` — skips kexec because the
-   ISO is already an installer. This is the destructive step; the old 256 GB zvol is
-   gone at this point.
+   **This is where the old disk dies** — the 256 GB zvol on `zfs_pool` is destroyed by
+   the disk replacement at `tofu apply`, not by the later nixos-anywhere run. Expect the
+   provider to stop the guest to do it. Nothing on that disk is preserved, which is the
+   intent; if anything on the old host is still wanted, take it before this step.
+3. The VM starts itself: `started = true` in the target block, with
+   `boot_order = ["scsi0", "ide0"]` and a blank disk, so it falls through to the ISO and
+   comes up in the NixOS installer. Note its DHCP address from the Proxmox console.
+   (After the install there is nothing to detach — the disk is first in `boot_order`, so
+   the next boot goes to the installed system with the ISO still attached, exactly as
+   dns and ca do it.)
+4. `just deploy hermes <ip> --phases disko,install,reboot` — skips kexec because the ISO
+   is already an installer. `modules/disko-xfs.nix` (§3) partitions the fresh
+   `ssd_pool` disk here: 1 M BIOS boot, 1 G ext4 `/boot`, 4 G swap, XFS root pinned to
+   `/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_drive-scsi0`.
 5. Re-key secrets (§11). Nothing agenix-backed works before this.
 6. Uncomment the hive entry (§12) and `just cah hermes`.
 7. Post-install manual steps that cannot be declarative:
