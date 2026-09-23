@@ -742,9 +742,10 @@ Two more layers behind it:
   outside this repo. Treat them as a bonus, never as the control: the host firewall must
   stand on its own, which is what the config above does.
 
-### 9.3 Can Tailscale come off this node?
+### 9.3 Tailscale stays on this node
 
-Reachability says yes; dependencies say no, not yet.
+Reachability alone would allow removing it; the dependencies do not, and the tailnet
+address is load-bearing elsewhere.
 
 **Inbound is already covered without it.** `hosts/dns/configuration.nix` advertises
 `--advertise-routes=192.168.2.0/24` from the dns host, and the `homelab.internal` zone
@@ -755,24 +756,31 @@ tailnet. Deploys do not need it either: hermes' colmena entry targets
 `hermes.homelab.local` and has no `hostAddrs` entry, so `DEPLOY_NET=tailscale` never
 switched it over.
 
-**Two outbound dependencies are tailnet-only, and one of them is the dashboard's auth.**
+**Outbound is what keeps it.**
 
-- **Pocket ID is `pocketid.dropbear-butterfly.ts.net` and has no `homelab.internal`
-  record** — it is not defined anywhere in this repo, so it is an external service
-  reachable only over the tailnet. The dashboard's OIDC needs *server-side* reach to
-  that issuer (discovery, JWKS), and on a non-loopback bind it "refuses to start until
-  an auth provider is configured". Dropping Tailscale therefore breaks §9.1 outright.
+- **Pocket ID now has a LAN record — but the tailnet name remains the issuer.** It is an
+  LXC on pve-gigabyte at 192.168.2.102, not a NixOS guest in this repo;
+  `pocketid.homelab.{internal,local}` A records and a PTR were added to
+  `hosts/dns/configuration.nix` alongside this plan. That gives a LAN path that does not
+  depend on MagicDNS. It does **not** make the tailnet name removable: every consumer
+  (forgejo, harbor, pgadmin, open-webui, romm, grafana) is configured with
+  `https://pocketid.dropbear-butterfly.ts.net` as its issuer, and the issuer URL is part
+  of token identity — changing it is a fleet-wide migration, not a hermes decision. The
+  new records are an addition, not a replacement.
+- **A LAN name also needs a LAN certificate.** Pocket ID presumably serves a Tailscale
+  cert for the ts.net name; hitting `https://pocketid.homelab.internal` would fail
+  verification until it also carries a step-ca cert for that name. Since the LXC is not
+  managed here, that is manual work on the container — worth doing if the LAN path is
+  ever to be used in anger, and not needed for this rebuild.
 - **`ventara-gateway`**, registered by `modules/coding-harness.nix`, is
-  `https://ventara-vm01.dropbear-butterfly.ts.net:8093/mcp`. Without the tailnet that
-  MCP server simply fails to connect. (`axon-gateway` is fine — it is
-  `axon.homelab.local`.)
+  `https://ventara-vm01.dropbear-butterfly.ts.net:8093/mcp`. Tailnet-only with no LAN
+  equivalent. (`axon-gateway` is fine — `axon.homelab.local`.)
 
-So: **keep Tailscale, drop the blanket trust.** That gets the security property you
-actually asked for — no port is open merely because it arrived on `tailscale0` — without
-breaking OIDC. Removing Tailscale entirely becomes possible if Pocket ID gets a
-`pocketid.homelab.internal` record with a matching certificate, but note the issuer URL
-is part of token identity, so changing it affects every other consumer (forgejo, harbor,
-open-webui, romm, pgadmin, grafana) — not a hermes-local decision.
+So: **keep Tailscale, drop the blanket trust.** That is the security property that
+actually matters here — no port is open merely because it arrived on `tailscale0` —
+and it costs nothing, since the tailnet is still how hermes reaches its OIDC issuer and
+its second MCP gateway. The dashboard keeps
+`issuer: https://pocketid.dropbear-butterfly.ts.net` (§9.1).
 
 ## 10. Memory — Requirement vs. What We Ship Now
 
@@ -868,10 +876,10 @@ receives `tailscale-auth-key.age`.
   and the key slot from the commented `open-webui-env` layout, leaving the wotan vLLM
   endpoint. Dropping the api_server without this leaves Open WebUI with a dead backend.
 - **`hosts/dns/configuration.nix`** — keep the `hermes.homelab.{local,internal}` A
-  records at 192.168.2.155 (still wanted for ssh/mosh) and the hosts-file entry, and
-  **add `hermes-dashboard.homelab.internal`** at the same address (§9.1). There is no
-  `pocketid.*` record in this zone; adding one is the prerequisite for ever taking
-  Tailscale off this node (§9.3), and it is a fleet-wide change, not a hermes one.
+  records at 192.168.2.155 (still wanted for ssh/mosh) and the PTR entry, and **add
+  `hermes-dashboard.homelab.{internal,local}`** at the same address (§9.1).
+  `pocketid.homelab.{internal,local}` → 192.168.2.102 and its PTR are **done** — landed
+  with this plan; see §9.3 for why that does not change the issuer.
 - **`hosts/otel/*`** — the hermes blackbox probes were already removed on 2026-09-10;
   the `hermes-node` scrape job can come back once the host is up, since node exporter
   on 9100 stays.
@@ -949,9 +957,9 @@ receives `tailscale-auth-key.age`.
 - **Does Pocket ID issue public PKCE clients?** (§9.1) Every existing homelab client
   (forgejo, harbor, pgadmin) uses a client *secret*; the dashboard wants a secret-less
   PKCE client. Confirm in Pocket ID before assuming no agenix entry is needed.
-- **Is a `pocketid.homelab.internal` record worth adding?** (§9.3) It is what would let
-  hermes — and eventually other nodes — stop depending on the tailnet for auth. Fleet-wide
-  change: the issuer URL is part of token identity.
+- **Should Pocket ID serve a step-ca cert for its new LAN name?** (§9.3) The records
+  exist now; the certificate does not, so the LAN path is DNS-only until someone
+  configures it on that LXC. Not needed for this rebuild.
 - **Do the harness modules get proper options?** (§6) They read `homelab.agent.*`, which
   no longer describes this host; `enable = false` + a repointed `user` works but is a
   lie in the option name.

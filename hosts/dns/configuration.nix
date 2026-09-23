@@ -157,6 +157,15 @@
           ''"otel.homelab.local. A 192.168.2.135"''
           ''"pgadmin.homelab.internal. A 192.168.2.134"''
           ''"pgadmin.homelab.local. A 192.168.2.134"''
+          # Pocket-ID (OIDC provider for forgejo, harbor, pgadmin, open-webui,
+          # romm, grafana). An LXC on pve-gigabyte, not a NixOS guest in this
+          # repo. The tailnet name pocketid.dropbear-butterfly.ts.net stays the
+          # issuer every consumer is configured with -- the issuer URL is part
+          # of token identity, so these records ADD a LAN path, they do not
+          # replace it. A client that switches to the .internal name also needs
+          # Pocket-ID to serve a certificate valid for it.
+          ''"pocketid.homelab.internal. A 192.168.2.102"''
+          ''"pocketid.homelab.local. A 192.168.2.102"''
           ''"prometheus.homelab.internal. A 192.168.2.135"''
           ''"prometheus.homelab.local. A 192.168.2.135"''
           ''"pve-gigabyte.homelab.internal. A 192.168.2.46"''
@@ -182,6 +191,7 @@
         ];
         local-data-ptr = [
           # keep-sorted start
+          ''"192.168.2.102 pocketid.homelab.local"''
           ''"192.168.2.134 database.homelab.local"''
           ''"192.168.2.134 pgadmin.homelab.local"''
           ''"192.168.2.135 alertmanager.homelab.local"''
