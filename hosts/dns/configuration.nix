@@ -140,6 +140,8 @@
           ''"forgejo.homelab.local. A 192.168.2.178"''
           ''"harbor.homelab.internal. A 192.168.2.174"''
           ''"harbor.homelab.local. A 192.168.2.174"''
+          ''"hermes-dashboard.homelab.internal. A 192.168.2.155"''
+          ''"hermes-dashboard.homelab.local. A 192.168.2.155"''
           ''"hermes.homelab.internal. A 192.168.2.155"''
           ''"hermes.homelab.local. A 192.168.2.155"''
           ''"hofvarpnir.homelab.internal. A 192.168.2.180"''
