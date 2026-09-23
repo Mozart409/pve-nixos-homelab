@@ -785,7 +785,6 @@
                   mkdir -p $out/opt/kics-queries
                   cp -r ${kicsQueries}/assets/queries/. $out/opt/kics-queries/
                 '')
-                (pkgs.callPackage ./pkgs/opencode-v2.nix {})
               ];
               # Link /bin so every tool lands on PATH, /etc so cacert's bundle
               # lands at /etc/ssl/certs (tofu/kics hit public registries), and
@@ -825,30 +824,22 @@
         buildInputs = with pkgs;
           [
             # keep-sorted start
-
-            # IaC
-
-            (pkgs.callPackage ./pkgs/opencode-v2.nix {})
             agenixPkg
             alejandra
             bacon
-            # rust
             cargo
             cargo-workspaces
             claude-code
             cocogitto
             colmenaPkg
             dive
-            # fmt
             dprint
             just
             keep-sorted
-            # check for security issues
             kics
             lazydocker
             lefthook
             nixosAnywherePkg
-            #ai
             opencode
             opentofu
             podman-compose
@@ -857,10 +848,8 @@
             rainfrog
             rust-analyzer
             rustc
-            # k8s
             timoni
             tofu-ls
-
             # keep-sorted end
           ]
           # Linux-only in nixpkgs (no darwin client package anymore)
