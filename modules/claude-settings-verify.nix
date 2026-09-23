@@ -4,7 +4,7 @@
   config,
   ...
 }: let
-  inherit (config.homelab.agent) user home;
+  inherit (config.homelab.codingHarness) user home;
 
   # Same list modules/claude-permissions.nix applies, so "what must be present"
   # and "what gets written" cannot drift apart. Previously this module carried

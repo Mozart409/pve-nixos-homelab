@@ -4,9 +4,11 @@
   pkgs,
   ...
 }: let
-  # The agent account (modules/agent-user.nix). Defaults to `agent`; a host
-  # that still runs its harness as amadeus sets homelab.agent.user there.
-  inherit (config.homelab.agent) user home;
+  # Whose ~/.claude and ~/.config/opencode this renders into
+  # (modules/agent-user.nix declares the option). Defaults to
+  # homelab.agent.user, i.e. `agent` on development; hermes points it at the
+  # `hermes` login, which is that host's only account.
+  inherit (config.homelab.codingHarness) user home;
 
   # Central, single-source-of-truth MCP server list shared by every "coding
   # harness" (Claude Code, opencode) on hosts that import this module. Add an

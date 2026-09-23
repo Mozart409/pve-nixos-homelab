@@ -3,7 +3,7 @@
   pkgs,
   ...
 }: let
-  inherit (config.homelab.agent) user home;
+  inherit (config.homelab.codingHarness) user home;
 
   perms = import ./claude-permissions-data.nix {inherit home;};
 

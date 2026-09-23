@@ -5,7 +5,7 @@
   herdr,
   ...
 }: let
-  inherit (config.homelab.agent) user home;
+  inherit (config.homelab.codingHarness) user home;
 
   herdrPkg = herdr.packages.${pkgs.stdenv.hostPlatform.system}.herdr;
 

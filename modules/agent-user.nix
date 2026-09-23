@@ -30,12 +30,38 @@ in {
     user = lib.mkOption {
       type = lib.types.str;
       default = "agent";
-      description = "Login the coding-agent harness modules configure.";
+      description = "Login this module creates for the unattended coding agents.";
     };
     home = lib.mkOption {
       type = lib.types.str;
       default = "/home/${cfg.user}";
       description = "Home directory of that login.";
+    };
+  };
+
+  # The account the HARNESS modules configure, which is not always the account
+  # this module creates. On `development` the two coincide: homelab.agent.enable
+  # is on, and the harness follows the `agent` account by default.
+  #
+  # On `hermes` the whole machine is the agent: there is no separate account to
+  # split off, the login IS `hermes`, and homelab.agent is never enabled. The
+  # harness modules still have to know whose ~/.claude and ~/.config/opencode to
+  # render, so they read THIS option instead of homelab.agent.*. Pointing
+  # homelab.agent.user at `hermes` with enable = false would work, but the name
+  # would then describe an account that module does not create -- see
+  # docs/plans/hermes-rebuild.md §6.
+  options.homelab.codingHarness = {
+    user = lib.mkOption {
+      type = lib.types.str;
+      default = config.homelab.agent.user;
+      defaultText = lib.literalExpression "config.homelab.agent.user";
+      description = "Login the Claude Code / opencode harness modules configure.";
+    };
+    home = lib.mkOption {
+      type = lib.types.str;
+      default = "/home/${config.homelab.codingHarness.user}";
+      defaultText = lib.literalExpression ''"/home/''${config.homelab.codingHarness.user}"'';
+      description = "Home directory the harness renders its config into.";
     };
   };
 

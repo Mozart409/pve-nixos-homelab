@@ -4,7 +4,7 @@
   pkgs,
   ...
 }: let
-  inherit (config.homelab.agent) user;
+  inherit (config.homelab.codingHarness) user;
 
   # Both logins that drive coding agents on this host: the unattended `agent`
   # service account and the interactive human. Each gets its OWN daemon,
