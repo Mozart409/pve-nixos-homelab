@@ -600,9 +600,10 @@ path is chosen must make it obvious *which* profile a push came from.
 
 ## 9. Access Path
 
-1. **mosh/ssh over Tailscale.** `modules/common.nix` already enables `programs.mosh` and
-   opens udp 60000–61000, and `trustedInterfaces = ["tailscale0"]` covers the tailnet
-   side. Firewall: `allowedTCPPorts = [22 443 9100]` — 443 is the dashboard vhost.
+1. **mosh/ssh, over the tailnet or the LAN.** `modules/common.nix` enables
+   `programs.mosh` and opens udp 60000–61000. The firewall is explicit per port and
+   **`trustedInterfaces` is gone** — see §9.2, which is what keeps the dashboard's only
+   door the authenticated one.
 2. **`ssh hermes@homelab-hermes`**, then `hermes -p <profile> chat` or the per-profile
    `~/.local/bin/<name>` wrapper. One account, four agents.
 3. **moshi-hook** for push out of agent sessions (§7.5) and, ideally, cron runs (§8.1).
@@ -688,14 +689,90 @@ Three details that bite:
 
 - **`127.0.0.1`, never `localhost`.** `/etc/resolv.conf` on these hosts lists a dead
   `nameserver ::1`, and every `reverse_proxy localhost:…` vhost hung on that timeout.
-- **A non-loopback bind is reachable outside Caddy.** With `trustedInterfaces =
-  ["tailscale0"]`, port 9119 answers directly over the tailnet, bypassing the vhost
-  (though *not* the OIDC gate, which is bound to the listener, not the proxy). Add an
-  explicit firewall rule for 9119 if that second door is unwanted — but do not remove
-  `tailscale0` from the trusted list, which is what makes mosh work.
+- **A non-loopback bind is reachable outside Caddy — unless the firewall says
+  otherwise.** This is exactly why §9.2 drops `trustedInterfaces`: 9119 must never
+  appear in any allow list, on any interface. The OIDC gate still stands in front of it
+  (it is bound to the listener, not to the proxy), but the firewall is what makes the
+  vhost the *only* path, so a future config slip in one layer is not a bypass on its
+  own.
 - **DNS and certs.** Add `hermes-dashboard.homelab.internal` (and `.local`) to
   `hosts/dns/configuration.nix` at 192.168.2.155, alongside the existing `hermes.*`
   records, and keep `modules/step-ca-trust.nix` imported.
+
+### 9.2 Firewall — no bypass path
+
+**The current `trustedInterfaces = ["tailscale0"]` is the bypass.** It accepts *every*
+port from the tailnet, so the moment the dashboard binds `0.0.0.0:9119` (§9.1), anyone
+on the tailnet reaches it directly — past Caddy, past the vhost, past TLS. The OIDC gate
+would still challenge them, but a single door with two locks beats two doors with one
+each. Every other host in this repo sets that line; hermes is the one that should not,
+because it is the one running an agent with a shell.
+
+```nix
+networking.firewall = {
+  enable = true;
+  # NO trustedInterfaces. Nothing is open by virtue of which interface it arrived on.
+  allowedTCPPorts = [
+    22    # ssh / mosh handshake
+    443   # Caddy: the dashboard vhost, and nothing else
+    9100  # node exporter (otel scrapes from 192.168.2.135)
+  ];
+  allowedUDPPortRanges = [
+    { from = 60000; to = 61000; }   # mosh
+  ];
+  # tailscaled's own inbound port: without it, direct connections fail and every
+  # session is relayed through DERP. Not a hole — it is wireguard.
+  allowedUDPPorts = [config.services.tailscale.port];
+};
+```
+
+Deliberately absent, and the reason each is absent:
+
+| Port | Why it is not listed |
+| --- | --- |
+| 9119 | the dashboard. Reachable **only** from `127.0.0.1`, i.e. only through Caddy. This is the whole point. |
+| 8642 | the api_server. Gone entirely (§1) — no key, no vhost, no listener. |
+| anything else | there is nothing else; the agent makes outbound connections, it does not serve. |
+
+Two more layers behind it:
+
+- `networking.firewall.checkReversePath = "loose"` comes from `modules/tailscale.nix`
+  and must stay — tailscale needs it.
+- Tailscale ACLs gate ports *before* the host firewall ever sees them, and they live
+  outside this repo. Treat them as a bonus, never as the control: the host firewall must
+  stand on its own, which is what the config above does.
+
+### 9.3 Can Tailscale come off this node?
+
+Reachability says yes; dependencies say no, not yet.
+
+**Inbound is already covered without it.** `hosts/dns/configuration.nix` advertises
+`--advertise-routes=192.168.2.0/24` from the dns host, and the `homelab.internal` zone
+carries an A record per host at its LAN address — including
+`hermes.homelab.internal. A 192.168.2.155`. That is the split-DNS path the phone already
+uses, and it works through the subnet router whether or not hermes itself is on the
+tailnet. Deploys do not need it either: hermes' colmena entry targets
+`hermes.homelab.local` and has no `hostAddrs` entry, so `DEPLOY_NET=tailscale` never
+switched it over.
+
+**Two outbound dependencies are tailnet-only, and one of them is the dashboard's auth.**
+
+- **Pocket ID is `pocketid.dropbear-butterfly.ts.net` and has no `homelab.internal`
+  record** — it is not defined anywhere in this repo, so it is an external service
+  reachable only over the tailnet. The dashboard's OIDC needs *server-side* reach to
+  that issuer (discovery, JWKS), and on a non-loopback bind it "refuses to start until
+  an auth provider is configured". Dropping Tailscale therefore breaks §9.1 outright.
+- **`ventara-gateway`**, registered by `modules/coding-harness.nix`, is
+  `https://ventara-vm01.dropbear-butterfly.ts.net:8093/mcp`. Without the tailnet that
+  MCP server simply fails to connect. (`axon-gateway` is fine — it is
+  `axon.homelab.local`.)
+
+So: **keep Tailscale, drop the blanket trust.** That gets the security property you
+actually asked for — no port is open merely because it arrived on `tailscale0` — without
+breaking OIDC. Removing Tailscale entirely becomes possible if Pocket ID gets a
+`pocketid.homelab.internal` record with a matching certificate, but note the issuer URL
+is part of token identity, so changing it affects every other consumer (forgejo, harbor,
+open-webui, romm, pgadmin, grafana) — not a hermes-local decision.
 
 ## 10. Memory — Requirement vs. What We Ship Now
 
@@ -792,7 +869,9 @@ receives `tailscale-auth-key.age`.
   endpoint. Dropping the api_server without this leaves Open WebUI with a dead backend.
 - **`hosts/dns/configuration.nix`** — keep the `hermes.homelab.{local,internal}` A
   records at 192.168.2.155 (still wanted for ssh/mosh) and the hosts-file entry, and
-  **add `hermes-dashboard.homelab.internal`** at the same address (§9.1).
+  **add `hermes-dashboard.homelab.internal`** at the same address (§9.1). There is no
+  `pocketid.*` record in this zone; adding one is the prerequisite for ever taking
+  Tailscale off this node (§9.3), and it is a fleet-wide change, not a hermes one.
 - **`hosts/otel/*`** — the hermes blackbox probes were already removed on 2026-09-10;
   the `hermes-node` scrape job can come back once the host is up, since node exporter
   on 9100 stays.
@@ -842,6 +921,11 @@ receives `tailscale-auth-key.age`.
    - `https://hermes-dashboard.homelab.internal` → **redirects to Pocket ID**, and after
      login the sidebar switcher lists all four profiles. If it ever renders the UI with
      no login, the bind went back to loopback — stop and fix §9.1.
+   - From the phone, on the tailnet: `curl -m5 http://hermes.homelab.internal:9119`
+     → **connection refused/timeout**, while 443 works. If 9119 answers, the firewall
+     still trusts an interface (§9.2) and there is a bypass.
+   - `ss -ltnp` on the host → 9119 bound, 8642 absent, nothing else listening beyond
+     22/443/9100.
    - `moshi-hook status --json | jq .paired` → `true`, and a test notification lands on
      the phone (§7.5).
    - `sudo -u hermes -i`, then `opencode run "print the repo name"` in a `~/code`
@@ -865,6 +949,9 @@ receives `tailscale-auth-key.age`.
 - **Does Pocket ID issue public PKCE clients?** (§9.1) Every existing homelab client
   (forgejo, harbor, pgadmin) uses a client *secret*; the dashboard wants a secret-less
   PKCE client. Confirm in Pocket ID before assuming no agenix entry is needed.
+- **Is a `pocketid.homelab.internal` record worth adding?** (§9.3) It is what would let
+  hermes — and eventually other nodes — stop depending on the tailnet for auth. Fleet-wide
+  change: the issuer URL is part of token identity.
 - **Do the harness modules get proper options?** (§6) They read `homelab.agent.*`, which
   no longer describes this host; `enable = false` + a repointed `user` works but is a
   lie in the option name.
