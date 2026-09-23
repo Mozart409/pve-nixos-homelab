@@ -4,280 +4,255 @@
   pkgs,
   ...
 }: let
-  # ── Shared knowledge base (Obsidian vault) ────────────────────────────────
-  # A git-synced Obsidian vault hosted in Forgejo, exposed to Hermes via the
-  # bundled `note-taking/obsidian` skill (filesystem-first; uses the agent's
-  # native file tools over OBSIDIAN_VAULT_PATH). You edit it via Obsidian; the
-  # agent edits the local clone; a timer keeps both in sync with Forgejo.
+  # ── Layout ────────────────────────────────────────────────────────────────
+  # One unix user, several agent homes. `hermes` is a NORMAL user with a real
+  # home, not the system account the upstream module would create, because the
+  # same login also sits at a mosh prompt, holds the coding harness
+  # (~/.claude, ~/.config/opencode) and keeps repo checkouts under ~/code.
   #
-  # Adjust owner/repo to match the Forgejo repo you created and added the
-  # `hermes-bot` account to as a Write collaborator (see runbook).
-  vaultOwner = "amadeus";
-  vaultRepoName = "obsidian-kb";
-  hermesHome = "/var/lib/hermes"; # services.hermes-agent.stateDir default == $HOME
-  vaultPath = "${hermesHome}/workspace/vault"; # the shared Obsidian vault clone
+  # stateDir is deliberately NOT /home/hermes, though the rebuild plan sketched
+  # it that way. The upstream module's activation script and tmpfiles rules
+  # `chmod 2770` the stateDir unconditionally (nix/nixosModules.nix, the
+  # "Directories" block is not gated on createUser), and a group-writable home
+  # makes sshd's StrictModes refuse public-key auth for that user — which would
+  # break the only interactive way into this host. Giving the agent its own
+  # subdirectory keeps /home/hermes at 0700 and costs nothing: HERMES_HOME is
+  # exported system-wide by `addToSystemPackages`, so `hermes`/`coding chat`
+  # still find their state from any shell.
+  humanHome = "/home/hermes";
+  stateDir = "${humanHome}/agent";
+  hermesHome = "${stateDir}/.hermes"; # == HERMES_HOME (module: stateDir/.hermes)
 
   # ── Restart nonce ─────────────────────────────────────────────────────────
-  # hermes-agent reads its credentials and its prompt/config at startup, and
-  # everything it reads lives at a STABLE path that a deploy rewrites in place:
-  # agenix drops secrets at /run/agenix/<name>, and a root activation script
-  # (re)writes config.yaml / SOUL.md / USER.md and the skill tree under
-  # ${hermesHome}. None of that changes the generated unit file, so
-  # switch-to-configuration finds nothing to restart and the agent keeps running
-  # with the previous prompt and credentials — the long-standing "deploys don't
-  # restart hermes-agent" footgun in AGENTS.md §3.
+  # hermes-agent reads its credentials, prompt and config at startup, and all of
+  # it lives at STABLE paths a deploy rewrites in place: agenix drops secrets at
+  # /run/agenix/<name>, and root activation scripts (re)write config.yaml,
+  # SOUL.md and each profile's .env under ${hermesHome}. None of that changes
+  # the generated unit file, so switch-to-configuration finds nothing to restart
+  # and the agent keeps running with the previous prompt and credentials — the
+  # long-standing "deploys don't restart hermes-agent" footgun in AGENTS.md §3.
   #
-  # Bump this string whenever a secret, SOUL.md, USER.md, config.yaml, or a
-  # skill changes; that changes restartTriggers -> the unit definition -> a
-  # restart on the next colmena apply.
-  secretNonce = "2026-09-14-network-allowlist";
+  # Bump this whenever a secret, any profile's SOUL.md / config.yaml, or a skill
+  # changes; it is wired to restartTriggers on hermes-agent.
+  secretNonce = "2026-09-23-rebuild-profiles";
 
-  # ── Extra (declarative) skills ────────────────────────────────────────────
-  # Custom skills shipped from this repo, exposed to Hermes read-only via the
-  # `skills.external_dirs` config key (see settings below). Hermes' skill loader
-  # (agent/skill_utils.py: get_all_skills_dirs) scans local ~/.hermes/skills
-  # first, then every external_dirs entry, rglob-ing each for <name>/SKILL.md.
-  # Pointing at this immutable store path keeps the skills reproducible and out
-  # of the mutable, hub-managed ~/.hermes/skills tree. These skills are
-  # instruction-only (they direct the agent's existing file/terminal tools); the
-  # loader reads them host-side when building the prompt.
+  # Custom skills shipped from this repo, exposed read-only via the
+  # `skills.external_dirs` config key. Hermes' skill loader rglobs each entry for
+  # <name>/SKILL.md when building the prompt. Pointing at the immutable store
+  # path keeps them reproducible and out of the mutable ~/.hermes/skills tree.
+  # NB `./skills` is relative to THIS file, i.e. hosts/hermes/skills/.
+  extraSkillsDir = ./skills;
+
+  # ── Dashboard ─────────────────────────────────────────────────────────────
+  dashboardHost = "hermes-dashboard.homelab.internal";
+  dashboardPort = 9119;
+  dashboardUrl = "https://${dashboardHost}";
+
+  # Pocket ID is this homelab's OIDC provider. The dashboard's client is PUBLIC
+  # (authorization code + PKCE S256) with access restricted to a single user, so
+  # there is no client secret and this id is not a credential — every other
+  # client in this lab uses a secret; this one deliberately does not, because
+  # upstream does not support confidential clients for the dashboard yet.
   #
-  # NB: `./skills` is relative to THIS file, so it resolves to
-  # hosts/hermes/skills/ — NOT the repo-root top-level skills/ directory. It
-  # imports to the matching /nix/store path (e.g. /nix/store/…-skills) at eval.
-  extraSkillsDir = ./skills; # == hosts/hermes/skills/ (relative to this file)
-  # NOTE: the SSH user is "forgejo" (the built-in Forgejo SSH server's configured
-  # user), NOT "git". Connecting as git@ is silently rejected by the server.
-  vaultRemote = "ssh://forgejo@forgejo.homelab.local:2222/${vaultOwner}/${vaultRepoName}.git";
-  gitSshCmd = "${pkgs.openssh}/bin/ssh -F ${hermesHome}/.ssh/config";
+  # The issuer stays the tailnet name even though pocketid.homelab.{local,internal}
+  # now resolve: the issuer URL is part of token identity and every other
+  # consumer (forgejo, harbor, pgadmin, open-webui, romm, grafana) is pinned to
+  # the ts.net one. Changing it is a fleet-wide migration, not a hermes decision.
+  pocketIdIssuer = "https://pocketid.dropbear-butterfly.ts.net";
+  dashboardClientId = "92fac046-8ab4-4081-bdef-e0795bac8c2c";
 
-  # ── Homelab config repo (this repo) ───────────────────────────────────────
-  # The agent develops changes to the NixOS homelab config on FEATURE BRANCHES
-  # and, under the `local` backend (running as the hermes user), fetches + pushes
-  # them to Forgejo itself with the hermes-forgejo-ssh key on ~/.ssh. `main` is
-  # branch-protected on Forgejo, so the bot can never land changes directly — the
-  # user reviews the branch, opens a PR, and deploys (colmena) by hand. Access
-  # reuses the SAME hermes-bot Forgejo account + hermes-forgejo-ssh key as the
-  # vault (same forgejo.homelab.local:2222 host the ~/.ssh/config block already
-  # routes), so NO new secret is needed.
-  repoOwner = "amadeus";
-  repoName = "pve-nixos-homelab";
-  repoPath = "${hermesHome}/workspace/${repoName}"; # the agent's repo checkout
-  repoRemote = "ssh://forgejo@forgejo.homelab.local:2222/${repoOwner}/${repoName}.git";
+  # ── Shared config fragments ───────────────────────────────────────────────
+  # Every profile gets these. Kept in one place so a change lands on all five.
+  commonSettings = {
+    provider = "deepseek";
+    timezone = "Europe/Berlin";
 
-  # SSH client config: route forgejo over :2222 using the hermes-bot deploy key.
-  vaultSshConfig = pkgs.writeText "hermes-vault-ssh-config" ''
-    Host forgejo.homelab.local
-      Port 2222
-      User git
-      IdentityFile ${config.age.secrets.hermes-forgejo-ssh.path}
-      IdentitiesOnly yes
-      StrictHostKeyChecking accept-new
-      UserKnownHostsFile ${hermesHome}/.ssh/known_hosts
-  '';
+    # Extra skill directories scanned in addition to the mutable
+    # ~/.hermes/skills tree. The `skills` toolset must stay enabled for the
+    # agent to see them.
+    skills.external_dirs = ["${extraSkillsDir}"];
 
-  # Commit identity for the bot. Rebase pulls keep history linear.
-  vaultGitConfig = pkgs.writeText "hermes-vault-gitconfig" ''
-    [user]
-      name = hermes-bot
-      email = hermes-bot@homelab.local
-    [pull]
-      rebase = true
-    [safe]
-      directory = ${vaultPath}
-      directory = ${repoPath}
-  '';
+    # Approvals. This was `off` on the old host because "manual" blocked on an
+    # interactive approval.request that the headless Open WebUI gateway could
+    # never answer. `smart` (the new default) adjudicates each flagged command
+    # with an auxiliary flash-tier model: auto-approve low risk, auto-deny
+    # dangerous, escalate the uncertain middle — and `unattended_mode` /
+    # `cron_mode` decide what an escalation does where no human is present.
+    # So the headless hang we designed around is now a setting, not a reason to
+    # disable the layer. See docs/hermes-agent-findings-2026-09-23.md §4.3.
+    approvals = {
+      mode = "smart";
+      # A surface with no human (webhook, peer) denies rather than guesses.
+      unattended_mode = "deny";
+      # Cron likewise: a scheduled job that trips the guard should fail loudly
+      # in its delivery, not silently do the dangerous thing at 03:00.
+      cron_mode = "deny";
+    };
+    auxiliary.approval = {
+      provider = "deepseek";
+      model = "deepseek-v4-flash";
+    };
 
-  # Install ~/.ssh/config and ~/.gitconfig for the hermes user so BOTH the
-  # agent's terminal git (pull-nudge) and the sync timer authenticate uniformly.
-  vaultGitSetup = pkgs.writeShellScript "hermes-vault-git-setup" ''
-    set -eu
-    install -d -m 700 ${hermesHome}/.ssh
-    install -m 600 ${vaultSshConfig} ${hermesHome}/.ssh/config
-    install -m 600 ${vaultGitConfig} ${hermesHome}/.gitconfig
-  '';
+    # Terminal/file/code tools run as host subprocesses of the agent — as the
+    # `hermes` user, with no container. There is no libpod DB, runroot or pause
+    # process, so the whole class of "execute_code → Docker version failed"
+    # wedges is gone by construction. Confinement is the systemd unit sandbox
+    # (ProtectSystem=strict, PrivateTmp, NoNewPrivileges, IPAddress*,
+    # ReadOnlyPaths, the resource caps below), not a jail.
+    terminal = {
+      backend = "local";
+      timeout = 180;
+    };
 
-  # Vault checkout bootstrap: clone-if-missing + one fetch, mirroring the homelab
-  # repo bootstrap below. It never commits, pulls --rebase, or pushes — the agent
-  # authors commits, pulls your Obsidian edits before writing, and pushes them
-  # directly (see SOUL.md + the obsidian-vault-notes skill). This oneshot only
-  # guarantees the checkout EXISTS at ${vaultPath} and keeps origin fresh.
-  # Idempotent and self-healing — exits 0 on a missing remote so boot retries.
-  vaultBootstrap = pkgs.writeShellScript "hermes-vault-bootstrap" ''
-    set -u
-    export GIT_SSH_COMMAND='${gitSshCmd}'
-    git=${pkgs.git}/bin/git
-    if [ ! -d ${vaultPath}/.git ]; then
-      mkdir -p ${hermesHome}/workspace
-      if ! $git clone ${vaultRemote} ${vaultPath}; then
-        echo "hermes-vault-bootstrap: clone failed (forgejo/network not ready?)" >&2
-        exit 0
-      fi
-    fi
-    cd ${vaultPath} || exit 0
-    $git fetch origin --prune --quiet \
-      || echo "hermes-vault-bootstrap: fetch failed" >&2
-  '';
+    # Holographic memory: fully local, one SQLite FTS5 DB per profile home, no
+    # infrastructure. NumPy (extraPythonPackages) enables the HRR algebra behind
+    # probe/reason. The char limits gate the BUILT-IN `memory` toolset
+    # (MEMORY.md/USER.md) — separate from the fact_store, same key, deep-merges.
+    # 4x the module defaults (2200/1375).
+    #
+    # NOT a shared store: each profile's DB is its own. Cross-profile memory
+    # needs Honcho, which is deferred — see docs/plans/hermes-rebuild.md §10.
+    memory = {
+      provider = "holographic";
+      memory_char_limit = 8800;
+      user_char_limit = 5500;
+    };
+    plugins.hermes-memory-store = {
+      auto_extract = true;
+      default_trust = 0.5;
+      min_trust_threshold = 0.2;
+    };
 
-  # Bootstrap the homelab config repo checkout for the agent. Under the `local`
-  # terminal backend the agent runs AS the hermes user with the Forgejo key on
-  # ~/.ssh, so it fetches + pushes its own feature branches directly (see SOUL.md);
-  # there is no longer a host-side pusher. This helper only guarantees the checkout
-  # EXISTS at ${repoPath} and keeps origin/main fresh: clone-if-missing + a single
-  # fetch. It never commits, merges, or pushes. Idempotent and self-healing — exits
-  # 0 on any soft failure so the boot oneshot / timer simply retries.
-  repoSync = pkgs.writeShellScript "hermes-repo-bootstrap" ''
-    set -u
-    export GIT_SSH_COMMAND='${gitSshCmd}'
-    git=${pkgs.git}/bin/git
-    mkdir -p ${repoPath}
-    if [ ! -d ${repoPath}/.git ]; then
-      if ! $git clone ${repoRemote} ${repoPath}; then
-        echo "hermes-repo-bootstrap: clone failed (forgejo/network not ready?)" >&2
-        exit 0
-      fi
-    fi
-    cd ${repoPath} || exit 0
-    $git fetch origin --prune --quiet \
-      || echo "hermes-repo-bootstrap: fetch failed" >&2
-  '';
+    # moshi-hooks: the phone-push plugin. Declaring it here makes the
+    # registration Nix-owned so it survives a state-dir wipe, and it is the SOLE
+    # reason `moshi-hook install` must not run on every boot — it rewrites
+    # config.yaml with a conflicting list indent and corrupts the file. Keep Nix
+    # the only steady-state writer of plugins.enabled. See ./moshi-hook.nix and
+    # AGENTS.md §6.
+    plugins.enabled = ["moshi-hooks"];
+  };
 
-  # ── config.yaml integrity gate ────────────────────────────────────────────
-  # hermes fails OPEN on a malformed config.yaml: gateway/run.py's
-  # _load_gateway_config() catches the YAML ParserError and substitutes an EMPTY
-  # dict, so the agent starts "successfully" with every override discarded. Only
-  # `provider`/`base_url`/`api_key` survive (separate env bridge); `model` has NO
-  # env fallback, so it resolves to "" and DeepSeek rejects the request with
-  # HTTP 400. That is a silent, days-long degradation — the failure mode this
-  # unit exists to convert into a loud one.
+  # Web config for the one profile that browses (research). SearXNG is ours and
+  # free but SEARCH-ONLY; `web_extract` needs a provider with the extract
+  # capability, and having only SearXNG configured is upstream issue #32698 —
+  # exactly the dead end the old host had. Firecrawl's keyless tier is the
+  # no-secret starting point; add a FIRECRAWL_API_KEY / EXA_API_KEY to that
+  # profile's .env if the free tier throttles.
+  webSettings = {
+    web = {
+      search_backend = "searxng";
+      extract_backend = "firecrawl";
+      extract_char_limit = 20000;
+      cache_enabled = true;
+      cache_ttl_minutes = 60;
+    };
+  };
+
+  # ── MCP, per profile ──────────────────────────────────────────────────────
+  # `services.hermes-agent.mcpServers` writes into $HERMES_HOME/config.yaml,
+  # i.e. into the DEFAULT profile only — a secondary profile reads mcp_servers
+  # from its own config.yaml and nothing else. Same story for credentials: the
+  # module concatenates `environmentFiles` into the DEFAULT profile's .env
+  # (nix/moduleCommon.nix), not into the unit's process environment, so a
+  # profile that wants `${AXON_GATEWAY_TOKEN}` expanded must also list
+  # axon-gateway-env in its OWN environmentFiles. Both halves or neither.
   #
-  # Runs AFTER moshi-hook-setup (the only non-Nix writer) and BEFORE hermes-agent,
-  # which `requires` it — so a config we cannot make sense of blocks the start
-  # instead of quietly demoting the agent to built-in defaults.
-  configCheckPython = pkgs.python3.withPackages (ps: [ps.pyyaml]);
-  configCheck = pkgs.writeScript "hermes-config-check" ''
-    #!${configCheckPython}/bin/python3
-    """Validate, minimally repair, and gate the hermes agent's config.yaml."""
-    import os
-    import shutil
-    import sys
-    import time
-    from pathlib import Path
+  # Given deliberately to `infra` (this IS its job) and to `default` (the
+  # catch-all), and withheld from coding/research/kb: every MCP server's whole
+  # tool surface costs schema tokens on every LLM call, and the coding profile
+  # reaches these backends through the nested harness's own MCP config anyway.
+  axonMcpSettings = {
+    mcp_servers.axon-gateway = {
+      url = "https://axon.homelab.local/mcp";
+      headers.Authorization = "Bearer \${AXON_GATEWAY_TOKEN}";
+    };
+  };
 
-    import yaml
+  # Cron result delivery. Upstream delivers the agent's final response itself
+  # now — the agent does not send the message, so there is nothing to call in
+  # the prompt — and tracks delivery separately from execution (a run whose
+  # output never landed records `delivery_failed`, not a green `ok`). That is
+  # what retires the hand-written `cron-result-delivery` skill.
+  #
+  # `homeassistant` is the target because HA already fans out to the phone. If
+  # the moshi-hooks plugin turns out to fire on unattended cron sessions too,
+  # this becomes redundant rather than wrong — verify with a throwaway
+  # one-minute job before deciding (docs/plans/hermes-rebuild.md §8.1).
+  cronSettings = {
+    cron.deliver = "homeassistant";
+  };
 
-    path = Path(sys.argv[1])
-    if not path.exists():
-        print(f"hermes-config-check: {path} does not exist yet; nothing to check")
-        sys.exit(0)
+  # Toolset lists. Every enabled toolset costs tool-schema tokens on EVERY LLM
+  # call, so these are deliberately minimal per profile rather than one generous
+  # shared list. `browser` is absent everywhere: it has no engine configured on
+  # this host, and a dead toolset still costs those tokens (findings §4.2).
+  baseTools = ["file" "memory" "skills" "session_search"];
 
-    raw = path.read_text()
-
-
-    def parse(text):
-        return yaml.safe_load(text) or {}
-
-
-    def normalize_sequence_runs(text):
-        """Re-indent mixed-depth block-sequence runs and drop exact duplicates.
-
-        The known corruption is two `- moshi-hooks` items at different depths under
-        `plugins.enabled:` (the Nix merge dumps at 2-space, moshi-hook writes at
-        4-space, and each inserts a duplicate it cannot see). A run of consecutive
-        `- ` lines always belongs to ONE sequence, so flattening the run to its
-        shallowest indent and dropping repeats restores a parseable document
-        without disturbing anything else in the file.
-        """
-        lines = text.splitlines()
-        out = []
-        i = 0
-        while i < len(lines):
-            if not lines[i].lstrip().startswith("- "):
-                out.append(lines[i])
-                i += 1
-                continue
-            run = []
-            while i < len(lines) and lines[i].lstrip().startswith("- "):
-                run.append(lines[i])
-                i += 1
-            indent = min(len(ln) - len(ln.lstrip()) for ln in run)
-            seen = set()
-            for ln in run:
-                item = ln.strip()
-                if item in seen:
-                    continue
-                seen.add(item)
-                out.append(" " * indent + item)
-        return "\n".join(out) + "\n"
-
-
-    changed = False
-    try:
-        data = parse(raw)
-    except yaml.YAMLError as exc:
-        print(f"hermes-config-check: {path} is not valid YAML:\n{exc}", file=sys.stderr)
-        try:
-            data = parse(normalize_sequence_runs(raw))
-        except yaml.YAMLError:
-            stamp = time.strftime("%Y%m%d-%H%M%S")
-            backup = path.with_suffix(f".yaml.corrupt.{stamp}")
-            shutil.copy2(path, backup)
-            print(
-                "hermes-config-check: automatic repair FAILED. Starting hermes now "
-                "would fail open to an EMPTY config and silently ignore every "
-                "override (model, toolsets, mcp_servers, ...). Blocking hermes-agent. "
-                f"Corrupt copy saved at {backup}.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        changed = True
-        print("hermes-config-check: repaired mixed-indent/duplicate sequence items")
-
-    plugins = data.get("plugins")
-    if isinstance(plugins, dict) and isinstance(plugins.get("enabled"), list):
-        deduped = list(dict.fromkeys(plugins["enabled"]))
-        if deduped != plugins["enabled"]:
-            plugins["enabled"] = deduped
-            changed = True
-            print("hermes-config-check: de-duplicated plugins.enabled")
-
-    # An empty/absent model is unrecoverable at runtime: there is no env fallback,
-    # so the agent would start and 400 on the first message. Fail here instead.
-    if not data.get("model"):
-        print(
-            "hermes-config-check: no `model` set in config.yaml — the agent would "
-            "send an empty model and every request would fail. Blocking hermes-agent.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-
-    if changed:
-        mode = path.stat().st_mode & 0o777
-        tmp = path.with_suffix(".yaml.tmp")
-        with tmp.open("w") as fh:
-            yaml.dump(data, fh, default_flow_style=False, sort_keys=False)
-        os.chmod(tmp, mode)
-        tmp.replace(path)
-        print(f"hermes-config-check: rewrote {path}")
-
-    print(f"hermes-config-check: OK (model={data.get('model')!r})")
-  '';
+  # Per-platform tool configuration. The top-level `toolsets` is NOT consulted
+  # per-platform: per hermes_cli/tools_config.py (`_get_platform_tools`) every
+  # gateway platform resolves its tools ONLY from `platform_toolsets.<platform>`,
+  # falling back to that platform's built-in preset when its key is absent. Pin
+  # each platform so the surface is deterministic across redeploys.
+  #
+  # `cron` is always leaner than `cli`: jobs run unattended in a fresh session,
+  # upstream warns that heavy toolsets bloat the schema on every call of every
+  # job, `clarify` is useless with nobody there, and `cronjob` is force-disabled
+  # inside cron runs anyway (anti-recursion guard).
+  mkToolsets = tools: {
+    toolsets = lib.unique tools;
+    platform_toolsets = {
+      # A human is present, so `clarify` is answerable and `cronjob` is how
+      # schedules get created in the first place. lib.unique because a profile's
+      # own list may already name cronjob.
+      cli = lib.unique (tools ++ ["clarify" "cronjob"]);
+      # Dropped for cron specifically: `clarify` has nobody to ask, `cronjob` is
+      # force-disabled inside cron runs anyway (anti-recursion guard) so listing
+      # it only pays its schema cost, and `delegation` is one of the toolsets
+      # upstream singles out as prompt-bloating on every call of every job.
+      # Per-job `enabled_toolsets` on cronjob.create still overrides this.
+      cron = lib.subtractLists ["clarify" "cronjob" "delegation"] (lib.unique tools);
+    };
+  };
 in {
   imports = [
     ../../modules/common.nix
-    ../../modules/disko-config.nix
+    # XFS root, not btrfs: the guest disk is a zvol on a ZFS pool that is already
+    # doing CoW, checksumming and zstd, so btrfs would stack a second CoW layer
+    # and a second compression pass on top of it. This also gives a real 4 G swap
+    # partition instead of a swapfile on a CoW subvolume, pins the disk by
+    # /dev/disk/by-id, and enables weekly fstrim (hence `discard = "on"` on the
+    # Proxmox disk in iac/main.tf).
+    ../../modules/disko-xfs.nix
     ../../modules/tailscale.nix
     ../../modules/step-ca-trust.nix
     ../../modules/osquery.nix
     ../../modules/fluent-bit.nix
-    ../../modules/moshi-hook.nix
-    ./moshi-hook.nix
     ../../modules/caddy-http3.nix
+    # Profiles: renders profiles/<name>/{config.yaml,SOUL.md,.env,memories/} and
+    # owns hermes-config-check, which must now loop over all of them.
+    ../../modules/hermes-profiles.nix
+    # ── Coding harness (§6 of the rebuild plan) ──────────────────────────────
+    # The same set `development` imports. They render Claude Code's and
+    # opencode's config, this repo's skills and slash-commands, and the Moshi
+    # hook wiring, into whichever account homelab.codingHarness names — here,
+    # `hermes` itself. agent-user.nix is imported for its OPTIONS only;
+    # homelab.agent.enable stays false, because on this host the whole machine
+    # is the agent and the account is simply `hermes`.
+    ../../modules/agent-user.nix
+    ../../modules/coding-harness.nix
+    ../../modules/claude-permissions.nix
+    ../../modules/claude-settings-verify.nix
+    ../../modules/repo-sync.nix
+    ../../modules/moshi-hook-user.nix
+    ../../modules/forgejo-cli.nix
+    ../../modules/herdr.nix
+    # Per-profile registration of the moshi-hooks plugin into each profile's
+    # config.yaml, stamped per (profile, moshi-hook version).
+    ./moshi-hook.nix
   ];
 
   networking.hostName = "homelab-hermes";
 
-  # Static IP configuration
   networking.interfaces.ens18 = {
     useDHCP = false;
     ipv4.addresses = [
@@ -289,7 +264,121 @@ in {
   };
   networking.defaultGateway = "192.168.2.1";
 
-  # Ship selected hermes-related daemon journals to the central Loki.
+  # Compressed RAM swap as the first response to a memory spike, so the first
+  # thing that happens is compression rather than IO on a 2-HDD pool shared by
+  # every VM in the cluster. Same reasoning as `development`, and it matters
+  # more here: a nested opencode/claude run plus a `nix develop` realisation is
+  # exactly the spike this absorbs. NixOS gives zram priority over the disk
+  # swap partition, so the disk stays a genuine last resort.
+  zramSwap = {
+    enable = true;
+    algorithm = "zstd";
+    memoryPercent = 25;
+  };
+
+  # ── The account ───────────────────────────────────────────────────────────
+  # One unprivileged user owning every profile home. The trade is stated
+  # plainly: isolation between profiles is Hermes' bookkeeping, not the kernel —
+  # `coding` and `research` share a uid and can read each other's .env. What
+  # holds is the boundary that matters: `hermes` is not `amadeus`, has no sudo,
+  # cannot read ~amadeus/.ssh (the colmena deploy key), and cannot deploy.
+  #
+  # One uid is also what makes the two features this rebuild is for work at all:
+  # ONE dashboard that enumerates the invoking user's profiles/ directory, and
+  # ONE multiplexing gateway. Per-profile unix users were considered and
+  # rejected for exactly that reason.
+  users.users.hermes = {
+    isNormalUser = true;
+    home = humanHome;
+    description = "Hermes agent profiles + coding harness";
+    shell = pkgs.zsh;
+    # Primary group `hermes`, not the `users` default isNormalUser would pick.
+    # The upstream module chowns its whole tree to ${cfg.user}:${cfg.group} and
+    # makes every state directory 2770 setgid, so files the agent creates inherit
+    # group `hermes` -- a user whose primary group is `users` would not be a
+    # member of the group its own files land in.
+    group = "hermes";
+    # Keeps /home/hermes at 0700 so sshd's StrictModes accepts key auth. The
+    # agent's own 2770 tree lives one level down, under ${stateDir}.
+    homeMode = "0700";
+    openssh.authorizedKeys.keys = config.homelab.users.amadeus.sshKeys;
+    # User services (moshi-hook daemon, claude-permissions, herdr) start at boot
+    # without a login. Also set by moshi-hook-user.nix; equal bool definitions
+    # merge, so stating it here is documentation, not a conflict.
+    linger = true;
+  };
+  users.groups.hermes = {};
+
+  # No sudo, explicitly. An absent grant can be widened later by accident; a
+  # deny cannot, and `sudo -l` says so in words.
+  security.sudo.extraRules = [
+    {
+      users = ["hermes"];
+      commands = [{command = "!ALL";}];
+    }
+  ];
+
+  # Which account the harness modules configure. homelab.agent is NOT enabled —
+  # there is no second account to create here.
+  homelab.codingHarness = {
+    user = "hermes";
+    home = humanHome;
+  };
+
+  # ── Repo checkouts ────────────────────────────────────────────────────────
+  # Sweeps every checkout under ~/code on a timer: fetch → `merge --ff-only`
+  # (refuses on divergence) → plain `push` (no --force, ever). It never commits
+  # or rebases and exits 0 on every skippable state, so a dirty tree is not a
+  # failure. This is how the coding profile's commits reach Forgejo with no
+  # human step.
+  #
+  # It pushes `main` directly — the same model as `development`, no PR
+  # round-trip from a phone. That needs `hermes` on the push whitelist of each
+  # protected `main` in Forgejo (see §5.3 of the rebuild plan). Nothing
+  # auto-deploys from `main`: comin was removed 2026-09-08, so a push reaches
+  # Forgejo and stops there until a human runs colmena.
+  homelab.repoSync.hermes = {
+    home = humanHome;
+    sshKey = config.age.secrets.hermes-forgejo-ssh.path;
+    push = true;
+  };
+
+  # Route Forgejo (LAN and tailnet) to the host's own key for this user. `Match`
+  # precedes the `Host` blocks common.nix appends and ssh takes the first value
+  # it finds, so this wins.
+  programs.ssh.extraConfig = lib.mkBefore ''
+    Match user hermes host forgejo.homelab.local,forgejo.homelab.internal,homelab-forgejo.dropbear-butterfly.ts.net
+      Port 2222
+      User forgejo
+      IdentityFile ${config.age.secrets.hermes-forgejo-ssh.path}
+      IdentitiesOnly yes
+      IdentityAgent none
+      StrictHostKeyChecking accept-new
+  '';
+
+  # Commit identity for this host's Forgejo account. `hermes` is a real Forgejo
+  # account of its own (not amadeus's collaborator key, which is what
+  # `development` uses), so commits from here are attributable to this host and
+  # revocable per host.
+  programs.git = {
+    enable = true;
+    config = {
+      user.name = "hermes";
+      user.email = "hermes@homelab.local";
+      pull.rebase = true;
+      init.defaultBranch = "main";
+    };
+  };
+
+  # direnv + nix-direnv: `cd` into a checkout with an `.envrc` auto-loads its
+  # flake devshell, cached so re-entry is instant. First use in a checkout still
+  # needs a one-time `direnv allow`.
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  };
+
+  # Ship the agent-related journals to the central Loki.
   services.loki-logs = {
     enable = true;
     units = [
@@ -302,355 +391,251 @@ in {
         job = "hermes-config-check";
       }
       {
-        unit = "hermes-repo-sync.service";
-        job = "hermes-repo-sync";
+        unit = "repo-sync-hermes.service";
+        job = "repo-sync";
       }
       {
-        unit = "hermes-vault-git-setup.service";
-        job = "hermes-vault-git-setup";
+        unit = "coding-harness-config.service";
+        job = "coding-harness";
       }
       {
-        unit = "hermes-vault-bootstrap.service";
-        job = "hermes-vault-bootstrap";
-      }
-      {
-        unit = "moshi-hook-setup.service";
-        job = "moshi-hook-setup";
+        unit = "hermes-moshi-profiles.service";
+        job = "hermes-moshi-profiles";
       }
     ];
   };
 
-  # direnv + nix-direnv: `cd` into a dir with an `.envrc` (the repo already ships
-  # one with `use flake`) auto-loads its flake devshell; nix-direnv caches it so
-  # re-entry is instant. The module hooks the interactive zsh/bash from
-  # common.nix. First use in a checkout still needs a one-time `direnv allow`.
-  programs.direnv = {
-    enable = true;
-    nix-direnv.enable = true;
+  # ── Secrets ───────────────────────────────────────────────────────────────
+  # Per-profile provider keys. A named profile resolves its providers ONLY from
+  # its own .env, so each profile gets its own agenix file; modules/hermes-
+  # profiles.nix concatenates them into profiles/<name>/.env at 0600. Note this
+  # separates WHAT EACH PROFILE USES, not what it could read — one uid owns them
+  # all (see the account comment above).
+  age.secrets.hermes-default-env = {
+    file = ../../secrets/hermes-default-env.age;
+    owner = "hermes";
+    mode = "0400";
+  };
+  age.secrets.hermes-coding-env = {
+    file = ../../secrets/hermes-coding-env.age;
+    owner = "hermes";
+    mode = "0400";
+  };
+  age.secrets.hermes-research-env = {
+    file = ../../secrets/hermes-research-env.age;
+    owner = "hermes";
+    mode = "0400";
+  };
+  age.secrets.hermes-kb-env = {
+    file = ../../secrets/hermes-kb-env.age;
+    owner = "hermes";
+    mode = "0400";
+  };
+  age.secrets.hermes-infra-env = {
+    file = ../../secrets/hermes-infra-env.age;
+    owner = "hermes";
+    mode = "0400";
   };
 
-  # OpenCode Zen provider key (env-file: KEY=value lines, i.e.
-  # OPENCODE_ZEN_API_KEY=sk-...). Must be an account key WITH billing, else the
-  # opencode CLI only sees the free models. Consumed by hermes-agent
-  # (environmentFiles below) and by the standalone `opencode` CLI wrapper in
-  # environment.systemPackages, which reads the key to materialize opencode's
-  # auth.json — hence owner=hermes so that wrapper (run as the hermes user) can
-  # read it. systemd still reads it as root for hermes-agent regardless of owner.
-  age.secrets.hermes-opencode-zen-key = {
+  # opencode-zen provider key (env-file: OPENCODE_ZEN_API_KEY=...). Declared
+  # under the GENERIC attribute name modules/coding-harness.nix looks for, while
+  # the file itself stays per-host. It is also the unattended coding path's
+  # credential: opencode authenticates from a key on disk, Claude Code from an
+  # interactive OAuth login, which is why cron jobs shell out to `opencode`.
+  age.secrets.opencode-zen-key = {
     file = ../../secrets/hermes-opencode-zen-key.age;
     owner = "hermes";
-    group = "hermes";
     mode = "0400";
   };
 
-  # API server key for hermes-agent
-  age.secrets.hermes-api-server-key = {
-    file = ../../secrets/hermes-api-server-key.age;
-    mode = "0400";
-  };
-
-  # DeepSeek provider key (file contains DEEPSEEK_API_KEY=...)
-  age.secrets.hermes-deepseek-key = {
-    file = ../../secrets/hermes-deepseek-key.age;
-    mode = "0400";
-  };
-
-  # AgentMail API key for the agentmail MCP server (file contains
-  # AGENTMAIL_API_KEY=am_...). Loaded via environmentFiles below so Hermes can
-  # expand it into the agentmail MCP `x-api-key` header at runtime. Read only by
-  # systemd (as root) before the agent drops privileges, so no owner needed.
-  age.secrets.hermes-agentmail-key = {
-    file = ../../secrets/hermes-agentmail-key.age;
-    mode = "0400";
-  };
-
-  # Axon MCP gateway bearer token (file contains AXON_GATEWAY_TOKEN=...).
+  # Axon MCP gateway bearer token (AXON_GATEWAY_TOKEN=...). Read by hermes-agent
+  # (to expand the mcp_servers header) AND by the harness, which sources it into
+  # interactive shells so `claude`/`opencode` resolve their own MCP config.
   age.secrets.axon-gateway-env = {
     file = ../../secrets/axon-gateway-env.age;
+    owner = "hermes";
     mode = "0400";
   };
 
-  # SSH private key for the hermes-bot Forgejo account, used to clone/push the
-  # Obsidian knowledge-base vault. Owned by the hermes user (not root) because
-  # ssh reads IdentityFile as the running agent/sync process. The matching
-  # public key must be added to hermes-bot's Forgejo SSH keys (see runbook).
+  # The Ventara deployment's own axon-gateway instance — a separate gateway on
+  # the shared tailnet, registered by modules/coding-harness.nix. Without this
+  # secret that MCP entry exists but never authenticates.
+  age.secrets.ventara-gateway-env = {
+    file = ../../secrets/ventara-gateway-env.age;
+    owner = "hermes";
+    mode = "0400";
+  };
+
+  # AgentMail API key (AGENTMAIL_API_KEY=am_...) for the agent's own inbox.
+  age.secrets.hermes-agentmail-key = {
+    file = ../../secrets/hermes-agentmail-key.age;
+    owner = "hermes";
+    mode = "0400";
+  };
+
+  # This host's Forgejo account key. RE-MINTED for the rebuild: the file used to
+  # hold the `hermes-bot` account's key, which served the Obsidian vault and the
+  # feature-branch flow — both retired. Owned by hermes because ssh reads
+  # IdentityFile as the running process.
   age.secrets.hermes-forgejo-ssh = {
     file = ../../secrets/hermes-forgejo-ssh.age;
     owner = "hermes";
-    group = "hermes";
     mode = "0400";
   };
 
-  # Moshi pairing token (plain raw text, NOT KEY=value — read directly by
-  # ./moshi-hook.nix's pair script). Owned by hermes so moshi-hook-setup
-  # (User=hermes) can read it.
+  # Moshi pairing token (raw text, NOT KEY=value — read directly by the pair
+  # script in modules/moshi-hook-user.nix).
   #
-  # NOTE: the SAME secret is also a recipient for development + zeroclaw
-  # (secrets/secrets.nix). It is UNVERIFIED whether one Moshi account token
-  # can pair 3 hosts simultaneously, or whether pairing a 2nd/3rd host
-  # invalidates the 1st. Deploy + verify hermes FIRST — see verification
-  # plan below.
+  # It is UNVERIFIED whether one Moshi account token can pair three hosts
+  # (development, zeroclaw, hermes) at once, or whether pairing a third
+  # invalidates the first. Verify on this host before assuming push works.
   age.secrets.moshi-device-id = {
     file = ../../secrets/moshi-device-id.age;
     owner = "hermes";
     group = "hermes";
-    mode = "0400";
+    mode = "0440";
   };
 
-  # Hermes Agent - Native mode with security hardening
+  # ── The agent ─────────────────────────────────────────────────────────────
   services.hermes-agent = {
     enable = true;
 
-    # Load provider keys from secrets (files contain KEY=value format).
-    # Both providers' keys are loaded so the active provider can be switched
-    # via settings.provider below without touching secrets.
+    # We own the account (above); the module must not create a system user of
+    # its own. stateDir is one level below the login's home — see the layout
+    # comment at the top of this file for why it is not /home/hermes itself.
+    user = "hermes";
+    group = "hermes";
+    createUser = false;
+    inherit stateDir;
+
+    # Puts the `hermes` CLI on PATH and exports HERMES_HOME system-wide, so an
+    # interactive shell shares state with the gateway and `hermes -p coding chat`
+    # (or the auto-generated ~/.local/bin/coding wrapper) works from any cwd.
+    addToSystemPackages = true;
+
+    # ── Web dashboard ──────────────────────────────────────────────────────
+    # Bound to LOOPBACK, and still authenticated. v2026.9.21 changed the rule
+    # the rebuild plan was written against: declaring a non-loopback
+    # `dashboard.public_url` engages the auth gate *even when the backend binds
+    # to loopback*, and the hostname in that URL is accepted as an exact Host /
+    # WebSocket Origin value (so the DNS-rebinding guard is satisfied by the
+    # proxied request). That is strictly better than the plan's 0.0.0.0 bind:
+    # Caddy is the only thing that can reach the socket at all, AND every
+    # request through it must carry a verified Pocket ID session.
+    backend = {
+      mode = "dashboard";
+      host = "127.0.0.1";
+      port = dashboardPort;
+    };
+
+    # Host-wide env. Per-PROFILE provider keys live in each profile's own .env
+    # (rendered by modules/hermes-profiles.nix); these are the values the
+    # default profile and the gateway itself need.
     environmentFiles = [
-      config.age.secrets.hermes-opencode-zen-key.path
-      config.age.secrets.hermes-deepseek-key.path
-      config.age.secrets.hermes-api-server-key.path
+      config.age.secrets.hermes-default-env.path
       config.age.secrets.axon-gateway-env.path
       config.age.secrets.hermes-agentmail-key.path
     ];
 
-    # API server config (not secrets). Named providers carry their own
-    # base_url, so OPENAI_BASE_URL is no longer needed.
     environment = {
-      API_SERVER_ENABLED = "true";
-      # hermes API server default port; Caddy reverse_proxy targets this.
-      API_SERVER_PORT = "8642";
-      # Shared knowledge base for the bundled `note-taking/obsidian` skill.
-      # The skill resolves notes relative to this absolute vault path.
-      OBSIDIAN_VAULT_PATH = vaultPath;
-      # Where the homelab config repo is checked out. The agent's file/terminal
-      # tools (running natively as the hermes user under the `local` backend) use
-      # this to locate the repo it develops on feature branches.
-      HOMELAB_REPO_PATH = repoPath;
-      # Agent clock timezone. Hermes resolves the time it injects into the
-      # conversation via hermes_time.now(), which reads HERMES_TIMEZONE first
-      # (then the config.yaml `timezone` key, then server-local). Plain `TZ` is
-      # NOT consulted by that resolver, so this — not TZ — is what makes the
-      # agent report Berlin instead of UTC. (The host clock / tool `date` is
-      # already Berlin via modules/common.nix's time.timeZone; do NOT set
-      # time.timeZone here — a second definition conflicts.)
+      # Agent clock. Hermes resolves the time it injects into the conversation
+      # via hermes_time.now(), which reads HERMES_TIMEZONE first (then the
+      # config.yaml `timezone` key, then server-local). Plain `TZ` is NOT
+      # consulted by that resolver — this, not TZ, is what makes the agent
+      # report Berlin. (Do not set time.timeZone here; common.nix already does.)
       HERMES_TIMEZONE = "Europe/Berlin";
-      # SearXNG instance backing the `web_search` tool (see settings.web below).
-      # Served by Caddy on the containers host; step-ca TLS is trusted here via
-      # step-ca-trust.nix. The .internal name (not MagicDNS) is what resolves
-      # from hermes; it carries a step-ca cert via the searxng vhost.
+      # SearXNG on the containers host, backing `web_search`. The .internal name
+      # resolves from here and carries a step-ca cert; MagicDNS does not.
       SEARXNG_URL = "https://searxng.homelab.internal";
-      # SSL cert file pointing at the system CA bundle that includes the
-      # Homelab step-ca root cert. httpx (used by the searxng web-search
-      # provider) needs this explicitly — it fails with CERTIFICATE_VERIFY_FAILED
-      # even though Python's default_verify_paths points at the same file,
-      # because httpcore/httpx re-initializes the SSL context differently.
+      # httpx (used by the searxng provider) re-initialises its SSL context and
+      # fails CERTIFICATE_VERIFY_FAILED without this, even though Python's
+      # default_verify_paths points at the same bundle.
       SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
     };
 
-    # Declarative configuration. The API server uses this single configured
-    # provider/model (the model field Open WebUI sends is ignored for routing).
-    # Switch providers by changing provider/model here and redeploying.
-    settings = {
-      # DeepSeek (uses DEEPSEEK_API_KEY, base_url https://api.deepseek.com/v1).
-      # Alt: provider = "opencode-zen"; model = "minimax-m2.5"; (needs
-      # OPENCODE_ZEN_API_KEY in hermes-opencode-zen-key.age).
-      provider = "deepseek";
-      # deepseek-chat is deprecated 2026-07-24 and becomes a silent alias for
-      # deepseek-v4-flash; opt into the stronger v4-pro tier explicitly instead.
-      model = "deepseek-v4-pro";
+    # ── The DEFAULT profile ────────────────────────────────────────────────
+    # These settings describe $HERMES_HOME itself, which IS the default
+    # profile. The other four are rendered under profiles/ by
+    # modules/hermes-profiles.nix.
+    settings =
+      commonSettings
+      // cronSettings
+      // (mkToolsets (baseTools ++ ["cronjob"]))
+      // {
+        # Cheap tier on purpose: this profile is the switchboard. It owns the
+        # multiplexer and the dashboard and routes real work to a sibling.
+        model = "deepseek-v4-flash";
 
-      # Timezone Hermes uses for the timestamps it injects into the conversation
-      # (hermes_time.now(), config.yaml `timezone` key). The HERMES_TIMEZONE env
-      # above takes precedence; this is the declarative belt-and-suspenders so the
-      # setting survives even if the env var is ever dropped.
-      timezone = "Europe/Berlin";
+        # One gateway serves every profile. v2026.9.21 enforces a host-wide
+        # singleton lock (one `hermes gateway run` per machine; a second starts
+        # observe-only), and multiplexing — on by default, stated here so it
+        # cannot drift — makes the default profile's gateway serve all of them,
+        # picking up profiles created later without a restart. Per-profile
+        # lifecycle is `hermes -p <name> gateway stop|start`, not a second unit.
+        #
+        # Footgun: the module's ExecStart is `hermes gateway run --replace`, and
+        # upstream issue #119837 reports that `--replace` skips the host-lock
+        # refusal. With a single unit that race is unlikely; verify
+        # `hermes gateway status` reports exactly one owner after boot.
+        gateway.multiplex_profiles = true;
 
-      # Tool permissions. `toolsets` is the global allowlist of toolsets the
-      # agent (and every gateway platform, including the API server) may use.
-      # It REPLACES the built-in default, so the toolsets the Obsidian/KB
-      # workflow relies on (`file`, `memory`, `skills`) are listed explicitly
-      # alongside the newly granted `web` and `terminal` access.
-      #   file           → read_file, write_file, patch, search_files
-      #   memory         → persistent notes / user profile
-      #   skills         → skills_list, skill_view, skill_manage
-      #   web            → web_search, web_extract (search via SearXNG below)
-      #   terminal       → terminal, process (shell + process management)
-      #   browser        → browser automation (navigate/click/type/...) — note:
-      #                    needs a Chromium/CDP backend to actually drive a page
-      #   code_execution → execute_code (run Python that calls tools)
-      #   delegation     → delegate_task (spawn subagents)
-      #   session_search → search/recall past conversations
-      toolsets = [
-        "file"
-        "memory"
-        "skills"
-        "web"
-        "terminal"
-        "browser"
-        "code_execution"
-        "delegation"
-        "session_search"
-      ];
-
-      # Extra skill directories scanned read-only in addition to the mutable
-      # ~/.hermes/skills tree. Each entry is rglob-ed for <name>/SKILL.md by the
-      # skill loader. Sourced from this repo (extraSkillsDir) so custom skills
-      # are declarative and reproducible. The `skills` toolset must stay enabled
-      # (it is, in toolsets + every platform_toolsets) for the agent to see them.
-      skills.external_dirs = ["${extraSkillsDir}"];
-
-      # Per-platform tool configuration. The top-level `toolsets` above is NOT
-      # consulted per-platform: per hermes_cli/tools_config.py
-      # (`_get_platform_tools`), every gateway *platform* resolves its tools ONLY
-      # from `platform_toolsets.<platform>`. When a platform's key is absent it
-      # falls back to that platform's built-in `default_toolset` preset
-      # (`hermes-api-server` / `hermes-cli` / `hermes-cron`) — which is why Open
-      # WebUI originally showed only the trimmed api-server preset. We pin each
-      # platform explicitly so the tool surface is deterministic across redeploys.
-      # Platform keys come from hermes_cli/platforms.py; every list entry must be
-      # a CONFIGURABLE_TOOLSETS key.
-      platform_toolsets = {
-        # Open WebUI (chat-completions) gateway. Interactive set + `cronjob` so
-        # schedules can be created straight from chat. `clarify` is omitted — the
-        # chat-completions gateway can't answer an interactive clarify/approval
-        # prompt (matches hermes-api-server). NB: no `todo` — SOUL.md routes all
-        # todos/lists through the Obsidian vault as `- [ ]` checkboxes, so the
-        # built-in ephemeral todo tool would compete with that.
-        api_server = [
-          "file"
-          "memory"
-          "skills"
-          "web"
-          "terminal"
-          "browser"
-          "code_execution"
-          "delegation"
-          "session_search"
-          "cronjob"
-        ];
-
-        # Interactive terminal sessions (`hermes chat`). Full sane set including
-        # `clarify` (a human is present to answer) and `cronjob` for managing
-        # scheduled tasks. No `todo` — todos live in the Obsidian vault per SOUL.md.
-        cli = [
-          "file"
-          "memory"
-          "skills"
-          "web"
-          "terminal"
-          "browser"
-          "code_execution"
-          "delegation"
-          "session_search"
-          "clarify"
-          "cronjob"
-        ];
-
-        # Scheduled cron jobs run UNATTENDED in a fresh session, driven by the
-        # gateway daemon's 60s tick (no extra service needed; jobs persist in
-        # ~/.hermes/cron/jobs.json). Deliberately LEAN: the docs warn that heavy
-        # toolsets (browser/delegation/moa) bloat the tool-schema prompt on every
-        # LLM call of every job. `clarify` is useless unattended, and `cronjob`
-        # is force-disabled inside cron runs anyway (anti-recursion guard).
-        # Per-job `enabled_toolsets` on cronjob.create still overrides this.
-        cron = [
-          "file"
-          "memory"
-          "skills"
-          "web"
-          "terminal"
-          "code_execution"
-          "session_search"
-        ];
+        dashboard = {
+          # Declaring this is what engages the auth gate on a loopback bind, and
+          # it is what the OAuth callback is built from: <public_url>/auth/callback,
+          # verbatim. That exact URL must be registered on the Pocket ID client.
+          public_url = dashboardUrl;
+          # Caddy runs on this host, so loopback trust already covers it.
+          # Listed explicitly so a future move of the TLS terminator to another
+          # host is a one-line change rather than a debugging session.
+          trusted_proxies = ["127.0.0.1"];
+          oauth = {
+            provider = "self-hosted";
+            self_hosted = {
+              issuer = pocketIdIssuer;
+              client_id = dashboardClientId;
+              scopes = "openid profile email";
+            };
+          };
+        };
       };
 
-      # Approval mode. Default is "manual": dangerous shell/subprocess commands
-      # (from `terminal` and `execute_code`) fire an interactive `approval.request`
-      # and BLOCK waiting for a POST /v1/runs/{id}/approval response. The Open
-      # WebUI chat-completions gateway never sends that, so those calls hang for
-      # the 60s timeout and fail silently ("hitting the approval guard"). With a
-      # headless API server there is no one to answer the prompt, so disable it.
-      # With the podman jail gone (terminal.backend = "local", below), the floor
-      # for injected shell/code is now: the systemd unit sandbox (ProtectSystem=
-      # strict caps writes to stateDir/workspace, PrivateTmp, NoNewPrivileges, the
-      # ReadOnlyPaths config lock + resource caps — see systemd.services below),
-      # Hermes' non-bypassable "hardline" rules (rm -rf /, fork bombs, /dev/sd
-      # writes, sudo -S), and the fact that hermes is its own disposable Proxmox
-      # VM. Blast radius of a destructive command is bounded to the vault + agent
-      # state on that VM.
-      approvals.mode = "off";
-
-      # Terminal tool backend = `local` (the module default). This governs
-      # `terminal`, `execute_code`, AND the file tools (read_file/write_file/
-      # search_files) — under `local` they all run as host subprocesses of the
-      # agent, i.e. as the `hermes` service user, with NO container. There is thus
-      # no libpod DB / runroot / pause process / persistent container to corrupt on
-      # a mid-drain SIGKILL — the class of wedge that plagued the podman backend is
-      # gone by construction. Confinement comes from the systemd unit sandbox
-      # (ProtectSystem=strict + ReadWritePaths + ReadOnlyPaths + PrivateTmp, see
-      # systemd.services.hermes-agent below), not a container. The host toolchain
-      # the tools need (python3/node/nix/openssh/…) is provided via extraPackages.
-      # The vault and the homelab repo are plain host paths the tools see directly
-      # ($OBSIDIAN_VAULT_PATH / $HOMELAB_REPO_PATH in environment above); the agent
-      # commits AND pushes with the Forgejo key on ~/.ssh (main stays branch-
-      # protected on Forgejo, so it can only land feature branches via a PR).
-      terminal = {
-        backend = "local";
-        timeout = 180;
-      };
-
-      # External memory provider: Holographic — fully local, no deps/infra.
-      # Stores facts in a local SQLite FTS5 DB at $HERMES_HOME/memory_store.db.
-      # NumPy (added via extraPythonPackages below) enables HRR algebra
-      # (probe/reason compositional queries).
-      # memory_char_limit/user_char_limit gate the BUILT-IN `memory` toolset
-      # (MEMORY.md/USER.md files) — separate from the holographic fact_store
-      # below, but same freeform `memory` key so they deep-merge fine. 4x the
-      # module defaults (2200/1375) to give the agent more headroom.
-      memory = {
-        provider = "holographic";
-        memory_char_limit = 8800;
-        user_char_limit = 5500;
-      };
-      plugins.hermes-memory-store = {
-        # Auto-extract facts from the conversation at session end.
-        auto_extract = true;
-        default_trust = 0.5;
-        # Lowered from the module default (0.3) so more auto-extracted facts
-        # clear the bar to persist/surface in retrieval.
-        min_trust_threshold = 0.2;
-      };
-
-      # Enable the moshi-hooks plugin (code files installed into the agent state
-      # dir by `moshi-hook install`, see ./moshi-hook.nix). Declaring it here makes
-      # the registration Nix-owned so it survives a state-dir wipe. This key is the
-      # SOLE reason `moshi-hook install` must not run on every boot: it rewrites
-      # config.yaml with a conflicting list indent and corrupts the file (see the
-      # stamp guard in ./moshi-hook.nix and AGENTS.md §6). Keep Nix the only steady-
-      # state writer of plugins.enabled.
-      plugins.enabled = ["moshi-hooks"];
-
-      # Web search via the self-hosted SearXNG on the containers host (free,
-      # no API key — reads SEARXNG_URL from environment above). Search-only:
-      # SearXNG does not back `web_extract`, so that tool stays unconfigured.
-      web.search_backend = "searxng";
+    # Hermes reads SOUL.md and memories/ from HERMES_HOME, NOT from the working
+    # directory — `documents` would install them into workspace/ where nothing
+    # reads them. (This was open question §3.2 in the findings doc; confirmed
+    # against nix/moduleCommon.nix on v2026.9.21, which now asserts on
+    # `documents` without an explicit workingDirectory for exactly this reason.)
+    hermesHomeFiles = {
+      "SOUL.md" = ./souls/default.md;
+      "memories/USER.md" = ./souls/user.md;
     };
 
-    # NumPy enables Holographic's HRR algebra (probe/reason). Matches the
-    # agent's Python 3.12 env.
+    # MCP servers. axon-gateway aggregates the homelab backends behind one
+    # authenticated endpoint; the header value is expanded by Hermes from the
+    # agenix-loaded env var at runtime, never baked into a store path.
+    mcpServers = {
+      axon-gateway = {
+        url = "https://axon.homelab.local/mcp";
+        headers.Authorization = "Bearer \${AXON_GATEWAY_TOKEN}";
+      };
+      agentmail = {
+        url = "https://mcp.agentmail.to/mcp";
+        headers."x-api-key" = "\${AGENTMAIL_API_KEY}";
+      };
+    };
+
+    # NumPy enables Holographic's HRR algebra (probe/reason).
     extraPythonPackages = [pkgs.python312Packages.numpy];
 
-    # Host toolchain for the `local` terminal backend. The module only puts
-    # [bash coreutils git] on the service PATH; under `local` the agent's
-    # terminal/execute_code tools run with that PATH (no container image), so we
-    # provision what the old python-nodejs image shipped plus what the flake
-    # workflow needs:
-    #   - python3/nodejs  → execute_code RPC + typical shell workflows
-    #   - curl/jq/grep/sed/awk/find → everyday shell tooling
-    #   - nix    → `nix develop -c just fmt` + scoped `nix eval` to validate flake
-    #              changes; talks to the host nix-daemon natively (no socket mount,
-    #              no NIX_REMOTE — /etc/nix/nix.conf already enables flakes)
-    #   - openssh → `git push` over ssh (the module PATH lacks the ssh binary);
-    #              the agent now pushes its own feature branches with the Forgejo key
+    # Host toolchain for the `local` backend. The module only puts
+    # [bash coreutils git] on the service PATH, and under `local` the agent's
+    # terminal/execute_code tools inherit exactly that — so everything they need
+    # is provisioned here:
+    #   python3/nodejs      → execute_code + ordinary shell work
+    #   curl/jq/grep/sed/awk/find → everyday tooling
+    #   nix                 → `nix develop -c just fmt` and scoped `nix eval`;
+    #                         talks to the host nix-daemon natively
+    #   openssh             → `git push` over ssh
+    #   opencode/claude-code → the harness the coding profile shells out to
     extraPackages = with pkgs; [
       python3
       nodejs
@@ -662,195 +647,148 @@ in {
       findutils
       nix
       openssh
+      opencode
+      claude-code
     ];
-
-    # System prompt and user context
-    documents = {
-      "SOUL.md" = ''
-        # Hermes - Homelab Assistant
-
-        You are Hermes, an AI assistant for managing a NixOS-based homelab.
-        You have access to Home Assistant for smart home control.
-
-        ## Capabilities
-        - Control smart home devices via Home Assistant MCP
-        - Answer questions about the homelab infrastructure
-        - Help with automation tasks
-        - Maintain a shared knowledge base (notes, lists, todos)
-
-        ## Shared Knowledge Base
-        - A shared Obsidian vault lives at the path in `$OBSIDIAN_VAULT_PATH`.
-          Use the `obsidian` note-taking skill (file tools: read_file,
-          write_file, patch, search_files) to read and edit notes, grocery
-          lists, and todos there. Use `- [ ]` / `- [x]` checkboxes for tasks
-          and `[[wikilinks]]` to connect notes.
-        - There is no built-in todo tool; track all tasks, todos, and lists as
-          checkboxes in the vault.
-        - SAVING YOUR EDITS: after changing notes, commit AND push via the
-          terminal:
-          `git -C "$OBSIDIAN_VAULT_PATH" add -A && git -C "$OBSIDIAN_VAULT_PATH"
-          commit -m "<concise description of the change>" && git -C
-          "$OBSIDIAN_VAULT_PATH" push`. Write a meaningful message (e.g. "add eggs
-          + milk to grocery list"), not a generic one. Your git is configured with
-          the Forgejo key, so the push goes straight to Forgejo.
-        - The user also edits the vault from Obsidian; a host timer pulls those
-          changes in for you, so your view refreshes on its own. Just re-read a
-          note if it looks stale.
-        - Keep commits small; never run `git reset --hard` or force-push in the
-          vault.
-
-        ## Homelab Config Repo
-        - This homelab's NixOS/IaC config repo is checked out at the path in
-          `$HOMELAB_REPO_PATH`. Read it to understand the infrastructure and to
-          make changes the user asks for. It is a Nix flake; `AGENTS.md` at its
-          root documents the conventions and `just` commands.
-        - NEVER commit to `main` (it is branch-protected and your commit would be
-          rejected anyway). Work one FEATURE BRANCH per task, started from a fresh
-          `origin/main`:
-          `git -C "$HOMELAB_REPO_PATH" fetch origin && git -C "$HOMELAB_REPO_PATH" switch -c feat/<short-slug> origin/main`
-        - Edit files with your file tools, then VALIDATE before committing.
-          First format: `cd "$HOMELAB_REPO_PATH" && nix develop -c just fmt`.
-          Then evaluate ONLY the host(s) you changed — do NOT run the full
-          `just nixos-check` / `nix flake check`: it evaluates all ~16 hosts and
-          gets OOM-killed (exit 137) on the host nix-daemon. A scoped eval fully
-          type-checks your change instead:
-          `nix eval ".#nixosConfigurations.<host>.config.system.build.toplevel.drvPath"`
-          (run once per edited host). A printed `/nix/store/….drv` = clean; an
-          error = fix and re-run. (`nix` is on your PATH; `nix develop` provides
-          `just`, `alejandra`, `tofu` from the repo's dev shell.)
-        - Commit THROUGH the dev shell so the repo's pre-commit hooks (`alejandra`,
-          `keep-sorted`) are on PATH and run; a bare `git commit` fails them. Do
-          NOT use `--no-verify`:
-          `git -C "$HOMELAB_REPO_PATH" add -A && cd "$HOMELAB_REPO_PATH" && nix develop -c git commit -m "<concise description>"`.
-        - SAVING/SHARING: push your feature branch to Forgejo yourself with the
-          Forgejo key your git is configured with:
-          `git -C "$HOMELAB_REPO_PATH" push -u origin feat/<short-slug>`. A push to
-          `main` is rejected by branch protection — that is expected. You do NOT
-          open PRs, merge, or deploy: the user reviews the branch, opens the pull
-          request, and deploys (`colmena`) when at the host.
-        - Never run `git reset --hard`, force-push, or switch back to commit on
-          `main`. If a task is unrelated to the previous one, start a brand-new
-          branch from `origin/main`.
-
-        ## Scheduled (cron) runs — delivering results
-        - When you run as an UNATTENDED scheduled/cron job, there is NO chat to
-          reply into: Open WebUI is pull-based and cannot receive a
-          server-initiated message, so anything you "reply" is lost. You MUST
-          deliver every cron result out-of-band.
-        - Load and follow the `cron-result-delivery` skill. It delivers through
-          two channels: (1) append the full result to `Inbox.md` in the vault,
-          then commit and push it, and (2) send a short Home Assistant push via
-          the `hamcp_call_service` tool (`domain="notify"`,
-          `service="mobile_app_iphone_von_amadeus"`).
-        - Store a memory fact reminding you to run this delivery on every
-          scheduled job, so future cron runs recall it.
-
-        ## Memory & Fact Store
-        - Before answering anything about the user, their preferences, past
-          decisions, or homelab history: probe/reason with `fact_store`
-          FIRST. Don't answer from recall alone — check.
-        - The moment you learn something durable (a preference, a decision,
-          an infra fact, a recurring pattern), add or update it via
-          `fact_store` immediately. Don't wait for end-of-session
-          auto_extract — that's a backstop, not your primary path.
-        - Prefer updating an existing fact over creating a near-duplicate.
-        - `fact_store` (structured, queryable facts) and the `memory` tool
-          (MEMORY.md/USER.md free text) are separate — use both.
-
-        ## Guidelines
-        - Be concise and helpful
-        - Confirm before taking actions that affect physical devices
-        - Report errors clearly
-      '';
-      "USER.md" = ''
-        # User Context
-
-        The user manages a Proxmox-based homelab running NixOS VMs.
-        Infrastructure includes: database, monitoring (otel), DNS, UniFi controller,
-        containers, and various MCP services.
-
-        Network: 192.168.2.0/24
-        Tailnet: dropbear-butterfly.ts.net
-      '';
-    };
-
-    # MCP Servers - axon-gateway aggregates the homelab MCP backends behind one
-    # authenticated endpoint. The header value is expanded by Hermes from the
-    # agenix-loaded AXON_GATEWAY_TOKEN environment variable at runtime.
-    mcpServers = {
-      axon-gateway = {
-        url = "https://axon.homelab.local/mcp";
-        headers.Authorization = "Bearer \${AXON_GATEWAY_TOKEN}";
-      };
-      # AgentMail hosted MCP — gives the agent its own email inbox(es) to send,
-      # receive, reply and manage threads. Authenticated with the x-api-key
-      # header, expanded by Hermes from the agenix-loaded AGENTMAIL_API_KEY.
-      agentmail = {
-        url = "https://mcp.agentmail.to/mcp";
-        headers."x-api-key" = "\${AGENTMAIL_API_KEY}";
-      };
-    };
-
-    # Keep CLI available for debugging
-    addToSystemPackages = true;
   };
 
-  # Order hermes-agent after secrets, tailscale, and the git/vault/repo setup so
-  # its native tools have DNS, the Forgejo key on ~/.ssh, and the repo checkout
-  # available at startup. The module already puts [package bash coreutils git] +
-  # extraPackages on the service PATH, so no path override is needed here.
+  # ── The other four profiles ───────────────────────────────────────────────
+  homelab.hermesProfiles.profiles = {
+    coding = {
+      description = "Drives opencode/claude in ~/code; the only profile with a shell.";
+      soul = ./souls/coding.md;
+      memories."USER.md" = ./souls/user.md;
+      environmentFiles = [config.age.secrets.hermes-coding-env.path];
+      settings =
+        commonSettings
+        // cronSettings
+        // (mkToolsets (baseTools ++ ["terminal" "code_execution" "delegation" "cronjob"]))
+        // {
+          model = "deepseek-v4-pro";
+
+          # Checkpoints: snapshot a project before destructive operations into a
+          # shadow git store, restorable with /rollback. Opt-in upstream
+          # (`enabled: false` by default) and enabled for THIS profile only —
+          # it is the one that edits files and shells out to other agents. The
+          # store is per Hermes home, so one 500 MB cap, not five.
+          #
+          # `git gc` reclaims space on a background sweep that can take tens of
+          # seconds; on a 4-core guest also running nested opencode, keep the
+          # sweep to once a day.
+          #
+          # These are NOT backups: 7-day retention, working-directory scope.
+          # Forgejo is the durable copy, which is the other reason this profile
+          # pushes main.
+          checkpoints = {
+            enabled = true;
+            max_snapshots = 20;
+            max_total_size_mb = 500;
+            max_file_size_mb = 10;
+            auto_prune = true;
+            retention_days = 7;
+            min_interval_hours = 24;
+          };
+        };
+    };
+
+    research = {
+      description = "Reading and synthesis; web tools, no shell.";
+      soul = ./souls/research.md;
+      memories."USER.md" = ./souls/user.md;
+      environmentFiles = [config.age.secrets.hermes-research-env.path];
+      settings =
+        commonSettings
+        // webSettings
+        // cronSettings
+        // (mkToolsets (baseTools ++ ["web" "cronjob"]))
+        // {
+          model = "deepseek-v4-pro";
+        };
+    };
+
+    kb = {
+      description = "Notes and knowledge capture; memory-first, no shell, no web.";
+      soul = ./souls/kb.md;
+      memories."USER.md" = ./souls/user.md;
+      environmentFiles = [config.age.secrets.hermes-kb-env.path];
+      settings =
+        commonSettings
+        // (mkToolsets baseTools)
+        // {
+          model = "deepseek-v4-flash";
+        };
+    };
+
+    infra = {
+      description = "Homelab observability via the axon-gateway MCP backends.";
+      soul = ./souls/infra.md;
+      memories."USER.md" = ./souls/user.md;
+      environmentFiles = [
+        config.age.secrets.hermes-infra-env.path
+        # Expands ${AXON_GATEWAY_TOKEN} in the mcp_servers header below.
+        config.age.secrets.axon-gateway-env.path
+      ];
+      settings =
+        commonSettings
+        // axonMcpSettings
+        // cronSettings
+        // (mkToolsets (baseTools ++ ["cronjob"]))
+        // {
+          model = "deepseek-v4-pro";
+          # Deliberately NO terminal/code_execution: everything this profile
+          # needs arrives through MCP, and the axon gateway's tools are already
+          # a wide read surface over the whole fleet. Adding a shell on top
+          # would widen the blast radius of a bad tool result for no capability
+          # gain — it has no sudo and no deploy key either way.
+        };
+    };
+  };
+
+  # ── Agent unit hardening ──────────────────────────────────────────────────
   systemd.services.hermes-agent = {
-    wants = ["agenix.target" "hermes-vault-bootstrap.service" "hermes-repo-sync.service" "moshi-hook-setup.service"];
-    # `requires` (not `wants`) on the config gate: a config.yaml we cannot parse
-    # must BLOCK the start, because hermes would otherwise fail open to an empty
-    # config and run for days on built-in defaults. See configCheck above.
-    requires = ["hermes-config-check.service"];
-    after = [
-      "agenix.target"
-      "tailscaled.service"
-      "hermes-vault-git-setup.service"
-      "hermes-vault-bootstrap.service"
-      "hermes-repo-sync.service"
-      "moshi-hook-setup.service"
-      "hermes-config-check.service"
-    ];
-    # See secretNonce above: forces a restart when a secret, SOUL.md, USER.md,
-    # config.yaml, or a skill is changed by a deploy.
+    wants = ["agenix.target"];
+    after = ["agenix.target" "tailscaled.service"];
+    # Config, SOUL.md and the .env files are written at stable paths, so the
+    # unit definition does not change when they do. See secretNonce above.
     restartTriggers = [secretNonce];
     serviceConfig = {
-      # ── Config integrity ("must stay nix") ──────────────────────────────────
-      # Under the `local` backend the agent's tools run AS the hermes user, and
-      # config.yaml / SOUL.md / USER.md are owned by hermes — so without this the
-      # agent could rewrite its own config and system prompt at runtime. Those
-      # files are (re)written on every deploy by a ROOT activation script that runs
-      # OUTSIDE this unit's mount namespace, so binding them read-only here stops
-      # the running agent from modifying them WITHOUT breaking the Nix merge. Nix
-      # stays the sole source of truth. They are single files inside the module's
-      # ReadWritePaths (stateDir, workingDirectory); systemd's most-specific-path
-      # rule keeps the rest writable — the memory DB, cron jobs, sessions, logs,
-      # the vault, and the repo checkout. (config.yaml lives in .hermes; the
-      # documents install to workingDirectory == stateDir/workspace.)
+      # ── Config integrity ──────────────────────────────────────────────────
+      # Under the `local` backend the agent's tools run AS the hermes user and
+      # these files are owned by hermes, so without this the agent could rewrite
+      # its own model and system prompt at runtime. They are (re)written on every
+      # deploy by ROOT activation scripts that run OUTSIDE this unit's mount
+      # namespace, so binding them read-only here stops the running agent
+      # without breaking the Nix merge. Nix stays the source of truth.
+      #
+      # Single files inside the module's ReadWritePaths; systemd's most-specific
+      # -path rule keeps the rest writable — memory DB, cron jobs, sessions,
+      # checkpoints, logs. The four secondary profiles' pairs are appended by
+      # modules/hermes-profiles.nix (unitOption concatenates list definitions).
+      #
+      # Upstream v2026.9.21 also hard-blocks write_file/patch on ~/.ssh, .env
+      # and protected instruction files — keep ours as well: a bind mount is
+      # enforced by the kernel, theirs by the agent.
       ReadOnlyPaths = [
-        "${hermesHome}/.hermes/config.yaml"
-        "${hermesHome}/workspace/SOUL.md"
-        "${hermesHome}/workspace/USER.md"
+        "${hermesHome}/config.yaml"
+        "${hermesHome}/SOUL.md"
       ];
-      # ── Network allow-list (added 2026-09-14) ────────────────────────────────
-      # The agent runs a shell with approvals off and has web/browser tools,
-      # so a prompt injection in a fetched page or a vault note is a shell on
-      # the LAN. Confine it to the few LAN peers it legitimately needs; the
-      # internet (DeepSeek, AgentMail, nix substituters) stays open because
-      # deny lists only these private ranges. Applies to every subprocess of
-      # the unit (terminal/code tools included) -- it is a cgroup BPF filter.
+
+      # ── Network allow-list ────────────────────────────────────────────────
+      # The agent runs a shell and has web tools, so a prompt injection in a
+      # fetched page is a shell on the LAN. Confine it to the peers it actually
+      # needs; the internet (DeepSeek, AgentMail, opencode-zen, Anthropic, nix
+      # substituters) stays open because the deny list only covers private
+      # ranges. This is a cgroup BPF filter, so it applies to every subprocess —
+      # the nested opencode/claude runs included.
       #   .145 dns, .1 router (second resolver in modules/common.nix)
-      #   .178 forgejo (vault + repo push), .152 mcp (axon gateway)
-      #   .149 containers (searxng)
-      # Everything the agent talks to on the LAN goes through those; the
-      # database, otel, ca, jellyfin, unifi, development hosts are all
-      # unreachable from inside the unit on purpose. Extend the list when a
-      # skill needs a new peer -- an omission shows up as "connection refused"
-      # in the agent's tool output, not as a silent failure.
-      IPAddressDeny = ["192.168.0.0/16" "10.0.0.0/8" "100.64.0.0/10" "172.16.0.0/12"];
+      #   .178 forgejo (repo push)      .152 mcp (axon gateway)
+      #   .149 containers (searxng)     .102 pocketid (OIDC discovery)
+      # 100.64.0.0/10 is NOT fully denied: the tailnet carries the Pocket ID
+      # issuer and the ventara-gateway MCP, and there is no LAN equivalent for
+      # the latter. Denying CGNAT wholesale and allowing back two moving
+      # addresses would break on every tailnet re-IP; the tailnet is a trusted
+      # network here and the host firewall (below) is what bounds inbound.
+      IPAddressDeny = ["192.168.0.0/16" "10.0.0.0/8" "172.16.0.0/12"];
       IPAddressAllow = [
         "localhost"
         "192.168.2.145"
@@ -858,223 +796,106 @@ in {
         "192.168.2.178"
         "192.168.2.152"
         "192.168.2.149"
+        "192.168.2.102"
       ];
-      # ── Resource caps (defense-in-depth) ────────────────────────────────────
-      # The tools now share this unit's cgroup. ProtectSystem=strict (module)
-      # bounds writes, not CPU/pids/mem. Bound the real DoS vector — runaway
-      # forks — and add a soft memory throttle. Deliberately NO hard MemoryMax:
-      # pure `nix eval` (the agent's flake validation) runs client-side in THIS
-      # unit, and a tight cap would OOM-kill legit scoped evals; heavy builds run
-      # in the separate nix-daemon.service cgroup, unaffected by this.
-      TasksMax = 512;
-      LimitNPROC = 512;
-      MemoryHigh = "3G";
+
+      # ── Resource caps ─────────────────────────────────────────────────────
+      # Raised from the old host's 3G/512/512. One gateway now serves five
+      # profiles, and the coding profile shells out to a nested node/opencode
+      # process that may itself realise a devShell — either exceeds the old caps
+      # on its own. Deliberately NO hard MemoryMax: a pure `nix eval` runs
+      # client-side in THIS unit and a tight cap would OOM-kill legitimate
+      # scoped evals; heavy builds run in nix-daemon.service's own cgroup.
+      TasksMax = 4096;
+      LimitNPROC = 4096;
+      MemoryHigh = "6G";
+
       # The module ships TimeoutStopSec=90s, but the gateway drains up to
-      # drain_timeout=180s on stop/restart; 90s SIGKILLs it mid-drain. Give the
-      # drain room so shutdowns are clean. mkForce overrides the module's 90s.
+      # drain_timeout=180s on stop/restart; 90s SIGKILLs it mid-drain.
       TimeoutStopSec = lib.mkForce 210;
-      # NB: NoNewPrivileges reverts to the module's `true` now that the podman
-      # setuid newuidmap/newgidmap requirement is gone (we no longer force it off).
     };
   };
 
-  # ── Knowledge-base vault sync ─────────────────────────────────────────────
-  # Write ~/.ssh/config + ~/.gitconfig for the hermes user (one-shot, persists).
-  systemd.services.hermes-vault-git-setup = {
-    description = "Set up git/ssh config for the hermes knowledge-base vault";
-    wantedBy = ["multi-user.target"];
-    after = ["agenix.target"];
-    wants = ["agenix.target"];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "hermes";
-      Group = "hermes";
-      ExecStart = vaultGitSetup;
-    };
-  };
-
-  # Vault checkout bootstrap: guarantee the vault EXISTS at boot (clone-if-missing
-  # + one fetch), mirroring hermes-repo-sync below. No timer/path/auto-push — the
-  # agent now pulls your Obsidian edits before writing and pushes its commits
-  # directly (see the obsidian-vault-notes skill + SOUL.md).
-  systemd.services.hermes-vault-bootstrap = {
-    description = "Bootstrap + refresh the hermes Obsidian vault checkout";
-    wantedBy = ["multi-user.target"];
-    after = ["hermes-vault-git-setup.service" "network-online.target"];
-    wants = ["network-online.target"];
-    requires = ["hermes-vault-git-setup.service"];
-    serviceConfig = {
-      Type = "oneshot";
-      User = "hermes";
-      Group = "hermes";
-      ExecStart = vaultBootstrap;
-    };
-  };
-
-  # ── Homelab config repo bootstrap ─────────────────────────────────────────
-  # Reuses the git/ssh config installed by hermes-vault-git-setup (the
-  # forgejo.homelab.local Host block + hermes-bot key apply to this repo too).
-  # Under the `local` backend the agent fetches + pushes its own feature branches
-  # directly with the Forgejo key (see SOUL.md), so there is NO host-side pusher.
-  # This oneshot only guarantees the checkout EXISTS at ${repoPath} and keeps
-  # origin/main fresh (clone-if-missing + one fetch). Runs at boot and on a slow
-  # timer; never commits/merges/pushes.
-  systemd.services.hermes-repo-sync = {
-    description = "Bootstrap + refresh the homelab config repo checkout for the hermes agent";
-    wantedBy = ["multi-user.target"];
-    after = ["hermes-vault-git-setup.service" "network-online.target"];
-    wants = ["network-online.target"];
-    requires = ["hermes-vault-git-setup.service"];
-    serviceConfig = {
-      Type = "oneshot";
-      User = "hermes";
-      Group = "hermes";
-      ExecStart = repoSync;
-    };
-  };
-
-  # ── config.yaml integrity gate ────────────────────────────────────────────
-  # Ordered between the last non-Nix writer (moshi-hook-setup) and hermes-agent,
-  # which `requires` this unit — so a config.yaml that cannot be parsed or has no
-  # `model` fails the start loudly instead of silently demoting the agent to
-  # built-in defaults. Runs as hermes so the rewritten file keeps its ownership.
-  systemd.services.hermes-config-check = {
-    description = "Validate + repair the hermes agent config.yaml before startup";
-    after = ["moshi-hook-setup.service"];
-    wants = ["moshi-hook-setup.service"];
-    before = ["hermes-agent.service"];
-    # `RemainAfterExit` means this only ever runs ONCE per boot. On a moshi-hook
-    # version bump, colmena restarts moshi-hook-setup mid-deploy — long after
-    # this unit went active at boot — so `moshi-hook install` corrupted
-    # config.yaml with nothing left to repair it. The damage then surfaced on the
-    # NEXT deploy, where the `hermes-agent-setup` ACTIVATION script parses the
-    # file before any unit runs and dies with a YAML ParserError (exit 2), which
-    # this unit's `before = hermes-agent.service` ordering cannot prevent —
-    # activation scripts run during switch-to-configuration, ahead of all units.
-    #
-    # PartOf propagates moshi-hook-setup's restart to this unit, and `after=`
-    # sequences it behind the install, so the repair always follows a rewrite.
-    partOf = ["moshi-hook-setup.service"];
-    # `partOf` only covers the moshi-hook path. Every activation ALSO re-runs
-    # hermes-config-merge, which rewrites config.yaml — and that alone leaves this
-    # unit active-since-boot, so the gate never sees the merged file. Harmless
-    # while hermes-agent also stayed up across deploys; not harmless now that
-    # secretNonce restarts it, because the agent would then load a config this
-    # unit never validated. Sharing the nonce re-runs the check and the agent
-    # together, in `before =` order. Observed 2026-07-28: agent restarted at
-    # 12:20, this unit's last run was the previous day.
-    restartTriggers = [secretNonce];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      User = "hermes";
-      Group = "hermes";
-      ExecStart = "${configCheck} ${hermesHome}/.hermes/config.yaml";
-    };
-  };
-
-  # Slow timer: keeps origin/main fresh for the agent to branch from. (The agent
-  # also fetches itself before branching; this is just a background top-up.)
-  systemd.timers.hermes-repo-sync = {
-    description = "Periodic homelab config repo fetch";
-    wantedBy = ["timers.target"];
-    timerConfig = {
-      OnBootSec = "2min";
-      OnUnitActiveSec = "5min";
-      AccuracySec = "1min";
-    };
-  };
-
-  # Caddy reverse proxy - Tailscale-only access
+  # ── Dashboard vhost ───────────────────────────────────────────────────────
   services.caddy = {
     enable = true;
-
-    # Tailscale hostname
-    virtualHosts."homelab-hermes.dropbear-butterfly.ts.net" = {
-      extraConfig = ''
-        tls {
-          get_certificate tailscale
-        }
-
-        handle {
-          reverse_proxy http://localhost:8642
-        }
-      '';
-    };
-
-    # Local network hostname with step-ca certificate
-    virtualHosts."hermes.homelab.local hermes.homelab.internal" = {
+    virtualHosts."${dashboardHost} hermes-dashboard.homelab.local" = {
       extraConfig = ''
         tls {
           ca https://ca.homelab.local:8443/acme/acme/directory
         }
 
         handle {
-          reverse_proxy http://localhost:8642
+          # 127.0.0.1, never `localhost`: /etc/resolv.conf on these hosts lists a
+          # dead `nameserver ::1`, and every `reverse_proxy localhost:…` vhost
+          # hung on that timeout.
+          reverse_proxy 127.0.0.1:${toString dashboardPort}
         }
       '';
     };
   };
 
-  # Allow Caddy to get Tailscale certs
-  services.tailscale.permitCertUid = "caddy";
-
-  # Give Caddy access to Tailscale socket for cert fetching
-  systemd.services.caddy = {
-    after = ["tailscaled.service"];
-    wants = ["tailscaled.service"];
-    serviceConfig.BindPaths = ["/run/tailscale/tailscaled.sock"];
-  };
-
-  # Strict firewall - Tailscale only, no LAN exposure
+  # ── Firewall — no bypass path ─────────────────────────────────────────────
+  # NOTE what is absent: `trustedInterfaces = ["tailscale0"]`, which every other
+  # host in this repo sets. That line accepts EVERY port from the tailnet, and
+  # this is the one host running an agent with a shell — so nothing here is open
+  # merely because of the interface it arrived on. The dashboard's auth gate
+  # would still challenge a direct connection, but a single door with two locks
+  # beats two doors with one each.
   networking.firewall = {
     enable = true;
-    trustedInterfaces = ["tailscale0"];
-    # Only allow SSH and node exporter on LAN (for initial setup and monitoring)
     allowedTCPPorts = [
-      22 # SSH
-      443 # HTTPS
-      9100 # Node exporter
+      22 # ssh (also the mosh handshake)
+      443 # Caddy: the dashboard vhost, and nothing else
+      9100 # node exporter (otel scrapes from 192.168.2.135)
     ];
-    # Block all other LAN access - hermes web UI only via Tailscale
+    allowedUDPPortRanges = [
+      {
+        from = 60000;
+        to = 61000;
+      } # mosh
+    ];
+    # tailscaled's own inbound port. Without it every session is relayed through
+    # DERP instead of connecting directly. Not a hole — it is wireguard.
+    allowedUDPPorts = [config.services.tailscale.port];
+    #
+    # Deliberately NOT listed:
+    #   9119 — the dashboard. Reachable only from 127.0.0.1, i.e. only through
+    #          Caddy. This is the whole point.
+    #   8642 — the api_server. Gone entirely: no key, no vhost, no listener.
+    # `checkReversePath = "loose"` comes from modules/tailscale.nix and must
+    # stay. Tailscale ACLs gate ports before this firewall ever sees them, but
+    # they live outside this repo — treat them as a bonus, never as the control.
   };
 
   environment.systemPackages = with pkgs; [
-    # Minimal tools for debugging
-    jq
+    # keep-sorted start
+    bat
+    btop
+    # bun + nodejs: opencode's global plugins (moshi-hooks.ts, herdr-agent-state.js)
+    # import @opencode-ai/plugin and bun:sqlite, and opencode bootstraps their
+    # node_modules on first run.
+    bun
+    claude-code
     curl
-    # Vault sync / manual conflict resolution
-    git
+    eza
+    fd
+    fzf
     htop
-    openssh
-    # Launch the interactive Hermes agent TUI as the hermes service user from a
-    # hermes-readable cwd (its workspace repo). Avoids the
-    # `Permission denied: '/home/amadeus/.git'` git-discovery error you hit when
-    # starting it from amadeus's home (mode 0700). amadeus has passwordless sudo.
-    (writeShellScriptBin "launch-hermes" ''
-      exec sudo -u hermes bash -lc 'cd ~/workspace/pve-nixos-homelab && exec hermes'
-    '')
-    # opencode CLI. opencode only exposes the full (paid) opencode-zen catalog
-    # when the key lives in its auth.json credential store — the OPENCODE_ZEN_API_KEY
-    # env var only ever surfaces the 6 free models. So this wrapper materializes
-    # ~/.local/share/opencode/auth.json from the agenix key on each launch, then
-    # execs opencode with NO env var set (matching a normal `opencode auth login`).
-    # Run as the hermes user (which owns the secret): `sudo -u hermes -i`, then
-    # `opencode`. NB: the key in hermes-opencode-zen-key must be an account key
-    # with billing, or only the free models appear.
-    (writeShellScriptBin "opencode" ''
-      envfile=${config.age.secrets.hermes-opencode-zen-key.path}
-      authfile="''${XDG_DATA_HOME:-$HOME/.local/share}/opencode/auth.json"
-      if [ -r "$envfile" ]; then
-        set -a; . "$envfile"; set +a
-        if [ -n "''${OPENCODE_ZEN_API_KEY:-}" ]; then
-          mkdir -p "$(dirname "$authfile")"
-          (umask 077; printf '{"opencode":{"type":"api","key":"%s"}}\n' "$OPENCODE_ZEN_API_KEY" > "$authfile")
-        fi
-        unset OPENCODE_ZEN_API_KEY
-      fi
-      exec ${pkgs.opencode}/bin/opencode "$@"
-    '')
+    jq
+    neovim
+    nodejs
+    opencode
+    ripgrep
+    tmux
+    wget
+    # keep-sorted end
   ];
+
+  # Convenience aliases for the interactive account. The per-profile wrappers
+  # (~/.local/bin/coding, /research, …) are generated by hermes itself.
+  environment.shellAliases = {
+    op = "opencode";
+    cl = "claude";
+  };
 }
