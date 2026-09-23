@@ -55,10 +55,8 @@
       WEBUI_URL = "https://homelab-containers.dropbear-butterfly.ts.net";
       # CORS must list every origin used to reach the UI, or WebSockets break.
       CORS_ALLOW_ORIGIN = "https://homelab-containers.dropbear-butterfly.ts.net;https://containers.homelab.local";
-      # No account creation at all, by either path. This UI is the front door
-      # to the hermes agent, which runs a shell as its service user with
-      # approvals off (hosts/hermes) -- so "can log in here" means "can run
-      # commands on hermes". Until 2026-09-14 any Pocket ID account could
+      # No account creation at all, by either path. Until 2026-09-14 any
+      # Pocket ID account could
       # self-provision on first login; now only accounts that already exist
       # AND carry the `admins` group can sign in. To add a person: put them
       # in `admins` in Pocket ID, flip ENABLE_OAUTH_SIGNUP to "true" for one
@@ -83,29 +81,29 @@
       # secrets env file). Open WebUI pads the key list with empty strings
       # when fewer keys than URLs are provided.
       #   1. wotan vLLM   — empty key (vLLM runs without --api-key).
-      #   2. hermes agent — requires the hermes API_SERVER_KEY as a bearer
-      #      token, so its key MUST be the 2nd entry in OPENAI_API_KEYS.
-      # hermes binds 127.0.0.1:8642 and is reached via its Caddy vhost on 443
-      # (step-ca TLS, trusted on this host). The Tailscale name does not
-      # resolve from here, so use the local DNS name. The model surfaces in
-      # the UI as "hermes-agent" (API_SERVER_MODEL_NAME default).
+      # `https://hermes.homelab.local/v1` was the 2nd entry until the 2026-09
+      # hermes rebuild (docs/plans/hermes-rebuild.md §12): that host no longer
+      # runs an api_server at all -- it is reached as an interactive agent over
+      # ssh/mosh and its own OIDC-gated dashboard, not as a model backend. The
+      # matching 2nd entry in OPENAI_API_KEYS (the hermes API_SERVER_KEY) is
+      # gone with it; leaving the URL here would give Open WebUI a dead backend.
       # Note: custom endpoint names/tags cannot be set via env vars; they
       # live in the OPENAI_API_CONFIGS database table which is UI-managed.
-      OPENAI_API_BASE_URLS = "http://wotan.homelab.local:10808/v1;https://hermes.homelab.local/v1";
+      OPENAI_API_BASE_URLS = "http://wotan.homelab.local:10808/v1";
     };
     # Secrets file should contain:
     # OAUTH_CLIENT_ID=...
     # OAUTH_CLIENT_SECRET=...
-    # OPENAI_API_KEYS=;<hermes API_SERVER_KEY>
+    # OPENAI_API_KEYS=
     #   Semicolon-separated, positional to OPENAI_API_BASE_URLS above:
-    #   1st empty (wotan vLLM, no auth), 2nd = hermes API_SERVER_KEY.
+    #   a single empty entry (wotan vLLM runs without --api-key).
     environmentFile = config.age.secrets.open-webui-env.path;
   };
 
   # Open WebUI secrets.
   # The open-webui service runs as a systemd DynamicUser, so there is no static
   # "open-webui" user/group to chown to. systemd reads EnvironmentFile as root
-  # before dropping privileges, so root-only access is sufficient (cf. hermes).
+  # before dropping privileges, so root-only access is sufficient.
   age.secrets.open-webui-env = {
     file = ../../../secrets/open-webui-env.age;
     mode = "0400";
