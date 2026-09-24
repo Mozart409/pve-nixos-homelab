@@ -59,24 +59,44 @@ Companion: `docs/hermes-agent-findings-2026-09-23.md` (upstream state, capabilit
 `gateway.multiplex_profiles` defaults to `true` and is pinned anyway; the
 harness modules got proper options.
 
+**Cleared 2026-09-24:**
+
+1. ~~The five per-profile secrets are PLACEHOLDERS.~~ `secrets/hermes-{default,
+   coding,research,kb,infra}-env.age` now hold real content, repacked from the
+   keys already in `hermes-deepseek-key.age` / `hermes-opencode-zen-key.age`:
+   every profile gets `DEEPSEEK_API_KEY`, and `coding` additionally
+   `OPENCODE_ZEN_API_KEY`. One shared DeepSeek key, not one per profile —
+   §11's "likely split per profile" was dropped as pointless here, since one
+   uid owns all five `.env` files anyway (§5). Split them upstream only if
+   per-profile spend attribution is ever wanted.
+2. ~~`secrets/hermes-forgejo-ssh.age` must be re-minted.~~ Fresh ed25519 key,
+   `SHA256:g3zxErfpKFxrne12DWtZ+kxTBUYVnS0FOBjetumCAhY`, registered on the new
+   `hermes` Forgejo account and **verified** there. The retired `hermes-bot`
+   key is gone from that file.
+
+   Verifying a key in the Forgejo UI has a footgun worth recording: the
+   `ssh-keygen -Y sign` token is **time-bucketed**, not merely reload-scoped —
+   only the current and previous window verify, and the failure reads
+   "The provided SSH key, signature or token do not match or token is
+   out-of-date", which points at the key first and the clock last. Decrypting
+   the agenix key inline puts a passphrase prompt between copying the token and
+   pasting the signature, which is enough to miss the window. Decrypt once to a
+   0600 temp file, then sign; the namespace is the instance host
+   (`homelab-forgejo.dropbear-butterfly.ts.net`), exactly as the UI prints it.
+
 **Still blocking, in order:**
 
-1. **The five per-profile secrets are PLACEHOLDERS.** `secrets/hermes-{default,
-   coding,research,kb,infra}-env.age` were created encrypted to the right
-   recipients but contain only a commented template — no machine here had an
-   age identity to seed them from. `cd secrets && agenix -e hermes-<n>-env.age`
-   for each, with that profile's `DEEPSEEK_API_KEY` (and `OPENCODE_ZEN_API_KEY`
-   where the profile shells out to opencode), before the first deploy.
-2. **`secrets/hermes-forgejo-ssh.age` must be re-minted** for the new `hermes`
-   Forgejo account (§5.2) — it currently holds the retired `hermes-bot` key.
-3. **Re-key after the wipe.** nixos-anywhere mints a fresh host key, so
+1. **Re-key after the wipe.** nixos-anywhere mints a fresh host key, so
    `hostHermes` in `secrets/secrets.nix` must be replaced and `just reencrypt`
    run, or activation dies with "no identity matched any of the recipients".
-4. **The colmena hive entry is still commented out**, deliberately — uncomment
+   This now covers the re-minted Forgejo key and the five profile `.env` files
+   above — all of them are currently encrypted to the OLD `hostHermes`.
+2. **The colmena hive entry is still commented out**, deliberately — uncomment
    it at §13 step 6, after the host exists, so fleet-wide applies keep working
    until then.
-5. Forgejo web UI: create the `hermes` account, register its key, add it to the
-   push whitelist on each protected `main`.
+3. Forgejo web UI: the `hermes` account exists and its key is verified. Still
+   to do — grant it collaborator access to every repo the `coding` profile
+   should touch, and add it to the push whitelist on each protected `main`.
 
 Do not run `colmena apply` from an agent session; `colmena build` is fine,
 though building hermes compiles Rust from source and is slow.
