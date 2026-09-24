@@ -648,6 +648,11 @@ resource "proxmox_virtual_environment_vm" "hermes_vm" {
   # name carries the nixpkgs revision, so it changes on every ISO rebuild --
   # re-upload to the `local` datastore and update all three occurrences, or the
   # next apply fails on a missing volume.
+  #
+  # A plan for this block shows `+ enabled = false`. That is vestigial state,
+  # NOT a disabled drive -- bpg 0.91.0 deprecates `enabled` ("no longer used")
+  # and `file_id` alone attaches it. Do not "fix" it by adding `enabled = true`.
+  # See ca_vm's cdrom block for the long version.
   cdrom {
     file_id   = "local:iso/nixos-homelab-26.11.20260907.dc5d91f-x86_64-linux.iso"
     interface = "ide0"
