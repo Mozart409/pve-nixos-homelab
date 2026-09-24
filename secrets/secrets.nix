@@ -13,7 +13,7 @@ let
   hostFleet = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICLI6UX6dd+pyXOd8TIQ3NY3Ryff2gCH4oTd1YWjvzm8 root@homelab-fleet";
   hostForgejo = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIByBR3nP+bKlGcC6p62Pg5w1cPZsdh1FHBE6RUfbchDo root@homelab-forgejo";
   hostHarbor = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBJmT6FxRSlang9smAuBoq1QhYGtQ4adP4kK1lkLn8Ip root@homelab-harbor";
-  hostHermes = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKBloNkev1cC0W2YBDi0Qk0adUqVwWve1oXK4X5PYnds root@homelab-hermes";
+  hostHermes = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINT6kV2OW2mlBGmK/mA7k1FQAHHDFYN5NbW4Weo379rK root@homelab-hermes"; # minted by the 2026-09-24 rebuild install
   hostJellyfin = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDjBjNv4pvr08UdR2QL72Re3B22cUV+3DQvR2oG3/nsA root@homelab-jellyfin";
   hostMcp = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGkfmvav5dWx4dAbDHcJSuKG32GSmdVdOK+uQ1xjCtse root@homelab-mcp";
   hostOtel = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGz4mCD5XyFkwVaSzzWHhral8WqMGo01nKZM3gAX2vzP amadeus@homelab-otel";
@@ -29,12 +29,20 @@ let
   # secrets below; reviving one is: add its key back here (and to the shared
   # secrets it needs, e.g. axon-gateway-env), `just reencrypt`.
   #
-  # hostHermes is back as of the 2026-09 rebuild (docs/plans/hermes-rebuild.md).
-  # NOTE: the rebuild wipes the VM, and nixos-anywhere mints a FRESH ssh host
-  # key -- so hostHermes above must be replaced with the new one and every
-  # hermes secret re-keyed (`just get-host-key 192.168.2.155`, then
-  # `just reencrypt`) before the first colmena apply, or activation fails with
-  # "no identity matched any of the recipients".
+  # hostHermes is back as of the 2026-09 rebuild (docs/plans/hermes-rebuild.md),
+  # and was replaced above on 2026-09-24 with the key nixos-anywhere minted
+  # during that install. Every hermes secret was re-keyed to it in the same
+  # pass; without that, activation fails with "no identity matched any of the
+  # recipients".
+  #
+  # `just reencrypt` is NOT the command for this -- it hardcodes
+  # `-i ~/.config/age/keys.txt`, which does not exist on wotan. Use the ssh
+  # identity instead, via a passphrase-stripped copy on tmpfs so age (which
+  # cannot talk to ssh-agent) does not prompt once per file:
+  #   cp ~/.ssh/id_ed25519 /run/user/1000/rekey && ssh-keygen -p -N '' -f /run/user/1000/rekey
+  #   cd secrets && agenix -r -i /run/user/1000/rekey && shred -u /run/user/1000/rekey
+  # Verify with sha256sum before/after: age uses a fresh ephemeral key per
+  # encryption, so an UNCHANGED ciphertext means nothing happened.
   users = [amadeus amadeusWotanAge amadeusMacbookAge amadeusMacbook hostDatabase hostOtel hostDns hostUnifi hostContainers hostMcp hostCa hostForgejo hostJellyfin hostZeroclaw hostDevelopment hostWoodpecker hostHermes];
   # keep-sorted end
 in {
