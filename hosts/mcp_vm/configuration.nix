@@ -171,8 +171,10 @@ in {
       prommcp-server = {
         enable = true;
         package = mcpPackages.prommcp-server;
-        # Through otel's Caddy with the query token: raw 9090 is closed since
-        # 2026-09-14.
+        # Through otel's Caddy: raw 9090 is closed since 2026-09-14. That
+        # vhost stopped requiring the query token on 2026-09-24 (browsers
+        # cannot send one); the header below is now ignored, kept so this
+        # server keeps working if the gate ever comes back.
         host = "https://prometheus.homelab.local";
         tokenFile = config.age.secrets.otel-query-token.path;
         bind = "127.0.0.1:8082";

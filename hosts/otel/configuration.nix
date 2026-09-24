@@ -730,8 +730,8 @@
     };
   };
 
-  # Bearer tokens that gate every non-Grafana vhost on this host. Until
-  # 2026-09-14 prometheus (remote-write receiver included), loki, tempo,
+  # Bearer tokens that gate the push and log/trace-read paths on this host.
+  # Until 2026-09-14 prometheus (remote-write receiver included), loki, tempo,
   # alertmanager and the OTLP receiver were reachable by anyone on the LAN or
   # tailnet with no credential at all -- and loki held the postgres role
   # passwords (see hosts/database, mkRolePasswordUnit). Two tokens, two blast
@@ -739,11 +739,17 @@
   #   push  -- every host's fluent-bit (modules/fluent-bit.nix) and OTLP
   #            senders. Encrypted to every host key, so it is the one that
   #            leaks when any single VM does; it can only *write*.
-  #   query -- the read side: the prom/loki/alertmanager MCP servers on the
-  #            mcp host. Only otel + mcp can decrypt it.
+  #   query -- the read side: the loki/tempo MCP servers on the mcp host.
+  #            Only otel + mcp can decrypt it.
   # Both are bare tokens (no KEY=value): Caddy reads them with the {file.…}
   # placeholder, fluent-bit and the MCP servers get them via LoadCredential.
   # Grafana reads all three stores over loopback and is unaffected.
+  #
+  # Prometheus and Alertmanager are deliberately NOT gated: their own UIs are
+  # the point of having them, and a browser cannot attach a bearer token, so
+  # gating them meant every link had to bounce to Grafana instead. Both still
+  # bind loopback only -- Caddy on 443 remains the one way in, and the raw
+  # ports stay closed in the firewall below.
   age.secrets.otel-push-token = {
     file = ../../secrets/otel-push-token.age;
     owner = "caddy";
@@ -769,9 +775,9 @@
       @query header Authorization "Bearer ${queryToken}"
     '';
     # The otel.homelab.local / ts.net "everything on one name" sites. Grafana
-    # stays open (it has its own OIDC login); every other path needs a token.
-    # Loki's push path takes either token so a host that only holds the push
-    # token can ship logs; reads need the query token.
+    # (its own OIDC login) and prometheus stay open; loki, tempo and the OTLP
+    # receiver need a token. Loki's push path takes either token so a host that
+    # only holds the push token can ship logs; reads need the query token.
     aggregate = ''
       ${authMatchers}
       @lokiPush {
@@ -791,12 +797,11 @@
           respond 401
         }
       }
+      # Open -- see the token comment above. No `route` needed once there is
+      # no 401 fallback to order against.
       handle /prometheus* {
-        route {
-          uri strip_prefix /prometheus
-          reverse_proxy @query localhost:9090
-          respond 401
-        }
+        uri strip_prefix /prometheus
+        reverse_proxy localhost:9090
       }
       handle /loki* {
         route {
@@ -814,6 +819,14 @@
       handle {
         respond "OK" 200
       }
+    '';
+    # Ungated single-service vhost: the service's own UI, reachable from a
+    # browser. Used for prometheus (and, in ./alerting.nix, alertmanager).
+    open = port: ''
+      tls {
+        ca https://ca.homelab.local:8443/acme/acme/directory
+      }
+      reverse_proxy localhost:${toString port}
     '';
     # Single-service vhosts: the query token unlocks everything; on loki the
     # push token additionally unlocks the push path (that is what every
@@ -870,7 +883,7 @@
     };
 
     virtualHosts."prometheus.homelab.local prometheus.homelab.internal" = {
-      extraConfig = single 9090 false;
+      extraConfig = open 9090;
     };
   };
 
