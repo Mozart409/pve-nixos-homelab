@@ -512,27 +512,26 @@
           ];
         };
 
-        # Inactive 2026-09-09: unreachable during `just colmena-apply`
-        # ("No route to host"). Only the hive entry is commented out --
-        # nixosConfigurations still evaluates the config and `just deploy`
-        # still works. Same treatment as the zeroclaw node below.
-        # hermes = {
-        #   deployment = {
-        #     # Not routed through hostAddrs/targetHost like the other nodes --
-        #     # hermes has no hostAddrs entry, so DEPLOY_NET=tailscale does not
-        #     # switch it over.
-        #     targetHost = "hermes.homelab.local";
-        #     targetUser = "amadeus";
-        #     buildOnTarget = false;
-        #     tags = ["ai" "hermes"];
-        #   };
-        #   imports = [
-        #     disko.nixosModules.disko
-        #     agenix.nixosModules.default
-        #     hermes-agent.nixosModules.default
-        #     ./hosts/hermes/configuration.nix
-        #   ];
-        # };
+        # Reactivated 2026-09-24: the VM was rebuilt from scratch
+        # (docs/plans/hermes-rebuild.md) and is reachable again, so this node
+        # is back in fleet-wide `just colmena-apply`.
+        hermes = {
+          deployment = {
+            # Not routed through hostAddrs/targetHost like the other nodes --
+            # hermes has no hostAddrs entry, so DEPLOY_NET=tailscale does not
+            # switch it over.
+            targetHost = "hermes.homelab.local";
+            targetUser = "amadeus";
+            buildOnTarget = false;
+            tags = ["ai" "hermes"];
+          };
+          imports = [
+            disko.nixosModules.disko
+            agenix.nixosModules.default
+            hermes-agent.nixosModules.default
+            ./hosts/hermes/configuration.nix
+          ];
+        };
 
         ca = {
           deployment = {
@@ -548,7 +547,11 @@
           ];
         };
 
-        # Inactive 2026-09-09 (see the note on hermes above).
+        # Inactive 2026-09-09: unreachable during `just colmena-apply`
+        # ("No route to host"). Only the hive entry is commented out --
+        # nixosConfigurations still evaluates the config and `just deploy`
+        # still works. hermes carried this note until it was rebuilt and
+        # reactivated on 2026-09-24.
         # fleet = {
         #   deployment = {
         #     targetHost = targetHost "fleet";
@@ -563,7 +566,7 @@
         #   ];
         # };
 
-        # Inactive 2026-09-09 (see the note on hermes above).
+        # Inactive 2026-09-09 (see the note on fleet above).
         # harbor = {
         #   deployment = {
         #     targetHost = targetHost "harbor";
@@ -617,7 +620,7 @@
           ];
         };
 
-        # Inactive 2026-09-09 (see the note on hermes above).
+        # Inactive 2026-09-09 (see the note on fleet above).
         # woodpecker = {
         #   deployment = {
         #     targetHost = targetHost "woodpecker";
@@ -660,7 +663,7 @@
           ];
         };
 
-        # Inactive 2026-09-09 (see the note on hermes above).
+        # Inactive 2026-09-09 (see the note on fleet above).
         # "k3s-cntrl-1" = {
         #   deployment = {
         #     targetHost = targetHost "k3s-cntrl-1";
