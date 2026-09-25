@@ -24,6 +24,26 @@
   # host listens on. Only Caddy (vhosts below) is meant to talk to it.
   gatewayPort = 8100;
 
+  # Keyed off the instance existing rather than re-probing the flake input:
+  # ../configuration.nix decides whether the Tempo MCP server is deployed (see
+  # `hasTempoMcp` there), and this backend must appear exactly when it does --
+  # a backend pointing at a dead port makes the gateway log a failed probe on
+  # every reconnect. The same attrset already drives the ordering deps below.
+  #
+  # Tools land as tempo_search / tempo_trace / ... Note that the RED-metrics
+  # view of these same spans is already in prometheus: tempo's
+  # metrics-generator remote-writes span-metrics and service-graph series
+  # there, so prom_query answers rates and latencies, and this backend is for
+  # when you need an individual trace or a TraceQL search.
+  tempoBackend = lib.optionalString (config.services.homelab-mcp.servers ? tempomcp-server) ''
+    [[backends]]
+    name = "tempo"
+    url = "http://127.0.0.1:8092/mcp"
+    transport = "http"
+    enabled = true
+
+  '';
+
   # Declarative gateway config. Secrets are NOT inlined here — they are referenced
   # as ${VAR} placeholders and resolved by axon at startup from the environment
   # file below. Missing referenced vars are a hard startup error, so every ${VAR}
@@ -105,6 +125,7 @@
     transport = "http"
     enabled = true
 
+    ${tempoBackend}
     [[backends]]
     name = "woodpecker"
     url = "http://127.0.0.1:8091/mcp"

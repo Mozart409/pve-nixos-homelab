@@ -70,11 +70,27 @@
         debug:
           verbosity: basic
 
-        # Metrics: nothing sends OTLP metrics (the collector has never even
-        # registered otelcol_receiver_accepted_metric_points), and a pipeline
-        # must name at least one exporter. `nop` keeps the OTLP metrics
-        # endpoint answering without turning `debug` back on.
-        nop: {}
+        # OTLP metrics go to Prometheus's own OTLP receiver (the
+        # --web.enable-otlp-receiver flag below). Until 2026-09-25 this
+        # pipeline exported to `nop` -- honest at the time, since nothing sent
+        # OTLP metrics and a pipeline must name at least one exporter -- but
+        # `nop` drops points silently, so it is exactly the wrong default the
+        # moment a sender appears. hofvarpnir already runs METRICS_ENABLED=true
+        # and is about to export over OTLP, hence the real exporter now.
+        #
+        # Endpoint has no /v1/metrics: the otlphttp exporter appends the signal
+        # path itself (same reason otlphttp/loki points at /otlp, not
+        # /otlp/v1/logs). Prometheus serves the receiver at
+        # /api/v1/otlp/v1/metrics.
+        #
+        # Series naming follows Prometheus 3.x's default translation strategy
+        # (underscore escaping + unit/_total suffixes); resource attributes
+        # land on a `target_info` series rather than on every sample, so join
+        # against it when you need service.version and friends.
+        otlphttp/prometheus:
+          endpoint: "http://127.0.0.1:9090/api/v1/otlp"
+          tls:
+            insecure: true
 
         otlphttp/tempo:
           endpoint: "http://127.0.0.1:4328"
@@ -97,7 +113,7 @@
           metrics:
             receivers: [otlp]
             processors: [batch]
-            exporters: [nop]
+            exporters: [otlphttp/prometheus]
           logs:
             receivers: [otlp]
             processors: [batch]
@@ -278,6 +294,15 @@
       # receiver accepts unauthenticated writes, so keep this host's 9090 off
       # anything but the LAN.
       "--web.enable-remote-write-receiver"
+      # OTLP ingestion for the collector's metrics pipeline above. Prometheus
+      # 3.x (3.14 here) promoted this out of --enable-feature; on 2.x it was
+      # `--enable-feature=otlp-write-receiver` and lived at a different path,
+      # so do not copy this flag to an older Prometheus.
+      #
+      # Same caveat as the remote-write receiver: unauthenticated. Both are
+      # reachable only over loopback and through the (open, but LAN-scoped)
+      # prometheus vhost -- 9090 itself stays shut in the firewall below.
+      "--web.enable-otlp-receiver"
     ];
 
     # The default `true` runs a full `promtool check config` at BUILD time, which
