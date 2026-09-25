@@ -38,6 +38,14 @@
   # is the guard working, not a new bug.
   #
   # The stamp lives inside each home, so a state-dir wipe re-runs it there.
+  #
+  # Consequence of that indent mismatch, verified 2026-09-25: `moshi-hook
+  # status` permanently reports the `hermes` target as `status: "stale"`,
+  # `missing: ["plugins.enabled[moshi-hooks]"]`. Its matcher only recognises
+  # its own 4-space form, and the steady-state file is the 2-space Nix/PyYAML
+  # dump — so it cannot see an entry that is demonstrably there and that Hermes
+  # itself loads. It is cosmetic. Do NOT clear it by running `install` again:
+  # that is the exact write this stamp exists to prevent.
   installProfiles = pkgs.writeShellScript "hermes-moshi-profiles" ''
     set -u
     moshi=${pkgs.moshi-hook}/bin/moshi-hook

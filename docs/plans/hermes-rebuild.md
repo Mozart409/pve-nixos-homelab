@@ -669,7 +669,27 @@ moshi-hook is a primary interface, fix this first (§11).
 
 Also unresolved and noted in the current config: it is **unverified whether one Moshi
 account token can pair three hosts** (development, zeroclaw, hermes) simultaneously.
-Verify on the rebuilt host before assuming push works.
+Verify on the rebuilt host before assuming push works. *(Answered 2026-09-25: yes —
+`moshi-hook status --json` on the rebuilt host reports `paired: true` as
+`homelab-hermes` with development and zeroclaw still paired.)*
+
+**`moshi-hook status` reports the `hermes` target as `stale` permanently — expected,
+cosmetic.** Verified 2026-09-25 on the rebuilt host: status prints
+`{"target":"hermes","status":"stale","missing":["plugins.enabled[moshi-hooks]"]}`
+while the on-disk state is correct in every respect — the plugin payload
+(`__init__.py`, `plugin.yaml`) is present, the `.moshi-hook-installed-<version>` stamp
+is there, and all five `config.yaml` files carry exactly one well-formed `moshi-hooks`
+entry. The cause is the *same* list-indent mismatch that makes `install` unsafe to
+rerun (above): `status` matches its own 4-space sequence style, the steady-state file
+is in the Nix/PyYAML 2-space dump form, so it cannot see the entry it is looking for.
+Hermes parses that file with PyYAML and loads the plugin fine.
+
+This is **not** a split-state problem — there is exactly one moshi ledger,
+`/home/hermes/.local/state/moshi`; the `HOME` override in `moshi-hook.nix` does not
+move it (checked: neither `$HERMES_HOME/.local/state/moshi` nor any per-profile
+equivalent exists). **Do not "fix" the stale line by running
+`moshi-hook install --target hermes`** — that is precisely the write that corrupts
+`config.yaml`. Judge the hooks by whether a push actually lands, not by this field.
 
 ## 8. Cron
 
@@ -1073,7 +1093,8 @@ receives `tailscale-auth-key.age`.
    - `ss -ltnp` on the host → 9119 bound, 8642 absent, nothing else listening beyond
      22/443/9100.
    - `moshi-hook status --json | jq .paired` → `true`, and a test notification lands on
-     the phone (§7.5).
+     the phone (§7.5). The `hermes` target showing `status: "stale"` is expected and
+     cosmetic — see §7.5; do **not** run `moshi-hook install` to clear it.
    - `sudo -u hermes -i`, then `opencode run "print the repo name"` in a `~/code`
      checkout → completes, and `claude -p` likewise if logged in.
    - In `hermes -p coding chat`: make a scratch edit, then `/rollback` restores it
@@ -1101,6 +1122,15 @@ fork in the road):
 - ~~Is a `default` profile worth it?~~ Kept, and a fifth (`infra`) added.
   `default` is flash-tier and thin, so the multiplexer and dashboard overhead
   stays off a working profile.
+- ~~Does one Moshi token pair three hosts?~~ Yes (2026-09-25). The rebuilt host
+  reports `paired: true` as `homelab-hermes` alongside development and
+  zeroclaw.
+- ~~Does `moshi-hook install` resolve the Hermes home from `$HERMES_HOME` or
+  `$HOME/.hermes`?~~ `$HERMES_HOME` (2026-09-25). `/home/hermes/.hermes` was
+  never created, and all five `config.yaml` files gained exactly one
+  `moshi-hooks` entry with no mixed-indent duplicates. Note that
+  `moshi-hook status` still calls the target `stale` afterwards — that is the
+  indent mismatch, not a failed install (§7.5).
 
 **Still open — these need a running machine:**
 
@@ -1112,14 +1142,6 @@ fork in the road):
   key and is therefore the cron path; Claude Code needs an interactive
   `claude login`. Until there is a key-based answer, a scheduled job must call
   `opencode`, and the `coding` profile's SOUL.md says so.
-- **Does one Moshi token pair three hosts?** (development, zeroclaw, hermes)
-  Unverified, and this rebuild makes hermes the host where it matters most.
-- **Does `moshi-hook install` resolve the Hermes home from `$HERMES_HOME` or
-  `$HOME/.hermes`?** `hosts/hermes/moshi-hook.nix` sets both to the same
-  directory per profile so either resolution is correct, but which one it
-  actually uses is untested — check that each profile's `config.yaml` gained
-  its `moshi-hooks` entry (and that `hermes-config-check` repaired the
-  indentation) after the first boot.
 - **Is the `infra` profile's read-only posture right?** It was given the
   axon-gateway MCP surface and deliberately NO `terminal` / `code_execution`,
   on the reasoning that everything it needs arrives through MCP and a shell
