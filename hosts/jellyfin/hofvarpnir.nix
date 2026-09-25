@@ -3,7 +3,9 @@
   lib,
   pkgs,
   ...
-}: {
+}: let
+  otelEnvFile = "/run/hofvarpnir/otel.env";
+in {
   # hofvarpnir: the user's Rust fetch-and-store media app, migrated off the old
   # Rocky LXC (192.168.2.100) onto this host so it writes completed downloads
   # straight onto the tuned ZFS media pool — no NFS, no cross-host mount wall.
@@ -37,10 +39,11 @@
       # creates /media/hofvarpnir 0755 jellyfin:jellyfin.
       "/media/hofvarpnir:/var/lib/hofvarpnir/downloads"
       # Host CA bundle (includes step-ca) so the container can verify TLS to
-      # *.homelab.local over HTTPS (e.g. the Loki push endpoint). SSL_CERT_FILE
-      # points native-tls/OpenSSL at it. If the binary is built against rustls it
-      # ignores this and uses bundled webpki-roots (would not trust step-ca) — in
-      # that case Loki log-push over HTTPS fails but the app + OTLP still work.
+      # *.homelab.local, including the OTLP and Loki pushes to otel below.
+      # Both exporters verify against the system store (reqwest 0.13 via
+      # rustls-platform-verifier; reqwest 0.12 via native roots), which reads
+      # SSL_CERT_FILE -- verified end to end in hofvarpnir's
+      # tests/otel_export.rs against a private CA.
       "/etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro"
       # yt-dlp's cache (JS-challenge/sigfunc solver state, etc.) lives under
       # $HOME/.cache — but the image bakes /home/hofvarpnir as 1000:1000 while
@@ -74,15 +77,19 @@
       # Rewritten from the LXC's homelab-otel.*.ts.net (MagicDNS does NOT resolve
       # between homelab VMs) to the step-ca *.homelab.local names on the otel host.
       METRICS_ENABLED = "true";
-      # Plain HTTP straight to Loki's port (firewall opens 3100 on otel). NOT the
-      # https://otel.homelab.local/loki Caddy path: hofvarpnir's tracing-loki HTTP
-      # client is rustls with bundled webpki-roots and does NOT trust step-ca, so
-      # HTTPS to the step-ca vhost fails (see dashboard-healthcheck-webpki-roots).
-      # tracing-loki 0.2.7 appends "/loki/api/v1/push" to this base URL.
-      LOKI_URL = "http://otel.homelab.local:3100";
-      OTEL_EXPORTER_OTLP_ENDPOINT = "http://otel.homelab.local:4317"; # plain gRPC
-      OTEL_EXPORTER_OTLP_PROTOCOL = "grpc";
+      # Both pipelines go through Caddy on otel's aggregate vhost, gated by the
+      # fleet push token (headers rendered at container start, see preStart
+      # below). The app appends the signal paths itself: "/v1/traces" for
+      # OTLP/HTTP and "/loki/api/v1/push" for Loki -- exactly the two paths
+      # that vhost forwards with the push token. OTLP/HTTP, not gRPC: Caddy
+      # has no h2c upstream for the collector's 4317.
+      LOKI_URL = "https://otel.homelab.local";
+      OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel.homelab.local";
+      OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf";
       OTEL_SERVICE_NAME = "hofvarpnir";
+      # Sampling is tunable without a release; unset means 100%. To cut Tempo
+      # IO: OTEL_TRACES_SAMPLER = "parentbased_traceidratio" plus
+      # OTEL_TRACES_SAMPLER_ARG = "0.1".
 
       SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt";
       # TLS to postgres (hosts/database has ssl = true). DATABASE_URL in
@@ -118,8 +125,34 @@
     #                        hofvarpnir-db-password.age means re-encrypting this too
     #   OIDC_CLIENT_ID     — from Pocket ID (not strictly secret, kept here for convenience)
     #   OIDC_CLIENT_SECRET — from Pocket ID (secret)
-    environmentFiles = [config.age.secrets.hofvarpnir-env.path];
+    #   OTEL_EXPORTER_OTLP_HEADERS, LOKI_HEADERS
+    #                      — rendered from the fleet push token at start (below)
+    environmentFiles = [
+      config.age.secrets.hofvarpnir-env.path
+      otelEnvFile
+    ];
   };
+
+  # Auth for the otel pushes, from the same fleet push token this host's
+  # fluent-bit already uses (age.secrets.otel-push-token is declared by
+  # modules/fluent-bit.nix, imported in ./configuration.nix). Rendered at
+  # container start instead of copied into hofvarpnir-env.age, so a token
+  # rotation needs one re-encryption, not two. Both vars share the OTLP
+  # headers format: `key=value`, value percent-encoded -- so `%` and `,`
+  # inside the token are escaped (a base64/hex token has neither).
+  # /run/hofvarpnir is the RuntimeDirectory oci-containers already gives this
+  # unit: recreated on every start before ExecStartPre and removed on stop, so
+  # the rendered token (0600 root via the umask) never outlives the container.
+  systemd.services.podman-hofvarpnir.preStart = lib.mkBefore ''
+    token="$(< ${config.age.secrets.otel-push-token.path})"
+    token="''${token//%/%25}"
+    token="''${token//,/%2C}"
+    (
+      umask 077
+      printf 'OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%%20%s\nLOKI_HEADERS=Authorization=Bearer%%20%s\n' \
+        "$token" "$token" > ${otelEnvFile}
+    )
+  '';
 
   age.secrets.hofvarpnir-env = {
     file = ../../secrets/hofvarpnir-env.age;
@@ -130,5 +163,9 @@
   # /run/agenix path, so a re-encrypted secret changes nothing in the unit and
   # colmena apply would keep the container running on the old DATABASE_URL.
   # The secret's .file is its store path, which changes on every re-encryption.
-  systemd.services.podman-hofvarpnir.restartTriggers = [config.age.secrets.hofvarpnir-env.file];
+  # Same for the push token rendered into otelEnvFile.
+  systemd.services.podman-hofvarpnir.restartTriggers = [
+    config.age.secrets.hofvarpnir-env.file
+    config.age.secrets.otel-push-token.file
+  ];
 }

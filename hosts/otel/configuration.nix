@@ -927,18 +927,11 @@
       # 9090/3100/3200/8888/4317/4318 are deliberately NOT here any more
       # (closed 2026-09-14). Prometheus, Loki, Tempo, the collector's own
       # metrics and both OTLP receivers still bind 0.0.0.0, but only loopback
-      # (grafana, tempo remote_write, the alertmanager bridge) and the one
-      # source-scoped exception below can reach them.
+      # (grafana, tempo remote_write, the alertmanager bridge) can reach them.
+      # hofvarpnir's source-scoped 4317/3100 exception is gone: it now pushes
+      # OTLP/HTTP and Loki through Caddy with the push token like every other
+      # sender (hosts/jellyfin/hofvarpnir.nix).
     ];
-    # hofvarpnir (jellyfin host) speaks OTLP/gRPC to 4317 and pushes logs to
-    # Loki's raw 3100 with no way to attach a bearer token, so those two ports
-    # stay open to that single source address. Everything else goes through
-    # Caddy. Drop this once hofvarpnir can send `Authorization` headers and
-    # hosts/jellyfin/hofvarpnir.nix points it at the vhosts.
-    extraCommands = ''
-      iptables -A nixos-fw -p tcp -s 192.168.2.180 --dport 4317 -j nixos-fw-accept
-      iptables -A nixos-fw -p tcp -s 192.168.2.180 --dport 3100 -j nixos-fw-accept
-    '';
   };
 
   environment.systemPackages = with pkgs; [
