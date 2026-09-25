@@ -16,6 +16,16 @@
 #   - `config.yaml` is DEEP-MERGED into whatever is on disk, Nix winning per
 #     key, never pruning — identical to upstream's `hermes-config-merge`. The
 #     agent may add keys of its own; Nix owns the keys it names.
+#
+#     WARNING: "never pruning" means REMOVING A SETTING HERE DOES NOT REMOVE IT
+#     FROM THE HOST. Deleting a key from Nix only stops re-asserting it; the
+#     value already written to config.yaml stays and the agent keeps honouring
+#     it. To remove something you must override it with the value you want, or
+#     delete the file and let activation regenerate it. Lists are replaced
+#     rather than merged (deep_merge recurses only when both sides are dicts),
+#     so a list Nix stops declaring is frozen at its last value. Re-verified
+#     against v2026.9.21 and upstream main on 2026-09-25 — see AGENTS.md §6,
+#     "Hermes `config.yaml` Is Deep-Merged and NEVER Pruned".
 #   - `.env` is concatenated from agenix-decrypted env files at 0600.
 #   - `SOUL.md` and `memories/` are installed into the profile home, because
 #     Hermes reads the system prompt and memory from HERMES_HOME and NOT from

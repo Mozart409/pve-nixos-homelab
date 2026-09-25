@@ -63,6 +63,13 @@
 
   # ── Shared config fragments ───────────────────────────────────────────────
   # Every profile gets these. Kept in one place so a change lands on all five.
+  #
+  # WARNING: these settings are DEEP-MERGED into each profile's on-disk
+  # config.yaml and nothing is ever pruned. Deleting a key from this set does
+  # NOT delete it from the host — it only stops re-asserting it, and the last
+  # value written stays live. Change a setting by overriding it, not by
+  # removing the line. See AGENTS.md §6, "Hermes `config.yaml` Is Deep-Merged
+  # and NEVER Pruned".
   commonSettings = {
     provider = "deepseek";
     timezone = "Europe/Berlin";
@@ -103,6 +110,14 @@
       backend = "local";
       timeout = 180;
     };
+
+    # There is no browser engine on this host and `browser` is absent from every
+    # profile's toolset list (see `tools` below), but Hermes still prints a
+    # startup warning pointing at `hermes tools` unless the backend is
+    # explicitly off. This silences that warning; it removes no capability.
+    # research's web access is `web_search`/`web_extract` (SearXNG + Firecrawl),
+    # which is a different subsystem and unaffected.
+    browser.backend = "off";
 
     # Holographic memory: fully local, one SQLite FTS5 DB per profile home, no
     # infrastructure. NumPy (extraPythonPackages) enables the HRR algebra behind

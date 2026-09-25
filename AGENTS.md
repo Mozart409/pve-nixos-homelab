@@ -615,6 +615,48 @@ The agent ran three days on built-in defaults before anyone chatted with it, so
   prunes removed ones. Any third-party tool that edits `config.yaml` in place will
   eventually collide with it.
 
+### Hermes `config.yaml` Is Deep-Merged and NEVER Pruned — Deleting Nix Config Does Not Delete It
+
+**Re-verified 2026-09-25** against the pinned `v2026.9.21`
+(`nix/configMergeScript.nix`, rev `d337b736`) *and* against upstream `main`:
+unchanged in both. Our own `modules/hermes-profiles.nix` deliberately
+replicates the same function for the four secondary profiles, so **every**
+`config.yaml` on hermes behaves this way — there is no overwrite path anywhere.
+
+The merge is exactly:
+
+```python
+merged = deep_merge(existing_on_disk, nix_settings)   # then yaml.dump the whole file
+```
+
+Three consequences, in the order they bite:
+
+1. **Removal is not a thing.** Deleting a setting from `hosts/hermes/configuration.nix`
+   only stops Nix *re-asserting* it. The key stays in `config.yaml` forever and the
+   agent keeps honouring it. A deploy that looks like it removed a setting removed
+   nothing. **To actually remove a key you must set it to the value you want, or
+   delete it from the file on the host.**
+2. **Lists are replaced, not concatenated.** `deep_merge` recurses only when *both*
+   sides are dicts; any list Nix declares clobbers the on-disk one wholesale. So
+   `plugins.enabled` and the `toolsets` lists are fully Nix-owned — but a list Nix
+   stops declaring is frozen at its last value, per (1).
+3. **`mcp_servers` is the sharpest edge.** Removing a server from `mcpServers` in Nix
+   never removes it from any profile's `config.yaml`, so the agent goes on loading a
+   server the config no longer declares — and on hermes that means a stale entry can
+   keep re-parking on a dead endpoint. Disable such a server *explicitly* in Nix
+   (leave the declaration, flip it off); do not just delete the block.
+
+**To genuinely reset a profile's config**, remove the file and re-run activation —
+the merge recreates it from Nix alone:
+
+```bash
+sudo -u hermes rm /home/hermes/agent/.hermes/profiles/<name>/config.yaml
+just colmena-apply-host hermes
+```
+
+That also discards any key the agent or a third-party tool added, which is usually
+the point. Check `hermes-config-check` is `active/exited` afterwards.
+
 ### Multi-Disk VMs: Pin Disko Devices by `/dev/disk/by-id`, Never `/dev/sdX`
 
 On a Proxmox VM with more than one disk, Linux `/dev/sdX` names follow disk
