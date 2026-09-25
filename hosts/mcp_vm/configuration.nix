@@ -7,6 +7,22 @@
 }: let
   mcpPackages = homelab-mcp.packages.${pkgs.stdenv.hostPlatform.system};
 
+  # The Tempo MCP server does not exist in the homelab-mcp-servers workspace
+  # yet (see that repo's todos/tempo-mcp-new-server.md). Everything needed to
+  # run it is written out below and in ./axon-gateway, gated on the package
+  # actually being in the flake input -- wiring it unconditionally would fail
+  # eval of this host today, and leaving it unwritten would mean rediscovering
+  # the whole shape later. The instance, its journal shipping, its restart
+  # trigger and the gateway backend all switch themselves on together at the
+  # first `nix flake update homelab-mcp` after the crate lands.
+  #
+  # NB the module keys its env-var prefix on serverType, falling back to
+  # `lib.toUpper` of the instance name for anything not in its `knownServers`
+  # table -- which would hand this instance a nonsensical TEMPOMCP-SERVER_*
+  # prefix. The crate's flake must add a `tempomcp-server` entry there
+  # (prefix = "TEMPO") or the server starts with no configuration at all.
+  hasTempoMcp = mcpPackages ? tempomcp-server;
+
   # Restart nonce for the secret-consuming MCP servers.
   #
   # agenix rewrites /run/agenix/<name> in place, so re-encrypting a secret leaves
@@ -77,14 +93,15 @@
     ++ map (name: {
       unit = "${name}.service";
       job = name;
-    }) [
-      "pbsmcp-server"
-      "prommcp-server"
-      "lokimcp-server"
-      "hamcp-server"
-      "wpmcp-server"
-      "alertmanagermcp-server"
-    ]
+    }) ([
+        "pbsmcp-server"
+        "prommcp-server"
+        "lokimcp-server"
+        "hamcp-server"
+        "wpmcp-server"
+        "alertmanagermcp-server"
+      ]
+      ++ lib.optional hasTempoMcp "tempomcp-server")
     ++ map (db: {
       unit = "${pgUnitName db}.service";
       job = pgUnitName db;
@@ -220,6 +237,27 @@ in {
         allowedHosts = loopbackOnly;
       };
     }
+    # Tempo, for trace search and single-trace fetch from the agents. Reached
+    # through otel's Caddy on the dedicated tempo.homelab.local vhost (raw
+    # 3200 has been closed in that host's firewall since 2026-09-14), which is
+    # gated by `single 3200 false` -- query token only, no push path. That is
+    # the same otel-query-token the prom/loki/alertmanager servers already
+    # carry, so this adds no new secret and no new agenix recipient.
+    #
+    # 8092 is the next free loopback port (8080-8091 are taken above, the
+    # gateway itself is 8100).
+    #
+    # See hasTempoMcp above for why this is conditional.
+    // lib.optionalAttrs hasTempoMcp {
+      tempomcp-server = {
+        enable = true;
+        package = mcpPackages.tempomcp-server;
+        host = "https://tempo.homelab.local";
+        tokenFile = config.age.secrets.otel-query-token.path;
+        bind = "127.0.0.1:8092";
+        allowedHosts = loopbackOnly;
+      };
+    }
     # One pgmcp instance per database on the `database` host. serverType pins the
     # PG_* env prefix — without it the module would derive PGMCP-<DB>-SERVER from
     # the instance name and the server would find no config at all.
@@ -242,7 +280,8 @@ in {
 
   systemd.services =
     # Secret-consuming servers must wait for agenix to place the credentials.
-    lib.genAttrs ["pbsmcp-server" "hamcp-server" "wpmcp-server" "prommcp-server" "lokimcp-server" "alertmanagermcp-server"] (_: {
+    lib.genAttrs (["pbsmcp-server" "hamcp-server" "wpmcp-server" "prommcp-server" "lokimcp-server" "alertmanagermcp-server"]
+      ++ lib.optional hasTempoMcp "tempomcp-server") (_: {
       wants = ["agenix.target"];
       after = ["agenix.target"];
       # See secretNonce above: forces a restart when a secret is re-encrypted.
