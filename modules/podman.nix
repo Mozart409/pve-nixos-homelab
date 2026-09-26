@@ -41,6 +41,26 @@ in {
       enable = true;
       dockerCompat = false;
       defaultNetwork.settings.dns_enabled = true;
+
+      # Every image bump leaves the previous tag behind, and a plain
+      # `podman system prune` only removes *dangling* (untagged) images, so
+      # superseded versions accumulate forever. `--all` removes every image no
+      # container is using. Safe for oci-containers: their units pull (or
+      # `podman load` their imageFile) on start, so a pruned image only costs
+      # a re-pull. Volumes are deliberately NOT pruned -- that is data.
+      #
+      # Also covers woodpecker's CI step images, which it used to prune on
+      # its own (dangling-only) schedule.
+      autoPrune = {
+        enable = true;
+        dates = "weekly";
+        flags = ["--all"];
+      };
+    };
+
+    systemd.services.podman-prune.serviceConfig = {
+      Nice = 19;
+      IOSchedulingClass = "idle";
     };
 
     # Set backend for OCI containers

@@ -54,13 +54,6 @@ in {
   };
   networking.defaultGateway = "192.168.2.1";
 
-  # Every pipeline pulls step images, and nothing reaps them. Weekly prune of
-  # dangling images and stopped containers keeps CI from filling its own disk.
-  virtualisation.podman.autoPrune = {
-    enable = true;
-    dates = "weekly";
-  };
-
   # Woodpecker server. Version 3.16.0 in the pinned nixpkgs, which is exactly
   # the tag the podman-compose prototype ran.
   #

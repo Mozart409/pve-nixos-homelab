@@ -42,7 +42,7 @@
   '';
 
   # Reclaim old dev shells. Every `devenv shell` drops a timestamped GC root
-  # under ~/.local/share/devenv/gc/, and modules/nix-gc.nix's weekly
+  # under ~/.local/share/devenv/gc/, and modules/nix-gc.nix's daily
   # nix-collect-garbage cannot touch anything those roots reach -- so without
   # this, superseded toolchains pile up in the store until someone remembers
   # `devenv gc`. That command prunes every root but the newest per project,
@@ -50,8 +50,8 @@
   # (a scoped GC over those paths, not a full store sweep).
   #
   # A user unit so it runs as whoever owns the roots: amadeus and the agent
-  # both linger, so it fires for both. Sunday evening puts it a few hours
-  # before nix-gc.nix's Monday-00:00 sweep, which then sees the roots gone.
+  # both linger, so it fires for both. nix-gc.nix's next daily sweep
+  # (00:00 + up to 2h jitter) then sees the roots gone.
   systemd.user.services.devenv-gc = {
     description = "Prune superseded devenv shells and their store paths";
     serviceConfig = {
