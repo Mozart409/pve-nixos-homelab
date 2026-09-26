@@ -7,22 +7,6 @@
 }: let
   mcpPackages = homelab-mcp.packages.${pkgs.stdenv.hostPlatform.system};
 
-  # The Tempo MCP server does not exist in the homelab-mcp-servers workspace
-  # yet (see that repo's todos/tempo-mcp-new-server.md). Everything needed to
-  # run it is written out below and in ./axon-gateway, gated on the package
-  # actually being in the flake input -- wiring it unconditionally would fail
-  # eval of this host today, and leaving it unwritten would mean rediscovering
-  # the whole shape later. The instance, its journal shipping, its restart
-  # trigger and the gateway backend all switch themselves on together at the
-  # first `nix flake update homelab-mcp` after the crate lands.
-  #
-  # NB the module keys its env-var prefix on serverType, falling back to
-  # `lib.toUpper` of the instance name for anything not in its `knownServers`
-  # table -- which would hand this instance a nonsensical TEMPOMCP-SERVER_*
-  # prefix. The crate's flake must add a `tempomcp-server` entry there
-  # (prefix = "TEMPO") or the server starts with no configuration at all.
-  hasTempoMcp = mcpPackages ? tempomcp-server;
-
   # Restart nonce for the secret-consuming MCP servers.
   #
   # agenix rewrites /run/agenix/<name> in place, so re-encrypting a secret leaves
@@ -93,15 +77,15 @@
     ++ map (name: {
       unit = "${name}.service";
       job = name;
-    }) ([
-        "pbsmcp-server"
-        "prommcp-server"
-        "lokimcp-server"
-        "hamcp-server"
-        "wpmcp-server"
-        "alertmanagermcp-server"
-      ]
-      ++ lib.optional hasTempoMcp "tempomcp-server")
+    }) [
+      "pbsmcp-server"
+      "prommcp-server"
+      "lokimcp-server"
+      "hamcp-server"
+      "wpmcp-server"
+      "alertmanagermcp-server"
+      "tempomcp-server"
+    ]
     ++ map (db: {
       unit = "${pgUnitName db}.service";
       job = pgUnitName db;
@@ -155,7 +139,7 @@ in {
       woodpecker-mcp-token = {
         file = ../../secrets/woodpecker-mcp-token.age;
       };
-      # Read-side bearer for the prometheus/loki/alertmanager vhosts on otel
+      # Read-side bearer for the prometheus/loki/alertmanager/tempo vhosts on otel
       # (see hosts/otel/configuration.nix). Bare token; each server exports it
       # as <PREFIX>_TOKEN from LoadCredential.
       otel-query-token = {
@@ -236,23 +220,20 @@ in {
         bind = "127.0.0.1:8086";
         allowedHosts = loopbackOnly;
       };
-    }
-    # Tempo, for trace search and single-trace fetch from the agents. Reached
-    # through otel's Caddy on the dedicated tempo.homelab.local vhost (raw
-    # 3200 has been closed in that host's firewall since 2026-09-14), which is
-    # gated by `single 3200 false` -- query token only, no push path. That is
-    # the same otel-query-token the prom/loki/alertmanager servers already
-    # carry, so this adds no new secret and no new agenix recipient.
-    #
-    # 8092 is the next free loopback port (8080-8091 are taken above, the
-    # gateway itself is 8100).
-    #
-    # See hasTempoMcp above for why this is conditional.
-    // lib.optionalAttrs hasTempoMcp {
+
+      # Tempo, for trace search and single-trace fetch from the agents. Reached
+      # through otel's Caddy on the dedicated tempo.homelab.internal vhost (raw
+      # 3200 has been closed in that host's firewall since 2026-09-14), which is
+      # gated by `single 3200 false` -- query token only, no push path. That is
+      # the same otel-query-token the prom/loki/alertmanager servers already
+      # carry, so this adds no new secret and no new agenix recipient.
+      #
+      # 8092 is the next free loopback port (8080-8091 are taken above, the
+      # gateway itself is 8100).
       tempomcp-server = {
         enable = true;
         package = mcpPackages.tempomcp-server;
-        host = "https://tempo.homelab.local";
+        host = "https://tempo.homelab.internal";
         tokenFile = config.age.secrets.otel-query-token.path;
         bind = "127.0.0.1:8092";
         allowedHosts = loopbackOnly;
@@ -280,15 +261,25 @@ in {
 
   systemd.services =
     # Secret-consuming servers must wait for agenix to place the credentials.
-    lib.genAttrs (["pbsmcp-server" "hamcp-server" "wpmcp-server" "prommcp-server" "lokimcp-server" "alertmanagermcp-server"]
-      ++ lib.optional hasTempoMcp "tempomcp-server") (_: {
+    lib.genAttrs ["pbsmcp-server" "hamcp-server" "wpmcp-server" "prommcp-server" "lokimcp-server" "alertmanagermcp-server" "tempomcp-server"] (_: {
       wants = ["agenix.target"];
       after = ["agenix.target"];
       # See secretNonce above: forces a restart when a secret is re-encrypted.
       # The otel query token additionally triggers on its own store path, so
-      # the three servers that carry it restart on rotation without a bump.
+      # the four servers that carry it restart on rotation without a bump.
       restartTriggers = [secretNonce config.age.secrets.otel-query-token.file];
     })
+    # The gateway reads its env file (bearer token + backend secrets) once at
+    # container start. Its config.toml is already covered by CONFIG_HASH in
+    # ./axon-gateway; this covers the secret side the same way as the servers
+    # above: a nonce bump, or a re-encrypted axon-gateway-env.age, restarts it.
+    // {
+      podman-axon-gateway = {
+        wants = ["agenix.target"];
+        after = ["agenix.target"];
+        restartTriggers = [secretNonce config.age.secrets.axon-gateway-env.file];
+      };
+    }
     # The pgmcp instances trigger on their own connection-URL secret instead:
     # the URL embeds the `mcp` role password, so rotating it on the database
     # host re-encrypts all five and restarts exactly these five, with no nonce
