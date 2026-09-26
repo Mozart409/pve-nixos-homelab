@@ -18,6 +18,19 @@ shell:
 sync-remotes:
     @./scripts/sync-remotes.sh
 
+# A pathspec commit, so anything else already staged is left alone, and a no-op
+# when no input moved.
+# Update every flake input and commit only flake.lock
+update: clear
+    #!/usr/bin/env bash
+    set -euo pipefail
+    nix flake update
+    if git diff --quiet HEAD -- flake.lock; then
+      echo "flake.lock unchanged -- nothing to commit."
+      exit 0
+    fi
+    git commit -m "chore(deps): upgrade flake" -- flake.lock
+
 check: clear
     nix flake check --all-systems
 
