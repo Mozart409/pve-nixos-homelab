@@ -17,6 +17,21 @@ ever ran it.
   woodpecker`.
 - `cache`: VM decommissioned 2026-09-09.
 
+**Follow-up 2026-09-27 — the step the first pass missed.** comin also left a
+system profile, `/nix/var/nix/profiles/system-profiles/comin` (one generation,
+so it is also that profile's *current* one). `nix-collect-garbage -d` never
+deletes a profile's current generation, so it stayed a GC root pinning a whole
+August closure — that is why every spot-check above freed 0. Measured before
+removal (closure-only NAR size, i.e. pre-dedupe/compression): otel 11.1 GiB,
+containers 13.7, jellyfin 9.9, unifi 10.3. Found when otel sat at 86% with
+only ~5 real generations.
+
+Removed (`rm /nix/var/nix/profiles/system-profiles/comin*` then
+`systemctl start nix-gc`) on `containers development jellyfin otel unifi`;
+`database forgejo mcp ca dns` had none. GRUB still lists a "Profile 'comin'"
+entry on those hosts until their next `colmena apply` regenerates the menu —
+harmless, just don't pick it.
+
 ## Archive
 
 The steps that were executed, per host:
@@ -36,6 +51,7 @@ status section above for the per-host outcome.
 
 - `systemctl status comin` reports the unit does not exist
 - `ls /var/lib | grep comin` returns nothing
+- `ls /nix/var/nix/profiles/system-profiles/` has no `comin*`
 - `nix-collect-garbage -d` actually frees space on hosts that had many pinned
   generations
 
