@@ -191,7 +191,12 @@
       # unknown fields). The actual cause is the read-only path problem
       # described below.
       backend_worker.compaction = {
-        block_retention = "720h"; # 30 days
+        # 7 days (was 30d, reduced 2026-09-26). A week covers any "what
+        # happened last night" question; span-metrics in prometheus keep the
+        # long-range RED view. Stored size was ~190 MB for ~13 days of
+        # hofvarpnir at the time, so this is about bounding growth as more
+        # services start pushing, not about current space.
+        block_retention = "168h";
       };
 
       # Tempo 3.x split ingestion into new modules -- live-store, block-builder
@@ -364,6 +369,16 @@
         static_configs = [
           {
             targets = ["localhost:8888"];
+          }
+        ];
+      }
+      # Tempo's own metrics (ingested spans/traces, block and compaction
+      # activity, backend bytes) on its HTTP port.
+      {
+        job_name = "tempo";
+        static_configs = [
+          {
+            targets = ["localhost:3200"];
           }
         ];
       }
