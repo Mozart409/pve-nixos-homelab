@@ -1,8 +1,8 @@
 {config, ...}: let
   # How many system generations survive a GC run, current one included.
-  # Enough to roll back a couple of bad deploys; each one pins a full closure,
-  # so every extra generation costs GBs on these 31 GiB root disks.
-  keepGenerations = 5;
+  # Current plus one rollback; each one pins a full closure, so every extra
+  # generation costs GBs on these 31 GiB root disks.
+  keepGenerations = 2;
 in {
   # Daily GC, bounded by count AND age.
   #
