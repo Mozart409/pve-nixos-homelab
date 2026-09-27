@@ -284,7 +284,7 @@
   services.prometheus = {
     enable = true;
     port = 9090;
-    retentionTime = "45d";
+    retentionTime = "30d";
     webExternalUrl = "https://homelab-otel.dropbear-butterfly.ts.net/prometheus";
     extraFlags = [
       "--web.route-prefix=/"
@@ -361,6 +361,9 @@
         static_configs = [
           {
             targets = ["localhost:${toString config.services.prometheus.exporters.node.port}"];
+            labels = {
+              instance = "homelab-otel";
+            };
           }
         ];
       }
