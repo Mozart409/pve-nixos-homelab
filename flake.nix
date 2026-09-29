@@ -308,9 +308,6 @@
           modules = [
             {
               nixpkgs.hostPlatform = system;
-              # claude-code is unfree; the colmenaHive sets this globally, but
-              # plain nixosSystem entries need it too so `nix build
-              # .#nixosConfigurations.development...` works standalone.
               nixpkgs.config.allowUnfree = true;
             }
             disko.nixosModules.disko
@@ -837,7 +834,6 @@
             bacon
             cargo
             cargo-workspaces
-            claude-code
             cocogitto
             colmenaPkg
             dive
@@ -848,7 +844,6 @@
             lazydocker
             lefthook
             nixosAnywherePkg
-            opencode
             opentofu
             podman-compose
             podman-tui
