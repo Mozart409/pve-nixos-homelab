@@ -101,6 +101,7 @@
         exit 0
       fi
 
+      before="$(git rev-parse HEAD)"
       if [ "$commit" = 1 ]; then
         if ! git rebase --quiet "$upstream" >/dev/null 2>&1; then
           git rebase --abort || true
@@ -114,9 +115,16 @@
           else
             log "push rejected (branch protection / no write access?)"
           fi
+          exit 0
         fi
       elif ! git merge --quiet --ff-only "$upstream" >/dev/null 2>&1; then
         log "not fast-forwardable, skipping"
+        exit 0
+      fi
+      if [ "$(git rev-parse HEAD)" = "$before" ]; then
+        log "up to date"
+      else
+        log "pulled $(git rev-list --count "$before..HEAD") commit(s)"
       fi
     '';
   };
@@ -173,7 +181,10 @@ in {
 
   config = lib.mkIf (cfg.bots != {}) {
     systemd.services.forgejo-bot-sync = {
-      description = "Clone, commit, rebase and push the Forgejo bot checkouts (never forces)";
+      description =
+        if lib.any (bot: bot.commit) (lib.attrValues cfg.bots)
+        then "Clone, commit, rebase and push the Forgejo bot checkouts (never forces)"
+        else "Clone and fast-forward the Forgejo bot checkouts (pull-only)";
       after = ["network-online.target" "agenix.target"];
       wants = ["network-online.target"];
       serviceConfig = {
