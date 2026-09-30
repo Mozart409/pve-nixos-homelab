@@ -383,9 +383,19 @@ in {
     # `<name> chat` == `hermes -p <name> chat`, one wrapper per declared profile.
     # Declared here rather than relying on the ~/.local/bin wrappers hermes
     # writes for `hermes profile create`, which this module never calls.
+    #
+    # The state tree is ${user}:${group} 2770, so any other account (amadeus,
+    # root) gets EACCES on the profile home. Re-exec as ${user} instead — a
+    # login shell (-i), because HERMES_HOME comes from the system profile and
+    # sudo's env_reset would drop it. Never run as root directly: root-owned
+    # files in a profile home break the agent.
     environment.systemPackages = lib.mapAttrsToList (name: _:
       pkgs.writeShellScriptBin name ''
-        exec ${lib.getExe' hermesCfg.package "hermes"} -p ${lib.escapeShellArg name} "$@"
+        hermes=${lib.getExe' hermesCfg.package "hermes"}
+        if [ "$(${pkgs.coreutils}/bin/id -un)" != ${lib.escapeShellArg user} ]; then
+          exec ${config.security.wrapperDir}/sudo -u ${lib.escapeShellArg user} -i "$hermes" -p ${lib.escapeShellArg name} "$@"
+        fi
+        exec "$hermes" -p ${lib.escapeShellArg name} "$@"
       '')
     cfg.profiles;
 
