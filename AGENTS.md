@@ -873,8 +873,8 @@ live under `/home/hermes/agent/.hermes/` and share the **one** unix user
 | Profile | Model | Purpose |
 | --- | --- | --- |
 | `default` | flash | owns the multiplexing gateway and the dashboard; deliberately near-empty, points at the other two |
-| `eve` | pro | personal assistant: memory/notes, web research, reminders (cron), AgentMail, Home Assistant (`hamcp_*` only) |
-| `heimdall` | pro | homelab observability through the full axon-gateway MCP surface |
+| `eve` | flash | personal assistant: memory/notes, web research, reminders (cron), AgentMail, Home Assistant (`hamcp_*` only) |
+| `heimdall` | flash | homelab observability through the full axon-gateway MCP surface |
 
 No profile has a shell. The 2026-09-30 reshuffle retired `coding`, `research`,
 `kb` and `infra`: `eve` absorbed `kb` + `research`, `infra` became `heimdall`,

@@ -713,7 +713,7 @@ in {
         // cronSettings
         // (mkToolsets (baseTools ++ ["web" "cronjob"]))
         // {
-          model = "deepseek-v4-pro";
+          model = "deepseek-v4-flash";
           display.skin = "eve";
           mcp_servers = {
             # Home Assistant (states, services, calendars) only — not the
@@ -743,7 +743,7 @@ in {
         // cronSettings
         // (mkToolsets (baseTools ++ ["cronjob"]))
         // {
-          model = "deepseek-v4-pro";
+          model = "deepseek-v4-flash";
           display.skin = "heimdall";
           # Deliberately NO terminal/code_execution: everything this profile
           # needs arrives through MCP, and the axon gateway's tools are already
