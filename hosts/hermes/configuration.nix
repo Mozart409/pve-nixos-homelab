@@ -17,7 +17,7 @@
   # makes sshd's StrictModes refuse public-key auth for that user — which would
   # break the only interactive way into this host. Giving the agent its own
   # subdirectory keeps /home/hermes at 0700 and costs nothing: HERMES_HOME is
-  # exported system-wide by `addToSystemPackages`, so `hermes`/`coding chat`
+  # exported system-wide by `addToSystemPackages`, so `hermes`/`eve chat`
   # still find their state from any shell.
   humanHome = "/home/hermes";
   stateDir = "${humanHome}/agent";
@@ -81,7 +81,7 @@
   dashboardClientId = "92fac046-8ab4-4081-bdef-e0795bac8c2c";
 
   # ── Shared config fragments ───────────────────────────────────────────────
-  # Every profile gets these. Kept in one place so a change lands on all five.
+  # Every profile gets these. Kept in one place so a change lands on every profile.
   #
   # WARNING: these settings are DEEP-MERGED into each profile's on-disk
   # config.yaml and nothing is ever pruned. Deleting a key from this set does
@@ -139,7 +139,7 @@
     # profile's toolset list (see `tools` below), but Hermes still prints a
     # startup warning pointing at `hermes tools` unless the backend is
     # explicitly off. This silences that warning; it removes no capability.
-    # research's web access is `web_search`/`web_extract` (SearXNG + Firecrawl),
+    # eve's web access is `web_search`/`web_extract` (SearXNG + Firecrawl),
     # which is a different subsystem and unaffected.
     browser.backend = "off";
 
@@ -171,7 +171,7 @@
     plugins.enabled = ["moshi-hooks"];
   };
 
-  # Web config for the one profile that browses (research). SearXNG is ours and
+  # Web config for the one profile that browses (eve). SearXNG is ours and
   # free but SEARCH-ONLY; `web_extract` needs a provider with the extract
   # capability, and having only SearXNG configured is upstream issue #32698 —
   # exactly the dead end the old host had. Firecrawl's keyless tier is the
@@ -196,15 +196,16 @@
   # profile that wants `${AXON_GATEWAY_TOKEN}` expanded must also list
   # axon-gateway-env in its OWN environmentFiles. Both halves or neither.
   #
-  # Given deliberately to `infra` (this IS its job) and to `default` (the
-  # catch-all), and withheld from coding/research/kb: every MCP server's whole
-  # tool surface costs schema tokens on every LLM call, and the coding profile
-  # reaches these backends through the nested harness's own MCP config anyway.
+  # Every MCP server's whole tool surface costs schema tokens on every LLM call.
+  # The axon gateway is ~90 tools, so only `heimdall` (whose job it is) gets all
+  # of it; `eve` gets the Home Assistant slice via `tools.include`, an fnmatch
+  # whitelist over the server's raw tool names (tools/mcp_tool_registration.py).
+  axonMcpServer = {
+    url = "https://axon.homelab.local/mcp";
+    headers.Authorization = "Bearer \${AXON_GATEWAY_TOKEN}";
+  };
   axonMcpSettings = {
-    mcp_servers.axon-gateway = {
-      url = "https://axon.homelab.local/mcp";
-      headers.Authorization = "Bearer \${AXON_GATEWAY_TOKEN}";
-    };
+    mcp_servers.axon-gateway = axonMcpServer;
   };
 
   # Cron result delivery. Upstream delivers the agent's final response itself
@@ -318,7 +319,7 @@ in {
   # ── The account ───────────────────────────────────────────────────────────
   # One unprivileged user owning every profile home. The trade is stated
   # plainly: isolation between profiles is Hermes' bookkeeping, not the kernel —
-  # `coding` and `research` share a uid and can read each other's .env. What
+  # `eve` and `heimdall` share a uid and can read each other's .env. What
   # holds is the boundary that matters: `hermes` is not `amadeus`, has no sudo,
   # cannot read ~amadeus/.ssh (the colmena deploy key), and cannot deploy.
   #
@@ -368,8 +369,8 @@ in {
   # Sweeps every checkout under ~/code on a timer: fetch → `merge --ff-only`
   # (refuses on divergence) → plain `push` (no --force, ever). It never commits
   # or rebases and exits 0 on every skippable state, so a dirty tree is not a
-  # failure. This is how the coding profile's commits reach Forgejo with no
-  # human step.
+  # failure. This is how commits made through the harness (herdr/claude/
+  # opencode, driven over mosh) reach Forgejo with no extra step.
   #
   # It pushes `main` directly — the same model as `development`, no PR
   # round-trip from a phone. That needs `hermes` on the push whitelist of each
@@ -455,16 +456,9 @@ in {
     owner = "hermes";
     mode = "0400";
   };
-  age.secrets.hermes-coding-env = {
-    file = ../../secrets/hermes-coding-env.age;
-    owner = "hermes";
-    mode = "0400";
-  };
-  age.secrets.hermes-research-env = {
-    file = ../../secrets/hermes-research-env.age;
-    owner = "hermes";
-    mode = "0400";
-  };
+  # eve and heimdall reuse the kb/infra files they replaced (same recipients,
+  # so a rename would only churn secrets.nix). hermes-coding-env and
+  # hermes-research-env are no longer consumed.
   age.secrets.hermes-kb-env = {
     file = ../../secrets/hermes-kb-env.age;
     owner = "hermes";
@@ -478,9 +472,7 @@ in {
 
   # opencode-zen provider key (env-file: OPENCODE_ZEN_API_KEY=...). Declared
   # under the GENERIC attribute name modules/coding-harness.nix looks for, while
-  # the file itself stays per-host. It is also the unattended coding path's
-  # credential: opencode authenticates from a key on disk, Claude Code from an
-  # interactive OAuth login, which is why cron jobs shell out to `opencode`.
+  # the file itself stays per-host.
   age.secrets.opencode-zen-key = {
     file = ../../secrets/hermes-opencode-zen-key.age;
     owner = "hermes";
@@ -548,8 +540,8 @@ in {
     inherit stateDir;
 
     # Puts the `hermes` CLI on PATH and exports HERMES_HOME system-wide, so an
-    # interactive shell shares state with the gateway and `hermes -p coding chat`
-    # (or the auto-generated ~/.local/bin/coding wrapper) works from any cwd.
+    # interactive shell shares state with the gateway and `hermes -p eve chat`
+    # (or the `eve` wrapper from modules/hermes-profiles.nix) works from any cwd.
     addToSystemPackages = true;
 
     # ── Web dashboard ──────────────────────────────────────────────────────
@@ -572,8 +564,6 @@ in {
     # default profile and the gateway itself need.
     environmentFiles = [
       config.age.secrets.hermes-default-env.path
-      config.age.secrets.axon-gateway-env.path
-      config.age.secrets.hermes-agentmail-key.path
     ];
 
     environment = {
@@ -594,15 +584,16 @@ in {
 
     # ── The DEFAULT profile ────────────────────────────────────────────────
     # These settings describe $HERMES_HOME itself, which IS the default
-    # profile. The other four are rendered under profiles/ by
+    # profile. eve and heimdall are rendered under profiles/ by
     # modules/hermes-profiles.nix.
     settings =
       commonSettings
       // cronSettings
-      // (mkToolsets (baseTools ++ ["cronjob"]))
+      // (mkToolsets baseTools)
       // {
-        # Cheap tier on purpose: this profile is the switchboard. It owns the
-        # multiplexer and the dashboard and routes real work to a sibling.
+        # Cheap tier on purpose, and deliberately near-empty: this profile is
+        # the switchboard. It owns the multiplexer and the dashboard and points
+        # the user at eve or heimdall; it does no work of its own.
         model = "deepseek-v4-flash";
 
         # One gateway serves every profile. v2026.9.21 enforces a host-wide
@@ -648,17 +639,18 @@ in {
       "memories/USER.md" = ./souls/user.md;
     };
 
-    # MCP servers. axon-gateway aggregates the homelab backends behind one
-    # authenticated endpoint; the header value is expanded by Hermes from the
-    # agenix-loaded env var at runtime, never baked into a store path.
+    # MCP servers: DISABLED, not deleted. The default profile no longer uses
+    # them (eve and heimdall carry their own), but config.yaml is deep-merged
+    # and never pruned — deleting these blocks would leave both servers live
+    # in the on-disk file. `enabled = false` is what actually turns them off.
     mcpServers = {
       axon-gateway = {
+        enabled = false;
         url = "https://axon.homelab.local/mcp";
-        headers.Authorization = "Bearer \${AXON_GATEWAY_TOKEN}";
       };
       agentmail = {
+        enabled = false;
         url = "https://mcp.agentmail.to/mcp";
-        headers."x-api-key" = "\${AGENTMAIL_API_KEY}";
       };
     };
 
@@ -674,7 +666,9 @@ in {
     #   nix                 → `nix develop -c just fmt` and scoped `nix eval`;
     #                         talks to the host nix-daemon natively
     #   openssh             → `git push` over ssh
-    #   opencode/claude-code → the harness the coding profile shells out to
+    # No profile enables terminal/execute_code today; this stays so re-enabling
+    # one does not start from a bare PATH. The coding harness (claude, opencode)
+    # is for the interactive login, via environment.systemPackages, not here.
     extraPackages = with pkgs; [
       python3
       nodejs
@@ -686,55 +680,26 @@ in {
       findutils
       nix
       openssh
-      opencode
-      claude-code
     ];
   };
 
-  # ── The other four profiles ───────────────────────────────────────────────
+  # ── The secondary profiles ────────────────────────────────────────────────
+  # `default` is only the switchboard (gateway + dashboard); these two do the
+  # work. `coding`, `research`, `kb` and `infra` were retired 2026-09-30: eve
+  # absorbed kb and research, infra became heimdall, and coding went away in
+  # favour of driving herdr/claude directly over mosh. Their profiles/<name>/
+  # directories are NOT removed by a deploy — delete them on the host by hand.
   homelab.hermesProfiles.profiles = {
-    coding = {
-      description = "Drives opencode/claude in ~/code; the only profile with a shell.";
-      soul = ./souls/coding.md;
+    eve = {
+      description = "Personal assistant: memory, notes, research, reminders, email, Home Assistant.";
+      soul = ./souls/eve.md;
       memories."USER.md" = ./souls/user.md;
-      environmentFiles = [config.age.secrets.hermes-coding-env.path];
-      settings =
-        commonSettings
-        // cronSettings
-        // (mkToolsets (baseTools ++ ["terminal" "code_execution" "delegation" "cronjob"]))
-        // {
-          model = "deepseek-v4-pro";
-
-          # Checkpoints: snapshot a project before destructive operations into a
-          # shadow git store, restorable with /rollback. Opt-in upstream
-          # (`enabled: false` by default) and enabled for THIS profile only —
-          # it is the one that edits files and shells out to other agents. The
-          # store is per Hermes home, so one 500 MB cap, not five.
-          #
-          # `git gc` reclaims space on a background sweep that can take tens of
-          # seconds; on a 4-core guest also running nested opencode, keep the
-          # sweep to once a day.
-          #
-          # These are NOT backups: 7-day retention, working-directory scope.
-          # Forgejo is the durable copy, which is the other reason this profile
-          # pushes main.
-          checkpoints = {
-            enabled = true;
-            max_snapshots = 20;
-            max_total_size_mb = 500;
-            max_file_size_mb = 10;
-            auto_prune = true;
-            retention_days = 7;
-            min_interval_hours = 24;
-          };
-        };
-    };
-
-    research = {
-      description = "Reading and synthesis; web tools, no shell.";
-      soul = ./souls/research.md;
-      memories."USER.md" = ./souls/user.md;
-      environmentFiles = [config.age.secrets.hermes-research-env.path];
+      environmentFiles = [
+        config.age.secrets.hermes-kb-env.path
+        # Expand ${AXON_GATEWAY_TOKEN} / ${AGENTMAIL_API_KEY} in mcp_servers.
+        config.age.secrets.axon-gateway-env.path
+        config.age.secrets.hermes-agentmail-key.path
+      ];
       settings =
         commonSettings
         // webSettings
@@ -742,25 +707,21 @@ in {
         // (mkToolsets (baseTools ++ ["web" "cronjob"]))
         // {
           model = "deepseek-v4-pro";
+          mcp_servers = {
+            # Home Assistant (states, services, calendars) only — not the
+            # fleet-wide observability surface, which is heimdall's.
+            axon-gateway = axonMcpServer // {tools.include = ["hamcp_*"];};
+            agentmail = {
+              url = "https://mcp.agentmail.to/mcp";
+              headers."x-api-key" = "\${AGENTMAIL_API_KEY}";
+            };
+          };
         };
     };
 
-    kb = {
-      description = "Notes and knowledge capture; memory-first, no shell, no web.";
-      soul = ./souls/kb.md;
-      memories."USER.md" = ./souls/user.md;
-      environmentFiles = [config.age.secrets.hermes-kb-env.path];
-      settings =
-        commonSettings
-        // (mkToolsets baseTools)
-        // {
-          model = "deepseek-v4-flash";
-        };
-    };
-
-    infra = {
+    heimdall = {
       description = "Homelab observability via the axon-gateway MCP backends.";
-      soul = ./souls/infra.md;
+      soul = ./souls/heimdall.md;
       memories."USER.md" = ./souls/user.md;
       environmentFiles = [
         config.age.secrets.hermes-infra-env.path
@@ -802,7 +763,7 @@ in {
       #
       # Single files inside the module's ReadWritePaths; systemd's most-specific
       # -path rule keeps the rest writable — memory DB, cron jobs, sessions,
-      # checkpoints, logs. The four secondary profiles' pairs are appended by
+      # checkpoints, logs. Each secondary profile's pair is appended by
       # modules/hermes-profiles.nix (unitOption concatenates list definitions).
       #
       # Upstream v2026.9.21 also hard-blocks write_file/patch on ~/.ssh, .env
@@ -816,10 +777,9 @@ in {
       # ── Network allow-list ────────────────────────────────────────────────
       # The agent runs a shell and has web tools, so a prompt injection in a
       # fetched page is a shell on the LAN. Confine it to the peers it actually
-      # needs; the internet (DeepSeek, AgentMail, opencode-zen, Anthropic, nix
-      # substituters) stays open because the deny list only covers private
-      # ranges. This is a cgroup BPF filter, so it applies to every subprocess —
-      # the nested opencode/claude runs included.
+      # needs; the internet (DeepSeek, AgentMail, nix substituters) stays open
+      # because the deny list only covers private ranges. This is a cgroup BPF
+      # filter, so it applies to every subprocess the agent starts.
       #   .145 dns, .1 router (second resolver in modules/common.nix)
       #   .178 forgejo (repo push)      .152 mcp (axon gateway)
       #   .149 containers (searxng)     .102 pocketid (OIDC discovery)
@@ -840,10 +800,9 @@ in {
       ];
 
       # ── Resource caps ─────────────────────────────────────────────────────
-      # Raised from the old host's 3G/512/512. One gateway now serves five
-      # profiles, and the coding profile shells out to a nested node/opencode
-      # process that may itself realise a devShell — either exceeds the old caps
-      # on its own. Deliberately NO hard MemoryMax: a pure `nix eval` runs
+      # Raised from the old host's 3G/512/512 when one gateway served five
+      # profiles and a coding profile shelled out to nested opencode runs. Kept
+      # as headroom now that it serves three. Deliberately NO hard MemoryMax: a pure `nix eval` runs
       # client-side in THIS unit and a tight cap would OOM-kill legitimate
       # scoped evals; heavy builds run in nix-daemon.service's own cgroup.
       TasksMax = 4096;
@@ -933,7 +892,7 @@ in {
   ];
 
   # Convenience aliases for the interactive account. The per-profile wrappers
-  # (~/.local/bin/coding, /research, …) are generated by hermes itself.
+  # (`eve chat`, `heimdall chat`) come from modules/hermes-profiles.nix.
   environment.shellAliases = {
     op = "opencode";
     cl = "claude";

@@ -380,6 +380,15 @@ in {
     # with the host's own ReadOnlyPaths rather than replacing them.
     systemd.services.hermes-agent.serviceConfig.ReadOnlyPaths = readOnlyPaths;
 
+    # `<name> chat` == `hermes -p <name> chat`, one wrapper per declared profile.
+    # Declared here rather than relying on the ~/.local/bin wrappers hermes
+    # writes for `hermes profile create`, which this module never calls.
+    environment.systemPackages = lib.mapAttrsToList (name: _:
+      pkgs.writeShellScriptBin name ''
+        exec ${lib.getExe' hermesCfg.package "hermes"} -p ${lib.escapeShellArg name} "$@"
+      '')
+    cfg.profiles;
+
     # The gate. `hermes-agent` requires it, so an unparseable config.yaml —
     # in ANY profile — blocks the start instead of silently demoting that
     # agent to built-in defaults.
