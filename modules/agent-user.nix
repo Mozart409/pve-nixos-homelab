@@ -78,8 +78,15 @@ in {
       shell = pkgs.zsh;
       # Same keys as amadeus so you can `ssh agent@<host>` / mosh straight
       # into the agent's herdr session. `sudo -u ${cfg.user} -i` from amadeus
-      # works too.
-      openssh.authorizedKeys.keys = config.homelab.users.amadeus.sshKeys;
+      # works too. Plus wotan's dedicated agent key: wotan's ssh config logs
+      # into every LAN host as `agent` with ~/.ssh/id_agent (IdentitiesOnly),
+      # keeping id_ed25519 for amadeus/root. Deliberately only here, not in
+      # homelab.users.amadeus, which would authorize it on every host.
+      openssh.authorizedKeys.keys =
+        config.homelab.users.amadeus.sshKeys
+        ++ [
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPqSbdEfL5sQyzQx/Q6JIUifjYpIO11zSk8kUYR8GiM6 llm-agent"
+        ];
       # User services (claude-permissions, herdr-setup, moshi-hook) start at
       # boot without a login.
       linger = true;
