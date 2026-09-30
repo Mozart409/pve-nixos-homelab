@@ -12,6 +12,7 @@
     ../../modules/osquery.nix
     ../../modules/fluent-bit.nix
     ../../modules/caddy-http3.nix
+    ../../modules/forgejo-bots.nix
   ];
 
   networking.hostName = "homelab-forgejo";
@@ -95,6 +96,28 @@
         UPDATE_AVATAR = true;
         USERNAME = "nickname";
       };
+    };
+  };
+
+  # Bot / LLM accounts. The module creates each account and keeps its SSH keys
+  # in sync; repo access is granted by inviting the account as a collaborator
+  # in the web UI. Public keys live in ./bot-keys/<bot>.pub (a missing file just
+  # means "no key yet"); the private halves are agenix secrets on the host that
+  # uses them (secrets/forgejo-bot-<bot>-ssh.age, hermes-forgejo-ssh.age).
+  homelab.forgejoBots = let
+    keyFor = bot: let
+      f = ./bot-keys + "/${bot}.pub";
+    in
+      lib.optionalAttrs (builtins.pathExists f) {hermes = builtins.readFile f;};
+  in {
+    hermes.sshPublicKeys = keyFor "hermes";
+    eve = {
+      fullName = "Eve";
+      sshPublicKeys = keyFor "eve";
+    };
+    heimdall = {
+      fullName = "Heimdall";
+      sshPublicKeys = keyFor "heimdall";
     };
   };
 

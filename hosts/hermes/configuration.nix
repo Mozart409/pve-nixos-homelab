@@ -54,6 +54,9 @@
   # <home>/skins/<name>.yaml and selected with `display.skin`.
   skins = import ./skins.nix;
 
+  # Private half of a Forgejo bot's SSH key (see homelab.forgejoBotSync).
+  botKeyFile = bot: ../../secrets + "/forgejo-bot-${bot}-ssh.age";
+
   # Everything the deploy rewrites under ${hermesHome} at stable paths, as one
   # string for hermes-agent's restartTriggers (see secretNonce). Skills ride
   # along via skills.external_dirs, a store path in `settings`. Secrets are
@@ -287,6 +290,7 @@ in {
     ../../modules/claude-permissions.nix
     ../../modules/claude-settings-verify.nix
     ../../modules/repo-sync.nix
+    ../../modules/forgejo-bot-sync.nix
     ../../modules/moshi-hook-user.nix
     ../../modules/forgejo-cli.nix
     ../../modules/herdr.nix
@@ -385,6 +389,44 @@ in {
     home = humanHome;
     sshKey = config.age.secrets.hermes-forgejo-ssh.path;
     push = true;
+  };
+
+  # ── Bot checkouts ─────────────────────────────────────────────────────────
+  # eve and heimdall have no shell, so the host does their git: clone into
+  # ${stateDir}/repos/<bot>/<repo> (inside the agent's ReadWritePaths, so their
+  # file tools can edit there), then every 10 min commit, rebase, push — as
+  # that bot, with its own Forgejo account and key. Access is whatever the
+  # account was invited to in Forgejo. Both profiles share this uid, so either
+  # can READ the other's checkouts on disk; the per-bot keys scope what each
+  # can clone and push. A bot is wired up once its key exists.
+  homelab.forgejoBotSync = {
+    user = "hermes";
+    baseDir = "${stateDir}/repos";
+    bots = lib.filterAttrs (bot: _: builtins.pathExists (botKeyFile bot)) {
+      eve = {
+        sshKey = "/run/agenix/forgejo-bot-eve-ssh";
+        commitMessage = "docs(kb): eve notes";
+        repos.obsidian-kb = "amadeus/obsidian-kb";
+      };
+      heimdall = {
+        sshKey = "/run/agenix/forgejo-bot-heimdall-ssh";
+        commitMessage = "chore(heimdall): sync agent edits";
+        repos = {
+          obsidian-kb = "amadeus/obsidian-kb";
+          pve-nixos-homelab = "amadeus/pve-nixos-homelab";
+        };
+      };
+    };
+  };
+  age.secrets.forgejo-bot-eve-ssh = lib.mkIf (builtins.pathExists (botKeyFile "eve")) {
+    file = botKeyFile "eve";
+    owner = "hermes";
+    mode = "0400";
+  };
+  age.secrets.forgejo-bot-heimdall-ssh = lib.mkIf (builtins.pathExists (botKeyFile "heimdall")) {
+    file = botKeyFile "heimdall";
+    owner = "hermes";
+    mode = "0400";
   };
 
   # Route Forgejo (LAN and tailnet) to the host's own key for this user. `Match`
