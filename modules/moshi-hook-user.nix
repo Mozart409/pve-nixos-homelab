@@ -41,11 +41,12 @@
   # verified with `moshi-hook status`, which reports them as `current`. There is
   # no per-project step to repeat.
   #
-  # These run as **user** units, not system units with User=<login>. The daemon
-  # and the hooks -- which are spawned from interactive shells -- must agree on
-  # the socket, and only a user unit gets an XDG_RUNTIME_DIR at all. Linger
-  # keeps both daemons up without an active login session.
-  moshiPairInstall = pkgs.writeShellScript "moshi-pair-install" ''
+  # Pairing and the daemon run as **user** units, not system units with
+  # User=<login>. The daemon and the hooks -- which are spawned from interactive
+  # shells -- must agree on the socket, and only a user unit gets an
+  # XDG_RUNTIME_DIR at all. Linger keeps both daemons up without an active
+  # login session.
+  moshiPair = pkgs.writeShellScript "moshi-pair" ''
     set -eu
     moshi=${pkgs.moshi-hook}/bin/moshi-hook
 
@@ -61,20 +62,32 @@
       fi
       "$moshi" pair --token "$token"
     fi
+  '';
 
-    # `install` skips the claude target outright when ~/.claude is absent, which
-    # is the case on a freshly provisioned host where Claude Code has never run.
-    # Create it first so the hooks land without a manual first launch.
+  # `install` skips the claude target outright when ~/.claude is absent, which
+  # is the case on a freshly provisioned host where Claude Code has never run.
+  # Create it first so the hooks land without a manual first launch.
+  #
+  # Unconditionally, on every start rather than once: `install` is what moves
+  # moshi's hook groups back to the TAIL of .hooks.PreToolUse, and
+  # `moshi-hook status` calls the claude target `stale` whenever anything sits
+  # after them. modules/claude-permissions.nix writes that file too, so the
+  # order is re-established here and that module now prepends its own group to
+  # keep it. Cheap, idempotent, and no config.yaml to corrupt -- unlike
+  # hosts/hermes/moshi-hook.nix, which is why only that one stamps per version.
+  #
+  # A SYSTEM unit with User=<login>, unlike pairing: `install` writes each hook
+  # as an absolute store path to the moshi-hook binary, so it has to re-run on
+  # every version bump. A deploy never re-ran the old RemainAfterExit user
+  # oneshot (it stays active), which left 0.4.10's doctor reporting the claude
+  # hooks "out of date" and pointing at a 0.3.16 path GC would delete. A system
+  # unit's ExecStart changes with the store path, so switch restarts it.
+  # `install` touches only files under $HOME and needs neither the socket nor
+  # a running daemon.
+  moshiInstall = pkgs.writeShellScript "moshi-install" ''
+    set -eu
     mkdir -p "$HOME/.claude"
-
-    # Unconditionally, on every start rather than once: `install` is what moves
-    # moshi's hook groups back to the TAIL of .hooks.PreToolUse, and
-    # `moshi-hook status` calls the claude target `stale` whenever anything sits
-    # after them. modules/claude-permissions.nix writes that file too, so the
-    # order is re-established here and that module now prepends its own group to
-    # keep it. Cheap, idempotent, and no config.yaml to corrupt -- unlike
-    # hosts/hermes/moshi-hook.nix, which is why only that one stamps per version.
-    "$moshi" install
+    ${pkgs.moshi-hook}/bin/moshi-hook install
   '';
 in {
   imports = [./moshi-hook.nix ./agent-user.nix];
@@ -83,7 +96,7 @@ in {
   users.users = lib.genAttrs hookUsers (_: {linger = true;});
 
   systemd.user.services.moshi-hook-setup = {
-    description = "Pair + install Moshi hooks";
+    description = "Pair this host with Moshi";
     wantedBy = ["default.target"];
     unitConfig.ConditionUser = conditionUsers;
     # Fail loudly and retry rather than exiting 0 on a bad/missing token: an
@@ -98,12 +111,29 @@ in {
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = moshiPairInstall;
+      ExecStart = moshiPair;
       Environment = ["MOSHI_SOCKET_PATH=${socketUnit}"];
       Restart = "on-failure";
       RestartSec = 15;
     };
   };
+
+  # One per login, see moshiInstall. Restarted by switch whenever the
+  # moshi-hook store path changes; also re-run at boot.
+  systemd.services = lib.listToAttrs (map (u:
+    lib.nameValuePair "moshi-hook-install-${u}" {
+      description = "Install Moshi agent hooks for ${u}";
+      wantedBy = ["multi-user.target"];
+      # home-manager may create ~/.claude; land after it when it exists.
+      after = ["home-manager-${u}.service"];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+        User = u;
+        ExecStart = moshiInstall;
+      };
+    })
+  hookUsers);
 
   systemd.user.services.moshi-hook = {
     description = "Moshi agent hook daemon";

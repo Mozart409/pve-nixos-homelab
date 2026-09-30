@@ -36,7 +36,7 @@
     # a build-time check that imports it in the sealed venv (PR #85160). See
     # docs/hermes-agent-findings-2026-09-23.md §2.
     hermes-agent = {
-      url = "github:NousResearch/hermes-agent/v2026.9.21";
+      url = "github:NousResearch/hermes-agent/v2026.9.24";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     homelab-dashboard = {

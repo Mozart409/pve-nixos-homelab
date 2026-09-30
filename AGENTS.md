@@ -160,9 +160,10 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
         re-run; already-done hosts are no-ops.
     -   **Restart services `colmena apply` does NOT bounce** (config written but
         not reloaded):
-        -   `hermes` — `sudo systemctl restart hermes-agent` after SOUL.md /
-            skill / `config.yaml` changes, and after any axon outage (it parks
-            the axon-gateway MCP and won't auto-recover).
+        -   `hermes` — `sudo systemctl restart hermes-agent` after any axon
+            outage (it parks the axon-gateway MCP and won't auto-recover).
+            SOUL.md / skill / `config.yaml` / secret changes restart it on
+            deploy by themselves (see `configHash` below).
         -   `containers` — axon-gateway backend/config edits used to need a
             manual `sudo systemctl restart podman-axon-gateway` (the container's
             generated unit doesn't change when only the mounted config.toml's
@@ -178,11 +179,14 @@ The `iac/` directory contains OpenTofu configurations for provisioning Proxmox V
          -   `hosts/mcp_vm/configuration.nix` — bump `secretNonce` when an MCP
              credential changes; it is wired to the secret-consuming units'
              `restartTriggers`.
-         -   `hosts/hermes/configuration.nix` — bump `secretNonce` when a secret,
-             ANY profile's `SOUL.md` / `config.yaml`, `USER.md`, or a skill
-             changes. All five profiles are written at stable paths under
-             `/home/hermes/agent/.hermes/`, so nothing in the generated unit
-             changes on its own.
+         -   `hosts/hermes/configuration.nix` — all five profiles are written
+             at stable paths under `/home/hermes/agent/.hermes/`, so
+             `configHash` (every profile's settings / SOUL.md / memories /
+             env, the default profile's `hermesHomeFiles` / `mcpServers`, and
+             each agenix secret's `.age` file) is wired to `hermes-agent`'s
+             `restartTriggers`. Any such change restarts it on deploy; no
+             manual step. `secretNonce` stays as a manual override for a
+             change Nix cannot see.
          -   `hosts/mcp_vm/axon-gateway/default.nix` — `configText` is hashed
              into `CONFIG_HASH`, so changing the declarative gateway config
              changes the generated container unit automatically.

@@ -32,8 +32,15 @@
   # and the agent keeps running with the previous prompt and credentials — the
   # long-standing "deploys don't restart hermes-agent" footgun in AGENTS.md §3.
   #
-  # Bump this whenever a secret, any profile's SOUL.md / config.yaml, or a skill
-  # changes; it is wired to restartTriggers on hermes-agent.
+  # Everything that is covered by Nix restarts the agent on its own: the unit's
+  # restartTriggers carry `configHash` (below), a hash of every profile's
+  # settings, SOUL.md, memories and environment, plus each agenix secret's
+  # ciphertext -- so an edit to any of them changes the generated unit and
+  # switch restarts hermes-agent. A hermes-agent package bump changes ExecStart
+  # and restarts it too.
+  #
+  # Bump this only for a change Nix cannot see (e.g. a secret re-keyed to the
+  # same recipients from outside this repo); it is a manual override.
   secretNonce = "2026-09-23-rebuild-profiles";
 
   # Custom skills shipped from this repo, exposed read-only via the
@@ -42,6 +49,18 @@
   # path keeps them reproducible and out of the mutable ~/.hermes/skills tree.
   # NB `./skills` is relative to THIS file, i.e. hosts/hermes/skills/.
   extraSkillsDir = ./skills;
+
+  # Everything the deploy rewrites under ${hermesHome} at stable paths, as one
+  # string for hermes-agent's restartTriggers (see secretNonce). Skills ride
+  # along via skills.external_dirs, a store path in `settings`. Secrets are
+  # hashed by their .age file, whose store path changes with the ciphertext.
+  configHash = builtins.hashString "sha256" (builtins.toJSON {
+    default = {
+      inherit (config.services.hermes-agent) settings hermesHomeFiles mcpServers environment environmentFiles;
+    };
+    profiles = config.homelab.hermesProfiles.profiles;
+    secrets = lib.mapAttrs (_: s: s.file) config.age.secrets;
+  });
 
   # ── Dashboard ─────────────────────────────────────────────────────────────
   dashboardHost = "hermes-dashboard.homelab.internal";
@@ -769,8 +788,9 @@ in {
     wants = ["agenix.target"];
     after = ["agenix.target" "tailscaled.service"];
     # Config, SOUL.md and the .env files are written at stable paths, so the
-    # unit definition does not change when they do. See secretNonce above.
-    restartTriggers = [secretNonce];
+    # unit definition does not change when they do. Hash their Nix sources into
+    # the unit instead. See secretNonce above.
+    restartTriggers = [secretNonce configHash];
     serviceConfig = {
       # ── Config integrity ──────────────────────────────────────────────────
       # Under the `local` backend the agent's tools run AS the hermes user and
