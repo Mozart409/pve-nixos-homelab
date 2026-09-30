@@ -74,6 +74,11 @@
     provider = "deepseek";
     timezone = "Europe/Berlin";
 
+    # Nix-pinned, so the startup "N commits behind" banner is noise: it diffs
+    # the embedded HERMES_REVISION against upstream *main*, not the latest
+    # release. Bump the flake input instead.
+    updates.check = false;
+
     # Extra skill directories scanned in addition to the mutable
     # ~/.hermes/skills tree. The `skills` toolset must stay enabled for the
     # agent to see them.
