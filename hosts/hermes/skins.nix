@@ -56,36 +56,37 @@ let
     help_header = "(${symbol}) Available Commands";
   };
 
+  # Compact layout: the TUI falls back to the stock HERMES-AGENT art when
+  # banner_logo is empty, so the top banner is a single header line instead,
+  # and the name lives in the panel as part of the hero. The TUI parser
+  # (parseRichMarkup) turns every [colour]…[/] tag into its own line, so
+  # each line carries exactly one tag.
   eveLogo = ''
-    [bold #FFB3DF]███████╗██╗   ██╗███████╗[/]
-    [bold #FF9BD2]██╔════╝██║   ██║██╔════╝[/]
-    [bold #FF79C6]█████╗  ██║   ██║█████╗[/]
-    [bold #FF79C6]██╔══╝  ╚██╗ ██╔╝██╔══╝[/]
-    [bold #E060AE]███████╗ ╚████╔╝ ███████╗[/]
-    [bold #A8457F]╚══════╝  ╚═══╝  ╚══════╝[/]
+    [bold #FF79C6]✦ eve · personal assistant[/]
   '';
   eveHero = ''
-    [#FFB3DF]    ▄    [/]
-    [#FF9BD2]   ███   [/]
-    [#FF79C6] ▀█████▀ [/]
-    [#FF9BD2]   ███   [/]
-    [#FFB3DF]    ▀    [/]
+    [#FFB3DF]     ▄[/]
+    [#FF9BD2]    ███[/]
+    [#FF79C6]  ▀█████▀[/]
+    [#FF9BD2]    ███[/]
+    [#FFB3DF]     ▀[/]
+
+    [bold #FF79C6]█▀▀ █ █ █▀▀[/]
+    [bold #E060AE]██▄ ▀▄▀ ██▄[/]
   '';
   heimdallLogo = ''
-    [bold #D2F0FF]██╗  ██╗███████╗██╗███╗   ███╗██████╗  █████╗ ██╗     ██╗[/]
-    [bold #B8E6FF]██║  ██║██╔════╝██║████╗ ████║██╔══██╗██╔══██╗██║     ██║[/]
-    [bold #7DCFFF]███████║█████╗  ██║██╔████╔██║██║  ██║███████║██║     ██║[/]
-    [bold #7DCFFF]██╔══██║██╔══╝  ██║██║╚██╔╝██║██║  ██║██╔══██║██║     ██║[/]
-    [bold #5AB4E6]██║  ██║███████╗██║██║ ╚═╝ ██║██████╔╝██║  ██║███████╗███████╗[/]
-    [bold #3D8FBF]╚═╝  ╚═╝╚══════╝╚═╝╚═╝     ╚═╝╚═════╝ ╚═╝  ╚═╝╚══════╝╚══════╝[/]
+    [bold #7DCFFF]◉ heimdall · homelab watch[/]
   '';
   heimdallHero = ''
-    [#B8E6FF]█   █   █[/]
-    [#9ADAFF] █  █  █ [/]
-    [#7DCFFF]  █ █ █  [/]
-    [#5AB4E6]   ███   [/]
-    [#5AB4E6]    █    [/]
-    [#3D8FBF]    █    [/]
+    [#B8E6FF]           █   █   █[/]
+    [#9ADAFF]            █  █  █[/]
+    [#7DCFFF]             █ █ █[/]
+    [#5AB4E6]              ███[/]
+    [#5AB4E6]               █[/]
+    [#3D8FBF]               █[/]
+
+    [bold #7DCFFF]█ █ █▀▀ █ █▀▄▀█ █▀▄ ▄▀█ █   █[/]
+    [bold #5AB4E6]█▀█ ██▄ █ █ ▀ █ █▄▀ █▀█ █▄▄ █▄▄[/]
   '';
   switchboardLogo = ''
     [bold #FFFFFF]██╗  ██╗███████╗██████╗ ███╗   ███╗███████╗███████╗[/]
