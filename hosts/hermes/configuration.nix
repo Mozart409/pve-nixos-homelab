@@ -394,23 +394,25 @@ in {
   # ── Bot checkouts ─────────────────────────────────────────────────────────
   # eve and heimdall have no shell, so the host does their git: clone into
   # ${stateDir}/repos/<bot>/<repo> (inside the agent's ReadWritePaths, so their
-  # file tools can edit there), then every 10 min commit, rebase, push — as
-  # that bot, with its own Forgejo account and key. Access is whatever the
-  # account was invited to in Forgejo. Both profiles share this uid, so either
-  # can READ the other's checkouts on disk; the per-bot keys scope what each
-  # can clone and push. A bot is wired up once its key exists.
+  # file tools can read and edit there) and fast-forward every 10 min, as that
+  # bot with its own Forgejo account and key. PULL-ONLY by decision
+  # (2026-09-30): nothing commits on the profiles' behalf, so their edits stay
+  # local until a human commits them, and a checkout with local edits is not
+  # pulled. Read access in Forgejo is enough. Both profiles share this uid, so
+  # either can READ the other's checkouts on disk; the per-bot keys scope what
+  # each can clone. A bot is wired up once its key exists.
   homelab.forgejoBotSync = {
     user = "hermes";
     baseDir = "${stateDir}/repos";
     bots = lib.filterAttrs (bot: _: builtins.pathExists (botKeyFile bot)) {
       eve = {
         sshKey = "/run/agenix/forgejo-bot-eve-ssh";
-        commitMessage = "docs(kb): eve notes";
+        commit = false;
         repos.obsidian-kb = "amadeus/obsidian-kb";
       };
       heimdall = {
         sshKey = "/run/agenix/forgejo-bot-heimdall-ssh";
-        commitMessage = "chore(heimdall): sync agent edits";
+        commit = false;
         repos = {
           obsidian-kb = "amadeus/obsidian-kb";
           pve-nixos-homelab = "amadeus/pve-nixos-homelab";

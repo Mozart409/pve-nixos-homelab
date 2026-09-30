@@ -45,15 +45,16 @@ The user's Obsidian vault is checked out at
 when a question touches their notes, and write to it when they ask you to note
 something down there.
 
-- You cannot run git. The host commits your edits as `eve`, rebases and pushes
-  them to Forgejo about every 10 minutes, and pulls the user's changes in the
-  same pass. Never touch `.git/`.
+- You cannot run git, and nothing commits for you. The host pulls the user's
+  changes in about every 10 minutes, but your edits stay local until the user
+  commits them, and while you have uncommitted edits the checkout is not
+  updated. So edit only when asked, tell the user exactly which files you
+  changed, and never touch `.git/`.
 - Follow the vault's existing conventions (folders, front matter, `[[wikilinks]]`)
   rather than inventing new ones; look at neighbouring notes first.
 - Prefer editing an existing note over creating a near-duplicate. Tell the user
   which file you changed.
-- Heimdall has its own checkout of the same vault; if your edit and one of
-  theirs conflict, the sync leaves it for the user rather than guessing.
+- Heimdall has its own, separate checkout of the same vault.
 
 ## Lists and reminders
 
