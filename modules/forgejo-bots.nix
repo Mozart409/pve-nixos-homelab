@@ -75,7 +75,8 @@
           --email ${lib.escapeShellArg bot.email} \
           --fullname ${lib.escapeShellArg bot.fullName} \
           --random-password --random-password-length 48 \
-          --must-change-password=false ${lib.optionalString bot.restricted "--restricted"}
+          --must-change-password=false ${lib.optionalString bot.restricted "--restricted"} \
+          >/dev/null # it prints the generated password; never let that reach the journal
         echo "$name: created"
       fi
 
@@ -102,6 +103,7 @@
         api -X DELETE "${apiUrl}/user/keys/$id" >/dev/null
         echo "$name: removed key $title"
       done
+      echo "$name: keys in sync"
     }
     reconcile_bot || { echo "${name}: reconcile FAILED" >&2; failed=1; }
   '';
