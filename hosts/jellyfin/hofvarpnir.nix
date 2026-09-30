@@ -21,7 +21,7 @@ in {
   virtualisation.oci-containers.containers.hofvarpnir = {
     # Pin to the released tag for reproducibility — never :latest. Matches the tag
     # that was running on the LXC.
-    image = "ghcr.io/mozart409/hofvarpnir:0.13.0";
+    image = "ghcr.io/mozart409/hofvarpnir:0.13.1";
     autoStart = true;
 
     # Container :3000 -> host 127.0.0.1:3000. Loopback only so it is reachable
