@@ -231,6 +231,13 @@
         ''
       )
       profile.memories;
+    # Skins are looked up as <home>/skins/<name>.yaml and selected with
+    # `display.skin` in config.yaml (hermes_cli/skin_engine.py).
+    skinFiles =
+      lib.mapAttrsToList (skin: data: ''
+        install -o ${user} -g ${group} -m 0640 -D ${yamlFormat.generate "hermes-skin-${skin}.yaml" data} ${dir}/skins/${skin}.yaml
+      '')
+      profile.skins;
     envLines =
       lib.mapAttrsToList (k: v: "printf '%s=%s\\n' ${lib.escapeShellArg k} ${lib.escapeShellArg v} >> \"$tmpenv\"")
       profile.environment;
@@ -245,6 +252,7 @@
 
     install -o ${user} -g ${group} -m 0640 ${soulFile} ${dir}/SOUL.md
     ${lib.concatStrings memoryFiles}
+    ${lib.concatStrings skinFiles}
 
     # .env: concatenated from the agenix-decrypted files this profile names,
     # plus any plain (non-secret) KEY=value pairs. Written via a temp file so a
@@ -313,6 +321,16 @@
           Files installed under `<profile>/memories/`. Hermes treats
           `memories/USER.md` and `memories/MEMORY.md` as part of the agent's
           identity, alongside SOUL.md. Keys are paths relative to `memories/`.
+        '';
+      };
+
+      skins = lib.mkOption {
+        type = lib.types.attrsOf yamlFormat.type;
+        default = {};
+        description = ''
+          Custom CLI/TUI skins, installed as `<profile>/skins/<name>.yaml`.
+          Each value is the skin's YAML document (`name`, `colors`, `branding`,
+          `banner_logo`, …). Select one with `settings.display.skin`.
         '';
       };
 

@@ -50,6 +50,10 @@
   # NB `./skills` is relative to THIS file, i.e. hosts/hermes/skills/.
   extraSkillsDir = ./skills;
 
+  # CLI/TUI skins, one per profile (./skins.nix). Installed as
+  # <home>/skins/<name>.yaml and selected with `display.skin`.
+  skins = import ./skins.nix;
+
   # Everything the deploy rewrites under ${hermesHome} at stable paths, as one
   # string for hermes-agent's restartTriggers (see secretNonce). Skills ride
   # along via skills.external_dirs, a store path in `settings`. Secrets are
@@ -595,6 +599,7 @@ in {
         # the switchboard. It owns the multiplexer and the dashboard and points
         # the user at eve or heimdall; it does no work of its own.
         model = "deepseek-v4-flash";
+        display.skin = "switchboard";
 
         # One gateway serves every profile. v2026.9.21 enforces a host-wide
         # singleton lock (one `hermes gateway run` per machine; a second starts
@@ -637,6 +642,7 @@ in {
     hermesHomeFiles = {
       "SOUL.md" = ./souls/default.md;
       "memories/USER.md" = ./souls/user.md;
+      "skins/switchboard.yaml" = (pkgs.formats.yaml {}).generate "hermes-skin-switchboard.yaml" skins.switchboard;
     };
 
     # MCP servers: DISABLED, not deleted. The default profile no longer uses
@@ -694,6 +700,7 @@ in {
       description = "Personal assistant: memory, notes, research, reminders, email, Home Assistant.";
       soul = ./souls/eve.md;
       memories."USER.md" = ./souls/user.md;
+      skins.eve = skins.eve;
       environmentFiles = [
         config.age.secrets.hermes-kb-env.path
         # Expand ${AXON_GATEWAY_TOKEN} / ${AGENTMAIL_API_KEY} in mcp_servers.
@@ -707,6 +714,7 @@ in {
         // (mkToolsets (baseTools ++ ["web" "cronjob"]))
         // {
           model = "deepseek-v4-pro";
+          display.skin = "eve";
           mcp_servers = {
             # Home Assistant (states, services, calendars) only — not the
             # fleet-wide observability surface, which is heimdall's.
@@ -723,6 +731,7 @@ in {
       description = "Homelab observability via the axon-gateway MCP backends.";
       soul = ./souls/heimdall.md;
       memories."USER.md" = ./souls/user.md;
+      skins.heimdall = skins.heimdall;
       environmentFiles = [
         config.age.secrets.hermes-infra-env.path
         # Expands ${AXON_GATEWAY_TOKEN} in the mcp_servers header below.
@@ -735,6 +744,7 @@ in {
         // (mkToolsets (baseTools ++ ["cronjob"]))
         // {
           model = "deepseek-v4-pro";
+          display.skin = "heimdall";
           # Deliberately NO terminal/code_execution: everything this profile
           # needs arrives through MCP, and the axon gateway's tools are already
           # a wide read surface over the whole fleet. Adding a shell on top
@@ -893,6 +903,11 @@ in {
 
   # Convenience aliases for the interactive account. The per-profile wrappers
   # (`eve chat`, `heimdall chat`) come from modules/hermes-profiles.nix.
+  # Pin the TUI to its dark palette. Its background auto-detection chose the
+  # LIGHT variant on a dark terminal (dark-brown ink on near-black), and a
+  # login-shell variable also reaches the `eve`/`heimdall` wrappers' sudo -i.
+  environment.variables.HERMES_TUI_THEME = "dark";
+
   environment.shellAliases = {
     op = "opencode";
     cl = "claude";
