@@ -895,6 +895,10 @@ in {
   # merely because of the interface it arrived on. The dashboard's auth gate
   # would still challenge a direct connection, but a single door with two locks
   # beats two doors with one each.
+  #
+  # Also opted out of the TCP 80 that modules/caddy-http3.nix opens on every
+  # other Caddy host, so ACME here can only use tls-alpn-01 on 443.
+  homelab.caddy.openHttpPort = false;
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [

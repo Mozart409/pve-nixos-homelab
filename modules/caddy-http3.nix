@@ -33,13 +33,31 @@
   # Bump this to force every Caddy host to restart and re-attempt ACME. Expect
   # renewal to take ~2.5 min per host after the restart, not to be instant:
   # Caddy begins renewals ~100s after startup. Do not judge it before then.
-  certNonce = "2026-09-08-acme-unwedge";
+  certNonce = "2026-10-01-open-port-80";
 in {
-  # Caddy advertises h3 via alt-svc, but the NixOS firewall drops QUIC
-  # packets unless UDP 443 is explicitly allowed.
-  networking.firewall.allowedUDPPorts = [443];
+  # step-ca validates ACME http-01 by dialing the host on TCP 80. Where the
+  # firewall dropped it, every challenge POST hung for step-ca's 30s dial
+  # timeout, CertMagic gave up and retried with an already-consumed nonce, and
+  # the journal showed only `badNonce` -- jellyfin and unifi sat in a 6h
+  # backoff with certs under 7 days on 2026-10-01 while the CA was healthy.
+  # The signature is in step-ca's log, not caddy's: challenge POSTs with
+  # duration ~30s and "could not connect to validation target".
+  options.homelab.caddy.openHttpPort = lib.mkOption {
+    type = lib.types.bool;
+    default = true;
+    description = "Open TCP 80 for ACME http-01 validation and Caddy's HTTP->HTTPS redirect.";
+  };
 
-  systemd.services.caddy = lib.mkIf config.services.caddy.enable {
-    restartTriggers = [certNonce];
+  config = {
+    # Caddy advertises h3 via alt-svc, but the NixOS firewall drops QUIC
+    # packets unless UDP 443 is explicitly allowed.
+    networking.firewall.allowedUDPPorts = [443];
+
+    networking.firewall.allowedTCPPorts =
+      lib.mkIf (config.services.caddy.enable && config.homelab.caddy.openHttpPort) [80];
+
+    systemd.services.caddy = lib.mkIf config.services.caddy.enable {
+      restartTriggers = [certNonce];
+    };
   };
 }
